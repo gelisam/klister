@@ -21,17 +21,13 @@ readExpr filename fileContents =
     Left err -> Left $ T.pack $ errorBundlePretty err
     Right ok -> Right ok
 
-syntactically :: Parser a -> Parser (Stx a)
-syntactically p =
-  do (Located srcloc x) <- located p
-     pure (Stx noScopes srcloc x)
-
 expr :: Parser Syntax
-expr = list <|> vec <|> identExpr
-  where
-    identExpr =
-      do Located srcloc x <- lexeme ident
-         return $ Syntax $ Stx noScopes srcloc (Id x)
+expr = list <|> vec <|> ident
+
+ident :: Parser Syntax
+ident =
+  do Located srcloc x <- lexeme identName
+     return $ Syntax $ Stx noScopes srcloc (Id x)
 
 list :: Parser Syntax
 list =
@@ -47,8 +43,8 @@ vec =
      Located loc2 _ <- located (literal "]")
      return $ Syntax $ Stx noScopes (spanLocs loc1 loc2) (Vec xs)
 
-ident :: Parser Text
-ident = takeWhile1P (Just "identifier character") isLetter
+identName :: Parser Text
+identName = takeWhile1P (Just "identifier character") isLetter
 
 eatWhitespace :: Parser ()
 eatWhitespace = L.space space1 lineComment blockComment
