@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
 module Core where
 
 import Data.Unique
@@ -24,6 +25,7 @@ data CoreF core
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreVec (ScopedVec core)
+  deriving (Functor, Foldable, Traversable)
 
 newtype Core = Core
   { unCore :: CoreF Core }
@@ -38,18 +40,22 @@ data ScopedIdent core = ScopedIdent
   { scopedIdentIdentifier :: core
   , scopedIdentScope      :: core
   }
+  deriving (Functor, Foldable, Traversable)
 
 data ScopedEmpty core = ScopedEmpty
   { scopedEmptyScope :: core
   }
+  deriving (Functor, Foldable, Traversable)
 
 data ScopedCons core = ScopedCons
   { scopedConsHead  :: core
   , scopedConsTail  :: core
   , scopedConsScope :: core
   }
+  deriving (Functor, Foldable, Traversable)
 
 data ScopedVec core = ScopedVec
   { scopedVecElements :: [core]
   , scopedVecScope    :: core
   }
+  deriving (Functor, Foldable, Traversable)
