@@ -1,4 +1,4 @@
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards #-}
 module Evaluator where
 
 import Control.Monad.Except
@@ -24,13 +24,18 @@ data Error
   | ErrorUnbound Var
   | ErrorType TypeError
 
-type Eval = ReaderT Env (ExceptT Error IO)
+newtype Eval a = Eval
+   { runEval :: ReaderT Env (ExceptT Error IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader Env, MonadError Error)
+
+withEnv :: Env -> Eval a -> Eval a
+withEnv = local . const
 
 eval :: Core -> Eval Value
 eval (CoreVar var) = do
   env <- ask
   case Map.lookup var env of
-    Just (ident, value) -> pure value
+    Just (_ident, value) -> pure value
     _ -> throwError $ ErrorUnbound var
 eval (CoreLam ident var body) = do
   env <- ask
@@ -45,11 +50,10 @@ eval (CoreApp fun arg) = do
   argValue <- eval arg
   case funValue of
     ValueClosure (Closure {..}) -> do
-      env <- ask
-      let env' = Map.insert closureVar
-                            (closureIdent, argValue)
-                            env
-      local (const env') $ do
+      let env = Map.insert closureVar
+                           (closureIdent, argValue)
+                           closureEnv
+      withEnv env $ do
         eval closureBody
     ValueSyntax syntax -> do
       throwError $ ErrorType $ TypeError
