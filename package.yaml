@@ -9,6 +9,7 @@ executables:
     dependencies:
       - base
       - containers
+      - extra
       - megaparsec
       - mtl
       - text
