@@ -7,17 +7,14 @@ import Syntax
 
 type Var = Unique
 
--- TODO: figure out how this should be defined
-data ScopeContext = ScopeContext
-
 data Core
   = CoreVar Var
-  | CoreLam Var Core
+  | CoreLam Ident Var Core
   | CoreApp Core Core
-  | CoreSyntaxError Syntax
-  | CoreSyntax Syntax SrcLoc ScopeContext
-  | CoreCase [(Pattern, Core)]
-  | CoreIdentifier Var
+  | CoreSyntaxError [Syntax] Syntax
+  | CoreSyntax Syntax
+  | CoreCase Core [(Pattern, Core)]
+  | CoreIdentifier Ident
   | CoreIdent ScopedIdent
   | CoreEmpty ScopedEmpty
   | CoreCons ScopedCons
@@ -45,6 +42,6 @@ data ScopedCons = ScopedCons
   }
 
 data ScopedVec = ScopedVec
-  { scopedVecElements :: Core
+  { scopedVecElements :: [Core]
   , scopedVecScope    :: Core
   }
