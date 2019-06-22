@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase, RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, RecordWildCards #-}
 module Evaluator where
 
 import Control.Monad.Except
@@ -25,7 +25,12 @@ data Error
   | ErrorType TypeError
   | ErrorCase Value
 
-type Eval = ReaderT Env (ExceptT Error IO)
+newtype Eval a = Eval
+   { runEval :: ReaderT Env (ExceptT Error IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader Env, MonadError Error)
+
+withEnv :: Env -> Eval a -> Eval a
+withEnv = local . const
 
 withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
 withExtendedEnv n x v act = local (Map.insert x (n, v)) act
@@ -41,7 +46,7 @@ eval :: Core -> Eval Value
 eval (CoreVar var) = do
   env <- ask
   case Map.lookup var env of
-    Just (ident, value) -> pure value
+    Just (_ident, value) -> pure value
     _ -> throwError $ ErrorUnbound var
 eval (CoreLam ident var body) = do
   env <- ask
@@ -56,11 +61,10 @@ eval (CoreApp fun arg) = do
   argValue <- eval arg
   case funValue of
     ValueClosure (Closure {..}) -> do
-      env <- ask
-      let env' = Map.insert closureVar
-                            (closureIdent, argValue)
-                            env
-      local (const env') $ do
+      let env = Map.insert closureVar
+                           (closureIdent, argValue)
+                           closureEnv
+      withEnv env $ do
         eval closureBody
     ValueSyntax syntax -> do
       throwError $ ErrorType $ TypeError
@@ -69,11 +73,16 @@ eval (CoreApp fun arg) = do
         }
 eval (CoreSyntaxError syntaxError) = do
   throwError $ ErrorSyntax syntaxError
-eval (CoreSyntax syntax) = undefined
+eval (CoreSyntax syntax) = do
+  pure $ ValueSyntax syntax
 eval (CoreCase scrutinee cases) = do
   v <- eval scrutinee
   doCase v cases
-eval (CoreIdentifier ident) = undefined
+eval (CoreIdentifier (Stx scopeSet srcLoc name)) = do
+  pure $ ValueSyntax
+       $ Syntax
+       $ Stx scopeSet srcLoc
+       $ Id name
 eval (CoreIdent scopedIdent) = undefined
 eval (CoreEmpty scopedEmpty) = undefined
 eval (CoreCons scopedCons) = undefined
