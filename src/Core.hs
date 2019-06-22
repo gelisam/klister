@@ -5,13 +5,18 @@ import Data.Unique
 import Syntax
 
 
+data SyntaxError = SyntaxError
+  { syntaxErrorLocations :: [Syntax]
+  , syntaxErrorMessage   :: Syntax
+  }
+
 type Var = Unique
 
 data Core
   = CoreVar Var
   | CoreLam Ident Var Core
   | CoreApp Core Core
-  | CoreSyntaxError [Syntax] Syntax
+  | CoreSyntaxError SyntaxError
   | CoreSyntax Syntax
   | CoreCase Core [(Pattern, Core)]
   | CoreIdentifier Ident

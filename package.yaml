@@ -10,5 +10,6 @@ executables:
       - base
       - containers
       - megaparsec
+      - mtl
       - text
     source-dirs: src
