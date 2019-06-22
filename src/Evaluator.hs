@@ -85,8 +85,38 @@ eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
        $ Id name
 eval (Core (CoreIdent scopedIdent)) = undefined
 eval (Core (CoreEmpty scopedEmpty)) = undefined
-eval (Core (CoreCons scopedCons)) = undefined
-eval (Core (CoreVec scopedVec)) = undefined
+eval (Core (CoreCons (ScopedCons hd tl scope))) = do
+  hdSyntax <- evalAsSyntax hd
+  tlSyntax <- evalAsSyntax tl
+  case tlSyntax of
+    Syntax (Stx _ _ expr) -> case expr of
+      List vs -> withScopeOf scope $ List $ hdSyntax : vs
+      Vec vs -> do
+        throwError $ ErrorType $ TypeError
+          { typeErrorExpected = "list"
+          , typeErrorActual   = "vec"
+          }
+eval (Core (CoreVec (ScopedVec elements scope))) = do
+  vec <- Vec <$> traverse evalAsSyntax elements
+  withScopeOf scope vec
+
+evalAsSyntax :: Core -> Eval Syntax
+evalAsSyntax core = do
+  value <- eval core
+  case value of
+    ValueClosure _ -> do
+      throwError $ ErrorType $ TypeError
+        { typeErrorExpected = "syntax"
+        , typeErrorActual = "function"
+        }
+    ValueSyntax syntax -> pure syntax
+
+withScopeOf :: Core -> ExprF Syntax -> Eval Value
+withScopeOf scope expr = do
+  scopeSyntax <- evalAsSyntax scope
+  case scopeSyntax of
+    Syntax (Stx scopeSet loc _) ->
+      pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
 doCase :: Value -> [(Pattern, Core)] -> Eval Value
 doCase v []     = throwError (ErrorCase v)
