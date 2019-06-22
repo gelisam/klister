@@ -62,7 +62,8 @@ eval (CoreApp fun arg) = do
         }
 eval (CoreSyntaxError syntaxError) = do
   throwError $ ErrorSyntax syntaxError
-eval (CoreSyntax syntax) = undefined
+eval (CoreSyntax syntax) = do
+  pure $ ValueSyntax syntax
 eval (CoreCase scrutinee cases) = undefined
 eval (CoreIdentifier ident) = undefined
 eval (CoreIdent scopedIdent) = undefined
