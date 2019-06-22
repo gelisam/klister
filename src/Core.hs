@@ -26,10 +26,10 @@ data Core
   | CoreVec ScopedVec
 
 data Pattern
-  = PatternIdentifier Var
+  = PatternIdentifier Ident Var
   | PatternEmpty
-  | PatternCons Var Var
-  | PatternVec [Var]
+  | PatternCons Ident Var Ident Var
+  | PatternVec [(Ident, Var)]
 
 data ScopedIdent = ScopedIdent
   { scopedIdentIdentifier :: Core
