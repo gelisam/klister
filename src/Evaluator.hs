@@ -1,3 +1,4 @@
+{-# LANGUAGE RecordWildCards #-}
 module Evaluator where
 
 import Control.Monad.Except
@@ -10,9 +11,18 @@ import Core
 import Value
 
 
+-- TODO: more precise representation
+type Type = String
+
+data TypeError = TypeError
+  { typeErrorExpected :: Type
+  , typeErrorActual   :: Type
+  }
+
 data Error
   = ErrorSyntax SyntaxError
   | ErrorUnbound Var
+  | ErrorType TypeError
 
 type Eval = ReaderT Env (ExceptT Error IO)
 
@@ -30,7 +40,22 @@ eval (CoreLam ident var body) = do
     , closureVar   = var
     , closureBody  = body
     }
-eval (CoreApp fun arg) = undefined
+eval (CoreApp fun arg) = do
+  funValue <- eval fun
+  argValue <- eval arg
+  case funValue of
+    ValueClosure (Closure {..}) -> do
+      env <- ask
+      let env' = Map.insert closureVar
+                            (closureIdent, argValue)
+                            env
+      local (const env') $ do
+        eval closureBody
+    ValueSyntax syntax -> do
+      throwError $ ErrorType $ TypeError
+        { typeErrorExpected = "function"
+        , typeErrorActual   = "syntax"
+        }
 eval (CoreSyntaxError syntaxError) = undefined
 eval (CoreSyntax syntax) = undefined
 eval (CoreCase scrutinee cases) = undefined
