@@ -56,7 +56,8 @@ eval (CoreApp fun arg) = do
         { typeErrorExpected = "function"
         , typeErrorActual   = "syntax"
         }
-eval (CoreSyntaxError syntaxError) = undefined
+eval (CoreSyntaxError syntaxError) = do
+  throwError $ ErrorSyntax syntaxError
 eval (CoreSyntax syntax) = undefined
 eval (CoreCase scrutinee cases) = undefined
 eval (CoreIdentifier ident) = undefined
