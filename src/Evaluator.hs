@@ -138,7 +138,7 @@ withScopeOf scope expr = do
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
 doCase :: Value -> [(Pattern, Core)] -> Eval Value
-doCase v []     = throwError (ErrorCase v)
+doCase v []              = throwError (ErrorCase v)
 doCase v ((p, rhs) : ps) = match (doCase v ps) p rhs v
   where
     match next (PatternIdentifier n x) rhs =
