@@ -84,7 +84,7 @@ eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
        $ Stx scopeSet srcLoc
        $ Id name
 eval (Core (CoreIdent scopedIdent)) = undefined
-eval (Core (CoreEmpty scopedEmpty)) = undefined
+eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
 eval (Core (CoreCons (ScopedCons hd tl scope))) = do
   hdSyntax <- evalAsSyntax hd
   tlSyntax <- evalAsSyntax tl
