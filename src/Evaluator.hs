@@ -65,7 +65,11 @@ eval (CoreSyntaxError syntaxError) = do
 eval (CoreSyntax syntax) = do
   pure $ ValueSyntax syntax
 eval (CoreCase scrutinee cases) = undefined
-eval (CoreIdentifier ident) = undefined
+eval (CoreIdentifier (Stx scopeSet srcLoc name)) = do
+  pure $ ValueSyntax
+       $ Syntax
+       $ Stx scopeSet srcLoc
+       $ Id name
 eval (CoreIdent scopedIdent) = undefined
 eval (CoreEmpty scopedEmpty) = undefined
 eval (CoreCons scopedCons) = undefined
