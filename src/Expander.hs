@@ -2,6 +2,7 @@
 module Expander where
 
 import Control.Monad.Writer
+import Data.Foldable
 import Data.Unique
 import Data.Map (Map)
 import Data.Maybe
@@ -27,18 +28,20 @@ zonk (SplitCore {..}) = PartialCore $ fmap go splitCoreRoot
         , splitCoreDescendants = splitCoreDescendants
         }
 
-unzonk :: Core -> IO SplitCore
-unzonk core = do
+unzonk :: PartialCore -> IO SplitCore
+unzonk partialCore = do
   (root, children) <- runWriterT $ do
-    traverse go (unCore core)
+    traverse go (unPartialCore partialCore)
   pure $ SplitCore root children
   where
-    go :: Core -> WriterT (Map Unique (CoreF Unique))
-                          IO
-                          Unique
-    go core = do
+    go :: Maybe PartialCore
+       -> WriterT (Map Unique (CoreF Unique))
+                  IO
+                  Unique
+    go maybePartialCore = do
       unique <- liftIO $ newUnique
-      SplitCore {..} <- liftIO $ unzonk core
-      tell $ Map.singleton unique splitCoreRoot
-      tell splitCoreDescendants
+      for_ maybePartialCore $ \partialCore -> do
+        SplitCore {..} <- liftIO $ unzonk partialCore
+        tell $ Map.singleton unique splitCoreRoot
+        tell splitCoreDescendants
       pure unique
