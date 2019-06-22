@@ -9,5 +9,6 @@ executables:
     dependencies:
       - base
       - containers
+      - megaparsec
       - text
     source-dirs: src
