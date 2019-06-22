@@ -8,21 +8,24 @@ import Data.Maybe
 import qualified Data.Map as Map
 
 import Core
+import PartialCore
 
 
 data SplitCore = SplitCore
-  { splitCoreRoot     :: CoreF Unique
-  , splitCoreChildren :: Map Unique (CoreF Unique)
+  { splitCoreRoot        :: CoreF Unique
+  , splitCoreDescendants :: Map Unique (CoreF Unique)
   }
 
-zonk :: SplitCore -> Core
-zonk (SplitCore {..}) = Core $ fmap go splitCoreRoot
+zonk :: SplitCore -> PartialCore
+zonk (SplitCore {..}) = PartialCore $ fmap go splitCoreRoot
   where
-    go :: Unique -> Core
-    go unique = Core
-              $ fmap go
-              $ fromMaybe (error $ "zonk: child missing: " ++ show (hashUnique unique))
-              $ Map.lookup unique splitCoreChildren
+    go :: Unique -> Maybe PartialCore
+    go unique = do
+      child <- Map.lookup unique splitCoreDescendants
+      pure $ zonk $ SplitCore
+        { splitCoreRoot        = child
+        , splitCoreDescendants = splitCoreDescendants
+        }
 
 unzonk :: Core -> IO SplitCore
 unzonk core = do
@@ -37,5 +40,5 @@ unzonk core = do
       unique <- liftIO $ newUnique
       SplitCore {..} <- liftIO $ unzonk core
       tell $ Map.singleton unique splitCoreRoot
-      tell splitCoreChildren
+      tell splitCoreDescendants
       pure unique
