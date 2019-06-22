@@ -83,7 +83,21 @@ eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
        $ Syntax
        $ Stx scopeSet srcLoc
        $ Id name
-eval (Core (CoreIdent scopedIdent)) = undefined
+eval (Core (CoreIdent (ScopedIdent ident scope))) = do
+  identSyntax <- evalAsSyntax ident
+  case identSyntax of
+    Syntax (Stx _ _ expr) -> case expr of
+      List vs -> do
+        throwError $ ErrorType $ TypeError
+          { typeErrorExpected = "id"
+          , typeErrorActual   = "list"
+          }
+      Vec _ -> do
+        throwError $ ErrorType $ TypeError
+          { typeErrorExpected = "id"
+          , typeErrorActual   = "vec"
+          }
+      Id name -> withScopeOf scope $ Id name
 eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
 eval (Core (CoreCons (ScopedCons hd tl scope))) = do
   hdSyntax <- evalAsSyntax hd
