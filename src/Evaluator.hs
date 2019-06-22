@@ -91,10 +91,15 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
   case tlSyntax of
     Syntax (Stx _ _ expr) -> case expr of
       List vs -> withScopeOf scope $ List $ hdSyntax : vs
-      Vec vs -> do
+      Vec _ -> do
         throwError $ ErrorType $ TypeError
           { typeErrorExpected = "list"
           , typeErrorActual   = "vec"
+          }
+      Id _ -> do
+        throwError $ ErrorType $ TypeError
+          { typeErrorExpected = "list"
+          , typeErrorActual   = "id"
           }
 eval (Core (CoreVec (ScopedVec elements scope))) = do
   vec <- Vec <$> traverse evalAsSyntax elements
