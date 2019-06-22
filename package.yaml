@@ -1,0 +1,11 @@
+name:           stuck-macros
+version:        0.1
+github:         gelisam/stuck-macros
+author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
+maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
+executables:
+  stuck-macros:
+    main:        Main.hs
+    dependencies:
+      - base
+    source-dirs: src
