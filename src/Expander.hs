@@ -5,6 +5,8 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.IORef
+import Data.Foldable
+
 import Data.Unique
 import Data.List.Extra
 import Data.Map (Map)
@@ -15,6 +17,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Core
+import PartialCore
 import Syntax
 
 newtype Binding = Binding Unique
@@ -64,33 +67,36 @@ resolve (Syntax (Stx scs srcLoc (Id x))) = do
       in undefined -- TODO check unambiguous, then return the binding object
 resolve other = throwError (NotIdentifier other)
 
-
 data SplitCore = SplitCore
-  { splitCoreRoot     :: CoreF Unique
-  , splitCoreChildren :: Map Unique (CoreF Unique)
+  { splitCoreRoot        :: CoreF Unique
+  , splitCoreDescendants :: Map Unique (CoreF Unique)
   }
 
-zonk :: SplitCore -> Core
-zonk (SplitCore {..}) = Core $ fmap go splitCoreRoot
+zonk :: SplitCore -> PartialCore
+zonk (SplitCore {..}) = PartialCore $ fmap go splitCoreRoot
   where
-    go :: Unique -> Core
-    go unique = Core
-              $ fmap go
-              $ fromMaybe (error $ "zonk: child missing: " ++ show (hashUnique unique))
-              $ Map.lookup unique splitCoreChildren
+    go :: Unique -> Maybe PartialCore
+    go unique = do
+      child <- Map.lookup unique splitCoreDescendants
+      pure $ zonk $ SplitCore
+        { splitCoreRoot        = child
+        , splitCoreDescendants = splitCoreDescendants
+        }
 
-unzonk :: Core -> IO SplitCore
-unzonk core = do
+unzonk :: PartialCore -> IO SplitCore
+unzonk partialCore = do
   (root, children) <- runWriterT $ do
-    traverse go (unCore core)
+    traverse go (unPartialCore partialCore)
   pure $ SplitCore root children
   where
-    go :: Core -> WriterT (Map Unique (CoreF Unique))
-                          IO
-                          Unique
-    go core = do
+    go :: Maybe PartialCore
+       -> WriterT (Map Unique (CoreF Unique))
+                  IO
+                  Unique
+    go maybePartialCore = do
       unique <- liftIO $ newUnique
-      SplitCore {..} <- liftIO $ unzonk core
-      tell $ Map.singleton unique splitCoreRoot
-      tell splitCoreChildren
+      for_ maybePartialCore $ \partialCore -> do
+        SplitCore {..} <- liftIO $ unzonk partialCore
+        tell $ Map.singleton unique splitCoreRoot
+        tell splitCoreDescendants
       pure unique
