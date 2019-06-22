@@ -43,12 +43,12 @@ withManyExtendedEnv exts act = local (inserter exts) act
 
 
 eval :: Core -> Eval Value
-eval (CoreVar var) = do
+eval (Core (CoreVar var)) = do
   env <- ask
   case Map.lookup var env of
     Just (_ident, value) -> pure value
     _ -> throwError $ ErrorUnbound var
-eval (CoreLam ident var body) = do
+eval (Core (CoreLam ident var body)) = do
   env <- ask
   pure $ ValueClosure $ Closure
     { closureEnv   = env
@@ -56,7 +56,7 @@ eval (CoreLam ident var body) = do
     , closureVar   = var
     , closureBody  = body
     }
-eval (CoreApp fun arg) = do
+eval (Core (CoreApp fun arg)) = do
   funValue <- eval fun
   argValue <- eval arg
   case funValue of
@@ -71,22 +71,22 @@ eval (CoreApp fun arg) = do
         { typeErrorExpected = "function"
         , typeErrorActual   = "syntax"
         }
-eval (CoreSyntaxError syntaxError) = do
+eval (Core (CoreSyntaxError syntaxError)) = do
   throwError $ ErrorSyntax syntaxError
-eval (CoreSyntax syntax) = do
+eval (Core (CoreSyntax syntax)) = do
   pure $ ValueSyntax syntax
-eval (CoreCase scrutinee cases) = do
+eval (Core (CoreCase scrutinee cases)) = do
   v <- eval scrutinee
   doCase v cases
-eval (CoreIdentifier (Stx scopeSet srcLoc name)) = do
+eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
   pure $ ValueSyntax
        $ Syntax
        $ Stx scopeSet srcLoc
        $ Id name
-eval (CoreIdent scopedIdent) = undefined
-eval (CoreEmpty scopedEmpty) = undefined
-eval (CoreCons scopedCons) = undefined
-eval (CoreVec scopedVec) = undefined
+eval (Core (CoreIdent scopedIdent)) = undefined
+eval (Core (CoreEmpty scopedEmpty)) = undefined
+eval (Core (CoreCons scopedCons)) = undefined
+eval (Core (CoreVec scopedVec)) = undefined
 
 doCase :: Value -> [(Pattern, Core)] -> Eval Value
 doCase v []     = throwError (ErrorCase v)

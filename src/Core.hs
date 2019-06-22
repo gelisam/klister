@@ -12,18 +12,21 @@ data SyntaxError = SyntaxError
 
 type Var = Unique
 
-data Core
+data CoreF core
   = CoreVar Var
-  | CoreLam Ident Var Core
-  | CoreApp Core Core
+  | CoreLam Ident Var core
+  | CoreApp core core
   | CoreSyntaxError SyntaxError
   | CoreSyntax Syntax
-  | CoreCase Core [(Pattern, Core)]
+  | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
-  | CoreIdent ScopedIdent
-  | CoreEmpty ScopedEmpty
-  | CoreCons ScopedCons
-  | CoreVec ScopedVec
+  | CoreIdent (ScopedIdent core)
+  | CoreEmpty (ScopedEmpty core)
+  | CoreCons (ScopedCons core)
+  | CoreVec (ScopedVec core)
+
+newtype Core = Core
+  { unCore :: CoreF Core }
 
 data Pattern
   = PatternIdentifier Ident Var
@@ -31,22 +34,22 @@ data Pattern
   | PatternCons Ident Var Ident Var
   | PatternVec [(Ident, Var)]
 
-data ScopedIdent = ScopedIdent
-  { scopedIdentIdentifier :: Core
-  , scopedIdentScope      :: Core
+data ScopedIdent core = ScopedIdent
+  { scopedIdentIdentifier :: core
+  , scopedIdentScope      :: core
   }
 
-data ScopedEmpty = ScopedEmpty
-  { scopedEmptyScope :: Core
+data ScopedEmpty core = ScopedEmpty
+  { scopedEmptyScope :: core
   }
 
-data ScopedCons = ScopedCons
-  { scopedConsHead  :: Core
-  , scopedConsTail  :: Core
-  , scopedConsScope :: Core
+data ScopedCons core = ScopedCons
+  { scopedConsHead  :: core
+  , scopedConsTail  :: core
+  , scopedConsScope :: core
   }
 
-data ScopedVec = ScopedVec
-  { scopedVecElements :: [Core]
-  , scopedVecScope    :: Core
+data ScopedVec core = ScopedVec
+  { scopedVecElements :: [core]
+  , scopedVecScope    :: core
   }
