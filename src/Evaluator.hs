@@ -22,7 +22,14 @@ eval (CoreVar var) = do
   case Map.lookup var env of
     Just (ident, value) -> pure value
     _ -> throwError $ ErrorUnbound var
-eval (CoreLam ident var body) = undefined
+eval (CoreLam ident var body) = do
+  env <- ask
+  pure $ ValueClosure $ Closure
+    { closureEnv   = env
+    , closureIdent = ident
+    , closureVar   = var
+    , closureBody  = body
+    }
 eval (CoreApp fun arg) = undefined
 eval (CoreSyntaxError syntaxError) = undefined
 eval (CoreSyntax syntax) = undefined
