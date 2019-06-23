@@ -15,7 +15,7 @@ dependencies:
 library:
   source-dirs: src
 executables:
-  stuck-macros:
+  stuck-macros-repl:
     main:        Main.hs
     source-dirs: stuck-macros
     dependencies:
