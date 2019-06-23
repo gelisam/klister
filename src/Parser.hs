@@ -13,6 +13,8 @@ import qualified Text.Megaparsec.Char.Lexer as L
 import Parser.Common
 import Syntax
 import Syntax.Lexical
+import qualified ScopeSet
+
 
 readExpr :: FilePath -> Text -> Either Text Syntax
 readExpr filename fileContents =
@@ -26,21 +28,21 @@ expr = list <|> vec <|> ident
 ident :: Parser Syntax
 ident =
   do Located srcloc x <- lexeme identName
-     return $ Syntax $ Stx noScopes srcloc (Id x)
+     return $ Syntax $ Stx ScopeSet.empty srcloc (Id x)
 
 list :: Parser Syntax
 list =
   do Located loc1 _ <- located (literal "(")
      xs <- many expr
      Located loc2 _ <- located (literal ")")
-     return $ Syntax $ Stx noScopes (spanLocs loc1 loc2) (List xs)
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (List xs)
 
 vec  :: Parser Syntax
 vec =
   do Located loc1 _ <- located (literal "[")
      xs <- many expr
      Located loc2 _ <- located (literal "]")
-     return $ Syntax $ Stx noScopes (spanLocs loc1 loc2) (Vec xs)
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (Vec xs)
 
 identName :: Parser Text
 identName = takeWhile1P (Just "identifier character") isLetter
