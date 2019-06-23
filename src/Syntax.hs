@@ -47,9 +47,9 @@ removeScope :: Syntax -> Scope -> Syntax
 removeScope = adjustScope ScopeSet.delete
 
 flipScope :: Syntax -> Scope -> Syntax
-flipScope = adjustScope flip
+flipScope = adjustScope go
   where
-    flip sc scs
+    go sc scs
       | ScopeSet.member sc scs = ScopeSet.delete sc scs
       | otherwise              = ScopeSet.insert sc scs
 

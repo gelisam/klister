@@ -76,6 +76,7 @@ instance AlphaEq a => AlphaEq [a] where
              (x2:xs2) = do
     alphaCheck x1  x2
     alphaCheck xs1 xs2
+  alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq Text where
   alphaCheck x y = guard (x == y)

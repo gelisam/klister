@@ -3,6 +3,7 @@ version:        0.1
 github:         gelisam/stuck-macros
 author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
+ghc-options: -Wall
 executables:
   stuck-macros:
     main:        Main.hs
