@@ -8,7 +8,7 @@ import Core
 
 newtype PartialCore = PartialCore
   { unPartialCore :: Maybe (CoreF PartialCore) }
-  deriving Show
+  deriving (Eq, Show)
 makePrisms ''PartialCore
 
 nonPartial :: Core -> PartialCore

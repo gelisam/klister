@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
 module Expander where
 
 import Control.Lens hiding (List, children)
@@ -282,6 +282,22 @@ initializeExpansionEnv =
             addReady funDest fun
             addReady argDest arg
             link dest $ CoreApp funDest argDest
+        )
+      , ( "pure"
+        , \ dest stx -> do
+            (Stx _ _ (_ :: Syntax, v)) <- mustBeVec stx
+            argDest <- liftIO newUnique
+            addReady argDest v
+            link dest $ CorePure argDest
+        )
+      , ( ">>="
+        , \ dest stx -> do
+            (Stx _ _ (_, act, cont)) <- mustBeVec stx
+            actDest <- liftIO newUnique
+            contDest <- liftIO newUnique
+            addReady actDest act
+            addReady contDest cont
+            link dest $ CoreBind actDest contDest
         )
       ]
 
