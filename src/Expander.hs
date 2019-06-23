@@ -4,7 +4,6 @@ module Expander where
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Data.IORef
 
 import Data.Unique
@@ -16,11 +15,11 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import Numeric.Natural
 
-import Core
 import PartialCore
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
+import SplitCore
 import Syntax
 import Value
 import qualified ScopeSet
@@ -204,37 +203,6 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
     return (Stx scs srcloc (v, w, x, y, z))
   mustBeVec other = throwError (NotRightLength 5 other)
 
-
-data SplitCore = SplitCore
-  { _splitCoreRoot        :: Unique
-  , _splitCoreDescendants :: Map Unique (CoreF Unique)
-  }
-makeLenses ''SplitCore
-
-zonk :: SplitCore -> PartialCore
-zonk (SplitCore {..}) = PartialCore $ go _splitCoreRoot
-  where
-    go :: Unique -> Maybe (CoreF PartialCore)
-    go unique = do
-      this <- Map.lookup unique _splitCoreDescendants
-      return (fmap (PartialCore . go) this)
-
-unzonk :: PartialCore -> IO SplitCore
-unzonk partialCore = do
-  root <- newUnique
-  ((), childMap) <- runWriterT $ go root (unPartialCore partialCore)
-  return $ SplitCore root childMap
-  where
-    go ::
-      Unique -> Maybe (CoreF PartialCore) ->
-      WriterT (Map Unique (CoreF Unique)) IO ()
-    go _     Nothing = pure ()
-    go place (Just c) = do
-      children <- flip traverse c $ \p -> do
-        here <- liftIO newUnique
-        go here (unPartialCore p)
-        pure here
-      tell $ Map.singleton place children
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
