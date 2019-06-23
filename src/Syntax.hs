@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveFunctor, OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor, OverloadedStrings, TemplateHaskell #-}
 module Syntax where
 
+import Control.Lens hiding (List)
 import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -11,24 +12,39 @@ import ScopeSet (ScopeSet)
 import qualified ScopeSet
 
 
-data SrcPos = SrcPos !Int !Int
+data SrcPos = SrcPos
+  { _srcPosLine :: !Int
+  , _srcPosCol  :: !Int
+  }
   deriving (Eq, Show)
+makeLenses ''SrcPos
 
-data SrcLoc = SrcLoc !FilePath !SrcPos !SrcPos
+data SrcLoc = SrcLoc
+  { _srcLocFilePath :: !FilePath
+  , _srcLocStart    :: !SrcPos
+  , _srcLocEnd      :: !SrcPos
+  }
   deriving (Eq, Show)
+makeLenses ''SrcLoc
 
-
-data Stx a = Stx ScopeSet !SrcLoc a
+data Stx a = Stx
+  { _stxScopeSet :: ScopeSet
+  , _stxSrcLoc   :: !SrcLoc
+  , _stxValue    :: a
+  }
+makeLenses ''Stx
 
 data ExprF a
   = Id Text
   | List [a]
   | Vec [a]
   deriving Functor
+makePrisms ''ExprF
 
 
 newtype Syntax =
   Syntax (Stx (ExprF Syntax))
+makePrisms ''Syntax
 
 type Ident = Stx Text
 

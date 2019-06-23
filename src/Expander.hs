@@ -1,9 +1,9 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RankNTypes, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, ViewPatterns #-}
 module Expander where
 
+import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Data.IORef
 
 import Data.Unique
@@ -16,10 +16,10 @@ import Data.Text (Text)
 import Numeric.Natural
 
 import Core
-import PartialCore
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
+import SplitCore
 import Syntax
 import Value
 import qualified ScopeSet
@@ -29,9 +29,6 @@ newtype Binding = Binding Unique
   deriving (Eq, Ord)
 
 type BindingTable = Map Text [(ScopeSet, Binding)]
-
-freshBinding :: Expand Binding
-freshBinding = Binding <$> liftIO newUnique
 
 data ExpansionErr
   = Ambiguous Ident
@@ -46,40 +43,33 @@ newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
 
 data ExpanderContext = ExpanderContext
-  { expanderState :: IORef ExpanderState
-  , expanderPhase :: !Phase
+  { _expanderState :: IORef ExpanderState
+  , _expanderPhase :: !Phase
   }
 
 data ExpanderState = ExpanderState
-  { expanderReceivedSignals :: !(Set.Set Signal)
-  , expanderEnvironments :: !(Map.Map Phase Env)
-  , expanderNextScope :: !Scope
-  , expanderBindingTable :: !BindingTable
-  , expanderExpansionEnv :: !ExpansionEnv
-  , expanderTasks :: [(Unique, ExpanderTask)]
+  { _expanderReceivedSignals :: !(Set.Set Signal)
+  , _expanderEnvironments :: !(Map.Map Phase Env)
+  , _expanderNextScope :: !Scope
+  , _expanderBindingTable :: !BindingTable
+  , _expanderExpansionEnv :: !ExpansionEnv
+  , _expanderTasks :: [(Unique, ExpanderTask)]
   }
 
 initExpanderState :: ExpanderState
 initExpanderState = ExpanderState
-  { expanderReceivedSignals = Set.empty
-  , expanderEnvironments = Map.empty
-  , expanderNextScope = Scope 0
-  , expanderBindingTable = Map.empty
-  , expanderExpansionEnv = ExpansionEnv mempty
-  , expanderTasks = []
+  { _expanderReceivedSignals = Set.empty
+  , _expanderEnvironments = Map.empty
+  , _expanderNextScope = Scope 0
+  , _expanderBindingTable = Map.empty
+  , _expanderExpansionEnv = ExpansionEnv mempty
+  , _expanderTasks = []
   }
 
 data EValue
   = EPrimMacro (Syntax -> Expand SplitCore) -- ^ For "special forms"
   | EVarMacro !Unique -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
-
-getEValue :: Binding -> Expand EValue
-getEValue b = do
-  ExpansionEnv env <- expanderExpansionEnv <$> getState
-  case Map.lookup b env of
-    Just v -> return v
-    Nothing -> throwError (InternalError "No such binding")
 
 data SyntacticCategory = Module | Declaration | Expression
 
@@ -94,26 +84,47 @@ data ExpanderTask
   = Ready Syntax
   | Blocked Signal Value -- the value is the continuation
 
+makePrisms ''Binding
+makePrisms ''ExpansionErr
+makePrisms ''Phase
+makeLenses ''ExpanderContext
+makeLenses ''ExpanderState
+makePrisms ''EValue
+makePrisms ''SyntacticCategory
+makePrisms ''ExpansionEnv
+makePrisms ''ExpanderTask
+
+
+freshBinding :: Expand Binding
+freshBinding = Binding <$> liftIO newUnique
+
+getEValue :: Binding -> Expand EValue
+getEValue b = do
+  ExpansionEnv env <- view expanderExpansionEnv <$> getState
+  case Map.lookup b env of
+    Just v -> return v
+    Nothing -> throwError (InternalError "No such binding")
+
 expanderContext :: Expand ExpanderContext
 expanderContext = Expand ask
 
 getState :: Expand ExpanderState
-getState = expanderState <$> expanderContext >>= liftIO . readIORef
+getState = view expanderState <$> expanderContext >>= liftIO . readIORef
 
 modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
 modifyState f = do
-  st <- expanderState <$> expanderContext
+  st <- view expanderState <$> expanderContext
   liftIO (modifyIORef st f)
 
 freshScope :: Expand Scope
 freshScope = do
-  sc <- expanderNextScope <$> getState
-  modifyState (\st -> st { expanderNextScope = nextScope (expanderNextScope st) })
+  sc <- view expanderNextScope <$> getState
+  modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
   return sc
 
 
 bindingTable :: Expand BindingTable
-bindingTable = expanderBindingTable <$> getState
+bindingTable = view expanderBindingTable <$> getState
 
 addBinding :: Text -> ScopeSet -> Binding -> Expand ()
 addBinding name scs b = do
@@ -121,9 +132,9 @@ addBinding name scs b = do
   -- to two bindings. That would indicate a bug in the expander but
   -- this code doesn't catch that.
   modifyState $
-    \st -> st { expanderBindingTable =
+    \st -> st { _expanderBindingTable =
                 Map.insertWith (<>) name [(scs, b)] $
-                expanderBindingTable st
+                view expanderBindingTable st
               }
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
@@ -193,36 +204,6 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
   mustBeVec other = throwError (NotRightLength 5 other)
 
 
-data SplitCore = SplitCore
-  { splitCoreRoot        :: Unique
-  , splitCoreDescendants :: Map Unique (CoreF Unique)
-  }
-
-zonk :: SplitCore -> PartialCore
-zonk (SplitCore {..}) = PartialCore $ go splitCoreRoot
-  where
-    go :: Unique -> Maybe (CoreF PartialCore)
-    go unique = do
-      this <- Map.lookup unique splitCoreDescendants
-      return (fmap (PartialCore . go) this)
-
-unzonk :: PartialCore -> IO SplitCore
-unzonk partialCore = do
-  root <- newUnique
-  ((), childMap) <- runWriterT $ go root (unPartialCore partialCore)
-  return $ SplitCore root childMap
-  where
-    go ::
-      Unique -> Maybe (CoreF PartialCore) ->
-      WriterT (Map Unique (CoreF Unique)) IO ()
-    go _     Nothing = pure ()
-    go place (Just c) = do
-      children <- flip traverse c $ \p -> do
-        here <- liftIO newUnique
-        go here (unPartialCore p)
-        pure here
-      tell $ Map.singleton place children
-
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
 identifierHeaded (Syntax (Stx _ _ (List (h:_))))
@@ -240,8 +221,8 @@ expandExpression stx
         EPrimMacro impl -> impl stx
         EVarMacro var ->
           do e <- liftIO $ newUnique
-             return $ SplitCore { splitCoreRoot = e
-                                , splitCoreDescendants = Map.singleton e (CoreVar var)
+             return $ SplitCore { _splitCoreRoot = e
+                                , _splitCoreDescendants = Map.singleton e (CoreVar var)
                                 }
         EUserMacro _ _impl ->
           error "Unimplemented"

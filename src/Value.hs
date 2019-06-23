@@ -1,5 +1,7 @@
+{-# LANGUAGE TemplateHaskell #-}
 module Value where
 
+import Control.Lens
 import Data.Map
 import Data.Unique
 
@@ -14,8 +16,11 @@ data Value
   | ValueSyntax Syntax
 
 data Closure = Closure
-  { closureEnv   :: Env
-  , closureIdent :: Ident
-  , closureVar   :: Var 
-  , closureBody  :: Core
+  { _closureEnv   :: Env
+  , _closureIdent :: Ident
+  , _closureVar   :: Var 
+  , _closureBody  :: Core
   }
+
+makePrisms ''Value
+makeLenses ''Closure

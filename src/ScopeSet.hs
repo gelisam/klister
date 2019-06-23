@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveFunctor, OverloadedStrings #-}
+{-# LANGUAGE DeriveFunctor, OverloadedStrings, TemplateHaskell #-}
 module ScopeSet where
 
+import Control.Lens
 import Control.Monad
 import qualified Data.Set as Set
 
@@ -11,6 +12,7 @@ import Scope
 newtype ScopeSet = ScopeSet
   { unScopeSet :: Set.Set Scope }
   deriving (Eq, Ord, Show)
+makePrisms ''ScopeSet
 
 empty :: ScopeSet
 empty = ScopeSet Set.empty
