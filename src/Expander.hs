@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
 module Expander where
 
 import Control.Lens hiding (List, children)
@@ -24,7 +24,6 @@ import SplitCore
 import Syntax
 import Value
 import qualified ScopeSet
-
 
 
 newtype Binding = Binding Unique
@@ -155,6 +154,9 @@ link dest layer =
 getTasks :: Expand [(Unique, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
+clearTasks :: Expand ()
+clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
+
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
 
@@ -231,7 +233,7 @@ instance MustBeVec (Syntax, Syntax) where
   mustBeVec (Syntax (Stx scs srcloc (Vec [x, y]))) = return (Stx scs srcloc (x, y))
   mustBeVec other = throwError (NotRightLength 2 other)
 
-instance MustBeVec (Syntax, Syntax, Syntax) where
+instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => MustBeVec (a, b, c) where
   mustBeVec (Syntax (Stx scs srcloc (Vec [x, y, z]))) = return (Stx scs srcloc (x, y, z))
   mustBeVec other = throwError (NotRightLength 3 other)
 
@@ -251,9 +253,26 @@ initializeExpansionEnv =
   pure ()
 
   where
+    prims :: [(Text, Unique -> Syntax -> Expand ())]
     prims =
       [ ( "oops"
-        , \_ stx -> throwError (InternalError $ "oops" ++ show stx)
+        , \ _ stx -> throwError (InternalError $ "oops" ++ show stx)
+        )
+      , ( "lambda"
+        , \ dest stx -> do
+            (Stx _ _ (_, arg, body)) <- mustBeVec stx
+            (Stx _ _ theArg) <- mustBeVec @Syntax arg
+            x <- mustBeIdent theArg
+            sc <- freshScope
+            let body' = addScope body sc
+            let (Stx argScopes _ arg') = addScope x sc
+            b <- freshBinding
+            addBinding arg' argScopes b
+            coreArg <- freshVar
+            bind b (EVarMacro coreArg)
+            bodyDest <- liftIO newUnique
+            addReady bodyDest body'
+            link dest $ CoreLam x coreArg bodyDest
         )
       ]
 
@@ -264,6 +283,15 @@ initializeExpansionEnv =
       -- FIXME primitive scope:
       addBinding name ScopeSet.empty b
       bind b val
+
+freshVar :: Expand Var
+freshVar = Var <$> liftIO newUnique
+
+addReady :: Unique -> Syntax -> Expand ()
+addReady dest stx =
+  modifyState $
+  \st -> st { _expanderTasks = (dest, Ready stx) : view expanderTasks st
+            }
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
@@ -289,6 +317,7 @@ expandTasks = do
   case tasks of
     [] -> return ()
     more -> do
+      clearTasks
       forM_ more runTask
       newTasks <- getTasks
       if tasks == newTasks

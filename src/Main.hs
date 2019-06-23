@@ -40,4 +40,6 @@ repl = forever $
             c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
             case c of
               Left err -> putStr "Expander error: " *> print err
-              Right out -> print $ zonk out
+              Right out -> do
+                putStrLn "Expander Output:"
+                print $ zonk out

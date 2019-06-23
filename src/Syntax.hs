@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor, OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, FlexibleInstances, OverloadedStrings, TemplateHaskell #-}
 module Syntax where
 
 import Control.Lens hiding (List)
@@ -50,20 +50,29 @@ makePrisms ''Syntax
 
 type Ident = Stx Text
 
-adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> Syntax -> Scope -> Syntax
-adjustScope f (Syntax (Stx scs srcloc e)) sc =
-  Syntax $
-  Stx (f sc scs) srcloc $
-  adjustRec e
-  where
-    adjustRec (Id x) = Id x
-    adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
-    adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
+class HasScopes a where
+  getScopes :: a -> ScopeSet
+  adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> a -> Scope -> a
 
-addScope :: Syntax -> Scope -> Syntax
+instance HasScopes (Stx Text) where
+  getScopes (Stx scs _ _) = scs
+  adjustScope f (Stx scs srcloc x) sc = Stx (f sc scs) srcloc x
+
+instance HasScopes Syntax where
+  getScopes (Syntax (Stx scs _ _)) = scs
+  adjustScope f (Syntax (Stx scs srcloc e)) sc =
+    Syntax $
+    Stx (f sc scs) srcloc $
+    adjustRec e
+    where
+      adjustRec (Id x) = Id x
+      adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
+      adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
+
+addScope :: HasScopes a => a -> Scope -> a
 addScope = adjustScope ScopeSet.insert
 
-removeScope :: Syntax -> Scope -> Syntax
+removeScope :: HasScopes a => a -> Scope -> a
 removeScope = adjustScope ScopeSet.delete
 
 flipScope :: Syntax -> Scope -> Syntax
