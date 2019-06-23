@@ -19,9 +19,13 @@ import Numeric.Natural
 
 import Core
 import PartialCore
+import Scope
+import ScopeSet (ScopeSet)
 import Signals
 import Syntax
 import Value
+import qualified ScopeSet
+
 
 newtype Binding = Binding Unique
   deriving (Eq, Ord)
@@ -120,13 +124,13 @@ allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
   bindings <- bindingTable
   return $
-    filter (flip Set.isSubsetOf scs . fst) $
+    filter (flip ScopeSet.isSubsetOf scs . fst) $
     fromMaybe [] (Map.lookup x bindings)
 
 checkUnambiguous :: Text -> ScopeSet -> [ScopeSet] -> Syntax -> Expand ()
 checkUnambiguous x best candidates blame =
-  let bestSize = Set.size best
-      candidateSizes = map Set.size candidates
+  let bestSize = ScopeSet.size best
+      candidateSizes = map ScopeSet.size candidates
   in
     if length (filter (== bestSize) candidateSizes) > 1
       then throwError (Ambiguous x)
@@ -138,7 +142,7 @@ resolve stx@(Syntax (Stx scs srcLoc (Id x))) = do
   case bs of
     [] -> throwError (Unknown (Stx scs srcLoc x))
     candidates ->
-      let best = maximumOn (Set.size . fst) candidates
+      let best = maximumOn (ScopeSet.size . fst) candidates
       in checkUnambiguous x (fst best) (map fst candidates) stx *>
          return (snd best)
 resolve other = throwError (NotIdentifier other)
