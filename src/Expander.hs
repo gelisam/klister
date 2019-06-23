@@ -57,14 +57,24 @@ allMatchingBindings x scs = do
     filter (flip Set.isSubsetOf scs . fst) $
     fromMaybe [] (Map.lookup x bindings)
 
+checkUnambiguous :: Text -> ScopeSet -> [ScopeSet] -> Syntax -> Expand ()
+checkUnambiguous x best candidates blame =
+  let bestSize = Set.size best
+      candidateSizes = map Set.size candidates
+  in
+    if length (filter (== bestSize) candidateSizes) > 1
+      then throwError (Ambiguous x)
+      else return ()
+
 resolve :: Syntax -> Expand Binding
-resolve (Syntax (Stx scs srcLoc (Id x))) = do
+resolve stx@(Syntax (Stx scs srcLoc (Id x))) = do
   bs <- allMatchingBindings x scs
   case bs of
     [] -> throwError (Unknown (Stx scs srcLoc x))
     candidates ->
       let best = maximumOn (Set.size . fst) candidates
-      in undefined -- TODO check unambiguous, then return the binding object
+      in checkUnambiguous x (fst best) (map fst candidates) stx *>
+         return (snd best)
 resolve other = throwError (NotIdentifier other)
 
 data SplitCore = SplitCore
