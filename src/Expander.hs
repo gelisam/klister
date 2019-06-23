@@ -62,11 +62,18 @@ initExpanderState = ExpanderState
   , expanderEnvironments = Map.empty
   , expanderNextScope = Scope 0
   , expanderBindingTable = Map.empty
-  , expanderExpansionEnv = ExpansionEnv
+  , expanderExpansionEnv = ExpansionEnv mempty
   , expanderTasks = []
   }
 
-data ExpansionEnv = ExpansionEnv -- TODO
+data EValue
+  = EPrimMacro (Syntax -> Expand PartialCore) -- ^ For "special forms"
+  | EVarMacro !PartialCore -- ^ For bound variables
+  | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
+
+data SyntacticCategory = Module | Declaration | Expression
+
+newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 
 newtype Expand a = Expand
   { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
@@ -211,5 +218,13 @@ unzonk partialCore = do
         tell splitCoreDescendants
       pure unique
 
-expand :: Syntax -> Expand SplitCore
-expand stx = undefined
+identifierHeaded :: Syntax -> Maybe Ident
+identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
+identifierHeaded (Syntax (Stx scs srcloc (List (h:_))))
+  | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
+identifierHeaded (Syntax (Stx scs srcloc (Vec (h:_))))
+  | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
+identifierHeaded _ = Nothing
+
+expandExpression :: Syntax -> Expand SplitCore
+expandExpression stx = undefined
