@@ -18,12 +18,14 @@ data TypeError = TypeError
   { _typeErrorExpected :: Type
   , _typeErrorActual   :: Type
   }
+  deriving (Eq, Show)
 makeLenses ''TypeError
 
 data EvalError
   = EvalErrorUnbound Var
   | EvalErrorType TypeError
   | EvalErrorCase Value
+  deriving (Eq, Show)
 makePrisms ''EvalError
 
 newtype Eval a = Eval

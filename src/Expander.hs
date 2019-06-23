@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings, RecordWildCards, RankNTypes, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
 module Expander where
 
 import Control.Lens hiding (List, children)
@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import Numeric.Natural
 
 import Core
+import Evaluator
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -39,6 +40,8 @@ data ExpansionErr
   | NotEmpty Syntax
   | NotCons Syntax
   | NotRightLength Natural Syntax
+  | MacroRaisedSyntaxError (SyntaxError Syntax)
+  | MacroEvaluationError EvalError
   | InternalError String
   deriving (Eq, Show)
 
@@ -92,7 +95,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 newtype Expand a = Expand
   { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
   }
-  deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO)
+  deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO, MonadReader ExpanderContext)
 
 execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
@@ -364,3 +367,28 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
+interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
+interpretMacroAction (MacroActionPure value) = do
+  pure $ Right value
+interpretMacroAction (MacroActionBind macroAction closure) = do
+  interpretMacroAction macroAction >>= \case
+    Left (signal, closures) -> do
+      pure $ Left (signal, closures ++ [closure])
+    Right boundResult -> do
+      phase <- view expanderPhase
+      s <- getState
+      let env = fromMaybe Map.empty
+                          (s ^. expanderEnvironments . at phase)
+      evalResult <- liftIO
+                  $ runExceptT
+                  $ flip runReaderT env
+                  $ runEval
+                  $ apply closure boundResult
+      case evalResult of
+        Left evalError -> do
+          throwError $ MacroEvaluationError evalError
+        Right value -> pure $ Right value
+interpretMacroAction (MacroActionSyntaxError syntaxError) = do
+  throwError $ MacroRaisedSyntaxError syntaxError
+interpretMacroAction (MacroActionSendSignal signal) = do
+  pure $ Left (signal, [])

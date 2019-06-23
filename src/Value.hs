@@ -16,13 +16,13 @@ data MacroAction
   | MacroActionBind MacroAction Closure
   | MacroActionSyntaxError (SyntaxError Syntax)
   | MacroActionSendSignal Signal
-  deriving (Eq)
+  deriving (Eq, Show)
 
 data Value
   = ValueClosure Closure
   | ValueSyntax Syntax
   | ValueMacroAction MacroAction
-  deriving (Eq)
+  deriving (Eq, Show)
 
 data Closure = Closure
   { _closureEnv   :: Env
@@ -30,7 +30,7 @@ data Closure = Closure
   , _closureVar   :: Var
   , _closureBody  :: Core
   }
-  deriving (Eq)
+  deriving (Eq, Show)
 
 makePrisms ''MacroAction
 makePrisms ''Value
