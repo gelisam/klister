@@ -50,21 +50,21 @@ eval (Core (CoreVar var)) = do
 eval (Core (CoreLam ident var body)) = do
   env <- ask
   pure $ ValueClosure $ Closure
-    { closureEnv   = env
-    , closureIdent = ident
-    , closureVar   = var
-    , closureBody  = body
+    { _closureEnv   = env
+    , _closureIdent = ident
+    , _closureVar   = var
+    , _closureBody  = body
     }
 eval (Core (CoreApp fun arg)) = do
   funValue <- eval fun
   argValue <- eval arg
   case funValue of
     ValueClosure (Closure {..}) -> do
-      let env = Map.insert closureVar
-                           (closureIdent, argValue)
-                           closureEnv
+      let env = Map.insert _closureVar
+                           (_closureIdent, argValue)
+                           _closureEnv
       withEnv env $ do
-        eval closureBody
+        eval _closureBody
     ValueSyntax _ -> do
       throwError $ ErrorType $ TypeError
         { typeErrorExpected = "function"
