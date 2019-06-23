@@ -25,6 +25,8 @@ tests:
     main:
       tests/Test.hs
     dependencies:
+      - call-stack
+      - deepseq
       - stuck-macros
       - tasty
       - tasty-hunit

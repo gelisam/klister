@@ -1,13 +1,17 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Control.Monad
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Test.Tasty
 import Test.Tasty.HUnit
 
+
 import Alpha
 import Core
+import Core.Builder
 import Expander
 import Parser
 import PartialCore
@@ -26,11 +30,12 @@ miniTests =
    [ testCase (show input) (testExpander input output)
    | (input, output) <-
      [("[lambda [x] x]",
-       Core (CoreSendSignal (Signal 0)))]
+       lam $ \x -> pure x)]
    ]
 
-testExpander :: Text -> Core -> Assertion
-testExpander input output =
+testExpander :: Text -> IO Core -> Assertion
+testExpander input spec = do
+  output <- spec
   case readExpr "<test suite>" input of
     Left err -> assertFailure (show err)
     Right expr -> do
@@ -41,4 +46,13 @@ testExpander input output =
         Right expanded ->
           case runPartialCore $ zonk expanded of
             Nothing -> assertFailure "Incomplete expansion"
-            Just c -> assertFailure "unimplemented"
+            Just done -> assertAlphaEq (T.unpack input) output done
+
+----------------------------
+-- Stolen from HUnit
+
+assertAlphaEq :: (AlphaEq a, Show a) => String -> a -> a -> Assertion
+assertAlphaEq preface expected actual =
+  unless (alphaEq actual expected) (assertFailure msg)
+ where msg = (if null preface then "" else preface ++ "\n") ++
+             "expected: " ++ show expected ++ "\n but got: " ++ show actual

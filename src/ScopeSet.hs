@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor, OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, GeneralizedNewtypeDeriving, OverloadedStrings, TemplateHaskell #-}
 module ScopeSet where
 
 import Control.Lens
@@ -11,7 +11,7 @@ import Scope
 
 newtype ScopeSet = ScopeSet
   { unScopeSet :: Set.Set Scope }
-  deriving (Eq, Ord, Show)
+  deriving (Eq, Monoid, Ord, Semigroup, Show)
 makePrisms ''ScopeSet
 
 empty :: ScopeSet

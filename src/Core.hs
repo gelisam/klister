@@ -91,9 +91,8 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreVar var1)
              (CoreVar var2) = do
     alphaCheck var1 var2
-  alphaCheck (CoreLam ident1 var1 body1)
-             (CoreLam ident2 var2 body2) = do
-    alphaCheck ident1 ident2
+  alphaCheck (CoreLam _ var1 body1)
+             (CoreLam _ var2 body2) = do
     alphaCheck var1   var2
     alphaCheck body1  body2
   alphaCheck (CoreApp fun1 arg1)
@@ -133,22 +132,19 @@ instance AlphaEq Core where
     alphaCheck x1 x2
 
 instance AlphaEq Pattern where
-  alphaCheck (PatternIdentifier n1 x1)
-             (PatternIdentifier n2 x2) = do
-    alphaCheck n1 n2
+  alphaCheck (PatternIdentifier _ x1)
+             (PatternIdentifier _ x2) = do
     alphaCheck x1 x2
   alphaCheck PatternEmpty
              PatternEmpty = do
     pure ()
-  alphaCheck (PatternCons nx1 x1 nxs1 xs1)
-             (PatternCons nx2 x2 nxs2 xs2) = do
-    alphaCheck nx1  nx2
+  alphaCheck (PatternCons _ x1 _ xs1)
+             (PatternCons _ x2 _ xs2) = do
     alphaCheck x1   x2
-    alphaCheck nxs1 nxs2
     alphaCheck xs1  xs2
   alphaCheck (PatternVec xs1)
              (PatternVec xs2) = do
-    alphaCheck xs1 xs2
+    alphaCheck (map snd xs1) (map snd xs2)
   alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq core => AlphaEq (ScopedIdent core) where
