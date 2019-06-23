@@ -29,7 +29,7 @@ repl :: IO ()
 repl = forever $
   do putStr "> "
      l <- T.getLine
-     tryCommand l $ \l -> case readExpr "<repl>" l of
+     tryCommand l $ \l' -> case readExpr "<repl>" l' of
        Left err -> T.putStrLn err
        Right ok ->
          do putStrLn "Parser output:"

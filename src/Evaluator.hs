@@ -3,7 +3,6 @@ module Evaluator where
 
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.Unique
 import qualified Data.Map as Map
 
 import Syntax
@@ -66,7 +65,7 @@ eval (Core (CoreApp fun arg)) = do
                            closureEnv
       withEnv env $ do
         eval closureBody
-    ValueSyntax syntax -> do
+    ValueSyntax _ -> do
       throwError $ ErrorType $ TypeError
         { typeErrorExpected = "function"
         , typeErrorActual   = "syntax"
@@ -87,7 +86,7 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   identSyntax <- evalAsSyntax ident
   case identSyntax of
     Syntax (Stx _ _ expr) -> case expr of
-      List vs -> do
+      List _ -> do
         throwError $ ErrorType $ TypeError
           { typeErrorExpected = "id"
           , typeErrorActual   = "list"
@@ -138,12 +137,12 @@ withScopeOf scope expr = do
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
 doCase :: Value -> [(Pattern, Core)] -> Eval Value
-doCase v []              = throwError (ErrorCase v)
-doCase v ((p, rhs) : ps) = match (doCase v ps) p rhs v
+doCase v0 []               = throwError (ErrorCase v0)
+doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
   where
     match next (PatternIdentifier n x) rhs =
       \case
-        v@(ValueSyntax (Syntax (Stx _ _ (Id y)))) ->
+        v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
           withExtendedEnv n x v (eval rhs)
         _ -> next
     match next PatternEmpty rhs =

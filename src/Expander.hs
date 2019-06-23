@@ -5,7 +5,6 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.IORef
-import Data.Foldable
 
 import Data.Unique
 import Data.List.Extra
@@ -14,7 +13,6 @@ import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
 import Numeric.Natural
 
 import Core
@@ -128,7 +126,7 @@ allMatchingBindings x scs = do
     fromMaybe [] (Map.lookup x bindings)
 
 checkUnambiguous :: Text -> ScopeSet -> [ScopeSet] -> Syntax -> Expand ()
-checkUnambiguous x best candidates blame =
+checkUnambiguous x best candidates _blame =
   let bestSize = ScopeSet.size best
       candidateSizes = map ScopeSet.size candidates
   in
@@ -210,7 +208,7 @@ unzonk partialCore = do
     go ::
       Unique -> Maybe (CoreF PartialCore) ->
       WriterT (Map Unique (CoreF Unique)) IO ()
-    go place Nothing = pure ()
+    go _     Nothing = pure ()
     go place (Just c) = do
       children <- flip traverse c $ \p -> do
         here <- liftIO newUnique
@@ -220,11 +218,11 @@ unzonk partialCore = do
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
-identifierHeaded (Syntax (Stx scs srcloc (List (h:_))))
+identifierHeaded (Syntax (Stx _ _ (List (h:_))))
   | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
-identifierHeaded (Syntax (Stx scs srcloc (Vec (h:_))))
+identifierHeaded (Syntax (Stx _ _ (Vec (h:_))))
   | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
 identifierHeaded _ = Nothing
 
 expandExpression :: Syntax -> Expand SplitCore
-expandExpression stx = undefined
+expandExpression _stx = undefined

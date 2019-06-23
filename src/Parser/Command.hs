@@ -1,14 +1,11 @@
 {-# LANGUAGE OverloadedStrings, ViewPatterns #-}
 module Parser.Command (Command(..), readCommand) where
 
-import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
-import Data.Void
 
 import Text.Megaparsec
 import Text.Megaparsec.Char
-import qualified Text.Megaparsec.Char.Lexer as L
 
 import Parser.Common
 

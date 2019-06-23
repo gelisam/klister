@@ -1,7 +1,6 @@
 {-# LANGUAGE DeriveFunctor, OverloadedStrings #-}
 module ScopeSet where
 
-import Data.Set (Set)
 import qualified Data.Set as Set
 
 import Scope
