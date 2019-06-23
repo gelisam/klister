@@ -1,6 +1,7 @@
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, TemplateHaskell #-}
 module Core where
 
+import Control.Lens
 import Data.Unique
 
 import Alpha
@@ -8,11 +9,47 @@ import Syntax
 
 
 data SyntaxError = SyntaxError
-  { syntaxErrorLocations :: [Syntax]
-  , syntaxErrorMessage   :: Syntax
+  { _syntaxErrorLocations :: [Syntax]
+  , _syntaxErrorMessage   :: Syntax
   }
+makeLenses ''SyntaxError
 
 type Var = Unique
+
+data Pattern
+  = PatternIdentifier Ident Var
+  | PatternEmpty
+  | PatternCons Ident Var Ident Var
+  | PatternVec [(Ident, Var)]
+makePrisms ''Pattern
+
+data ScopedIdent core = ScopedIdent
+  { _scopedIdentIdentifier :: core
+  , _scopedIdentScope      :: core
+  }
+  deriving (Functor, Foldable, Traversable)
+makeLenses ''ScopedIdent
+
+data ScopedEmpty core = ScopedEmpty
+  { _scopedEmptyScope :: core
+  }
+  deriving (Functor, Foldable, Traversable)
+makeLenses ''ScopedEmpty
+
+data ScopedCons core = ScopedCons
+  { _scopedConsHead  :: core
+  , _scopedConsTail  :: core
+  , _scopedConsScope :: core
+  }
+  deriving (Functor, Foldable, Traversable)
+makeLenses ''ScopedCons
+
+data ScopedVec core = ScopedVec
+  { _scopedVecElements :: [core]
+  , _scopedVecScope    :: core
+  }
+  deriving (Functor, Foldable, Traversable)
+makeLenses ''ScopedVec
 
 data CoreF core
   = CoreVar Var
@@ -27,39 +64,11 @@ data CoreF core
   | CoreCons (ScopedCons core)
   | CoreVec (ScopedVec core)
   deriving (Functor, Foldable, Traversable)
+makePrisms ''CoreF
 
 newtype Core = Core
   { unCore :: CoreF Core }
-
-data Pattern
-  = PatternIdentifier Ident Var
-  | PatternEmpty
-  | PatternCons Ident Var Ident Var
-  | PatternVec [(Ident, Var)]
-
-data ScopedIdent core = ScopedIdent
-  { scopedIdentIdentifier :: core
-  , scopedIdentScope      :: core
-  }
-  deriving (Functor, Foldable, Traversable)
-
-data ScopedEmpty core = ScopedEmpty
-  { scopedEmptyScope :: core
-  }
-  deriving (Functor, Foldable, Traversable)
-
-data ScopedCons core = ScopedCons
-  { scopedConsHead  :: core
-  , scopedConsTail  :: core
-  , scopedConsScope :: core
-  }
-  deriving (Functor, Foldable, Traversable)
-
-data ScopedVec core = ScopedVec
-  { scopedVecElements :: [core]
-  , scopedVecScope    :: core
-  }
-  deriving (Functor, Foldable, Traversable)
+makePrisms ''Core
 
 
 instance AlphaEq SyntaxError where
