@@ -93,7 +93,6 @@ makeLenses ''ExpanderState
 makePrisms ''EValue
 makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
-makePrisms ''Expand
 makePrisms ''ExpanderTask
 
 
