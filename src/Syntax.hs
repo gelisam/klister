@@ -44,6 +44,7 @@ makePrisms ''ExprF
 
 newtype Syntax =
   Syntax (Stx (ExprF Syntax))
+makePrisms ''Syntax
 
 type Ident = Stx Text
 
