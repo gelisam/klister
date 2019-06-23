@@ -15,10 +15,13 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import Numeric.Natural
 
 import Core
 import PartialCore
+import Signals
 import Syntax
+import Value
 
 newtype Binding = Binding Unique
   deriving (Eq, Ord)
@@ -33,26 +36,62 @@ data ExpansionErr
   | Unknown (Stx Text)
   | NotIdentifier Syntax
 
+newtype Phase = Phase Natural
+  deriving (Eq, Ord, Show)
+
+data ExpanderContext = ExpanderContext
+  { expanderState :: IORef ExpanderState
+  , expanderPhase :: !Phase
+  }
+
+data ExpanderState = ExpanderState
+  { expanderReceivedSignals :: !(Set.Set Signal)
+  , expanderEnvironments :: !(Map.Map Phase Env)
+  , expanderNextScope :: !Scope
+  , expanderBindingTable :: !BindingTable
+  , expanderExpansionEnv :: !ExpansionEnv
+  , expanderTasks :: [(Unique, ExpanderTask)]
+  }
+
+data ExpansionEnv = ExpansionEnv -- TODO
+
 newtype Expand a = Expand
-  { runExpand :: ReaderT (IORef BindingTable) (ExceptT ExpansionErr IO) a
+  { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
   }
   deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO)
 
-bindingTable :: Expand (IORef BindingTable)
-bindingTable = Expand ask
+data ExpanderTask
+  = Ready Syntax
+  | Blocked Signal Value -- the value is the continuation
+
+expanderContext :: Expand ExpanderContext
+expanderContext = Expand ask
+
+getState :: Expand ExpanderState
+getState = expanderState <$> expanderContext >>= liftIO . readIORef
+
+modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
+modifyState f = do
+  st <- expanderState <$> expanderContext
+  liftIO (modifyIORef st f)
+
+bindingTable :: Expand BindingTable
+bindingTable = expanderBindingTable <$> getState
 
 addBinding :: Text -> ScopeSet -> Binding -> Expand ()
 addBinding name scs b = do
-  table <- bindingTable
   -- Note: assumes invariant that a name-scopeset pair is never mapped
   -- to two bindings. That would indicate a bug in the expander but
   -- this code doesn't catch that.
-  liftIO (modifyIORef table (Map.insertWith (<>) name [(scs, b)]))
+  modifyState $
+    \st -> st { expanderBindingTable =
+                Map.insertWith (<>) name [(scs, b)] $
+                expanderBindingTable st
+              }
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
-  table <- bindingTable
-  bindings <- liftIO $ readIORef table
+  bindings <- bindingTable
   return $
     filter (flip Set.isSubsetOf scs . fst) $
     fromMaybe [] (Map.lookup x bindings)
