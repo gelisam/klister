@@ -274,6 +274,15 @@ initializeExpansionEnv =
             addReady bodyDest body'
             link dest $ CoreLam x coreArg bodyDest
         )
+      , ( "#%app"
+        , \ dest stx -> do
+            (Stx _ _ (_, fun, arg)) <- mustBeVec stx
+            funDest <- liftIO newUnique
+            argDest <- liftIO newUnique
+            addReady funDest fun
+            addReady argDest arg
+            link dest $ CoreApp funDest argDest
+        )
       ]
 
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
