@@ -10,6 +10,7 @@ executables:
       - base
       - containers
       - extra
+      - lens
       - megaparsec
       - mtl
       - text
