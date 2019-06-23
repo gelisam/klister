@@ -31,4 +31,7 @@ repl = forever $
      l <- T.getLine
      tryCommand l $ \l -> case readExpr "<repl>" l of
        Left err -> T.putStrLn err
-       Right ok -> T.putStrLn (syntaxText ok)
+       Right ok ->
+         do putStrLn "Parser output:"
+            T.putStrLn (syntaxText ok)
+            
