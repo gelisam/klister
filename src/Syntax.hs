@@ -15,6 +15,9 @@ data SrcLoc = SrcLoc !FilePath !SrcPos !SrcPos
 newtype Scope = Scope Int
   deriving (Eq, Ord, Show)
 
+nextScope :: Scope -> Scope
+nextScope (Scope i) = Scope (i + 1)
+
 type ScopeSet = Set.Set Scope
 
 noScopes :: ScopeSet

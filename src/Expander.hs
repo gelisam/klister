@@ -1,4 +1,4 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards #-}
 module Expander where
 
 import Control.Monad.Except
@@ -35,6 +35,9 @@ data ExpansionErr
   = Ambiguous Text
   | Unknown (Stx Text)
   | NotIdentifier Syntax
+  | NotEmpty Syntax
+  | NotCons Syntax
+  | NotRightLength Natural Syntax
 
 newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
@@ -51,6 +54,16 @@ data ExpanderState = ExpanderState
   , expanderBindingTable :: !BindingTable
   , expanderExpansionEnv :: !ExpansionEnv
   , expanderTasks :: [(Unique, ExpanderTask)]
+  }
+
+initExpanderState :: ExpanderState
+initExpanderState = ExpanderState
+  { expanderReceivedSignals = Set.empty
+  , expanderEnvironments = Map.empty
+  , expanderNextScope = Scope 0
+  , expanderBindingTable = Map.empty
+  , expanderExpansionEnv = ExpansionEnv
+  , expanderTasks = []
   }
 
 data ExpansionEnv = ExpansionEnv -- TODO
@@ -74,6 +87,13 @@ modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
 modifyState f = do
   st <- expanderState <$> expanderContext
   liftIO (modifyIORef st f)
+
+freshScope :: Expand Scope
+freshScope = do
+  sc <- expanderNextScope <$> getState
+  modifyState (\st -> st { expanderNextScope = nextScope (expanderNextScope st) })
+  return sc
+
 
 bindingTable :: Expand BindingTable
 bindingTable = expanderBindingTable <$> getState
@@ -116,6 +136,47 @@ resolve stx@(Syntax (Stx scs srcLoc (Id x))) = do
          return (snd best)
 resolve other = throwError (NotIdentifier other)
 
+mustBeIdent :: Syntax -> Expand (Stx Text)
+mustBeIdent (Syntax (Stx scs srcloc (Id x))) = return (Stx scs srcloc x)
+mustBeIdent other = throwError (NotIdentifier other)
+
+mustBeEmpty :: Syntax -> Expand (Stx ())
+mustBeEmpty (Syntax (Stx scs srcloc (List []))) = return (Stx scs srcloc ())
+mustBeEmpty other = throwError (NotEmpty other)
+
+mustBeCons :: Syntax -> Expand (Stx (Syntax, [Syntax]))
+mustBeCons (Syntax (Stx scs srcloc (List (x:xs)))) = return (Stx scs srcloc (x, xs))
+mustBeCons other = throwError (NotCons other)
+
+class MustBeVec a where
+  mustBeVec :: Syntax -> Expand (Stx a)
+
+instance MustBeVec () where
+  mustBeVec (Syntax (Stx scs srcloc (Vec []))) = return (Stx scs srcloc ())
+  mustBeVec other = throwError (NotRightLength 0 other)
+
+instance MustBeVec Syntax where
+  mustBeVec (Syntax (Stx scs srcloc (Vec [x]))) = return (Stx scs srcloc x)
+  mustBeVec other = throwError (NotRightLength 1 other)
+
+instance MustBeVec (Syntax, Syntax) where
+  mustBeVec (Syntax (Stx scs srcloc (Vec [x, y]))) = return (Stx scs srcloc (x, y))
+  mustBeVec other = throwError (NotRightLength 2 other)
+
+instance MustBeVec (Syntax, Syntax, Syntax) where
+  mustBeVec (Syntax (Stx scs srcloc (Vec [x, y, z]))) = return (Stx scs srcloc (x, y, z))
+  mustBeVec other = throwError (NotRightLength 3 other)
+
+instance MustBeVec (Syntax, Syntax, Syntax, Syntax) where
+  mustBeVec (Syntax (Stx scs srcloc (Vec [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
+  mustBeVec other = throwError (NotRightLength 4 other)
+
+instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
+  mustBeVec (Syntax (Stx scs srcloc (Vec [v, w, x, y, z]))) =
+    return (Stx scs srcloc (v, w, x, y, z))
+  mustBeVec other = throwError (NotRightLength 5 other)
+
+
 data SplitCore = SplitCore
   { splitCoreRoot        :: CoreF Unique
   , splitCoreDescendants :: Map Unique (CoreF Unique)
@@ -149,3 +210,6 @@ unzonk partialCore = do
         tell $ Map.singleton unique splitCoreRoot
         tell splitCoreDescendants
       pure unique
+
+expand :: Syntax -> Expand SplitCore
+expand stx = undefined
