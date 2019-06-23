@@ -4,18 +4,13 @@ import Core
 
 
 newtype PartialCore = PartialCore
-  { unPartialCore :: CoreF (Maybe PartialCore) }
+  { unPartialCore :: Maybe (CoreF PartialCore) }
 
 nonPartial :: Core -> PartialCore
-nonPartial = PartialCore . fmap go . unCore
-  where
-    go :: Core -> Maybe PartialCore
-    go = Just . nonPartial
+nonPartial = PartialCore . Just . fmap nonPartial . unCore
+
 
 runPartialCore :: PartialCore -> Maybe Core
-runPartialCore = fmap Core . traverse go . unPartialCore
-  where
-    go :: Maybe PartialCore -> Maybe Core
-    go maybePartialCore = do
-      partialCore <- maybePartialCore
-      runPartialCore partialCore
+runPartialCore (PartialCore Nothing) = Nothing
+runPartialCore (PartialCore (Just c)) =
+  traverse runPartialCore c >>= pure . Core

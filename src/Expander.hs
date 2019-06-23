@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards, ViewPatterns #-}
 module Expander where
 
 import Control.Monad.Except
@@ -189,38 +189,34 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
 
 
 data SplitCore = SplitCore
-  { splitCoreRoot        :: CoreF Unique
+  { splitCoreRoot        :: Unique
   , splitCoreDescendants :: Map Unique (CoreF Unique)
   }
 
 zonk :: SplitCore -> PartialCore
-zonk (SplitCore {..}) = PartialCore $ fmap go splitCoreRoot
+zonk (SplitCore {..}) = PartialCore $ go splitCoreRoot
   where
-    go :: Unique -> Maybe PartialCore
+    go :: Unique -> Maybe (CoreF PartialCore)
     go unique = do
-      child <- Map.lookup unique splitCoreDescendants
-      pure $ zonk $ SplitCore
-        { splitCoreRoot        = child
-        , splitCoreDescendants = splitCoreDescendants
-        }
+      this <- Map.lookup unique splitCoreDescendants
+      return (fmap (PartialCore . go) this)
 
 unzonk :: PartialCore -> IO SplitCore
 unzonk partialCore = do
-  (root, children) <- runWriterT $ do
-    traverse go (unPartialCore partialCore)
-  pure $ SplitCore root children
+  root <- newUnique
+  ((), childMap) <- runWriterT $ go root (unPartialCore partialCore)
+  return $ SplitCore root childMap
   where
-    go :: Maybe PartialCore
-       -> WriterT (Map Unique (CoreF Unique))
-                  IO
-                  Unique
-    go maybePartialCore = do
-      unique <- liftIO $ newUnique
-      for_ maybePartialCore $ \partialCore -> do
-        SplitCore {..} <- liftIO $ unzonk partialCore
-        tell $ Map.singleton unique splitCoreRoot
-        tell splitCoreDescendants
-      pure unique
+    go ::
+      Unique -> Maybe (CoreF PartialCore) ->
+      WriterT (Map Unique (CoreF Unique)) IO ()
+    go place Nothing = pure ()
+    go place (Just c) = do
+      children <- flip traverse c $ \p -> do
+        here <- liftIO newUnique
+        go here (unPartialCore p)
+        pure here
+      tell $ Map.singleton place children
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
