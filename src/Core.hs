@@ -3,6 +3,7 @@ module Core where
 
 import Data.Unique
 
+import Alpha
 import Syntax
 
 
@@ -59,3 +60,98 @@ data ScopedVec core = ScopedVec
   , scopedVecScope    :: core
   }
   deriving (Functor, Foldable, Traversable)
+
+
+instance AlphaEq SyntaxError where
+  alphaCheck (SyntaxError locations1 message1)
+             (SyntaxError locations2 message2) = do
+    alphaCheck locations1 locations2
+    alphaCheck message1   message2
+
+instance AlphaEq core => AlphaEq (CoreF core) where
+  alphaCheck (CoreVar var1)
+             (CoreVar var2) = do
+    alphaCheck var1 var2
+  alphaCheck (CoreLam ident1 var1 body1)
+             (CoreLam ident2 var2 body2) = do
+    alphaCheck ident1 ident2
+    alphaCheck var1   var2
+    alphaCheck body1  body2
+  alphaCheck (CoreApp fun1 arg1)
+             (CoreApp fun2 arg2) = do
+    alphaCheck fun1 fun2
+    alphaCheck arg1 arg2
+  alphaCheck (CoreSyntaxError syntaxError1)
+             (CoreSyntaxError syntaxError2) = do
+    alphaCheck syntaxError1 syntaxError2
+  alphaCheck (CoreSyntax syntax1)
+             (CoreSyntax syntax2) = do
+    alphaCheck syntax1 syntax2
+  alphaCheck (CoreCase scrutinee1 cases1)
+             (CoreCase scrutinee2 cases2) = do
+    alphaCheck scrutinee1 scrutinee2
+    alphaCheck cases1 cases2
+  alphaCheck (CoreIdentifier stx1)
+             (CoreIdentifier stx2) = do
+    alphaCheck stx1 stx2
+  alphaCheck (CoreIdent scopedIdent1)
+             (CoreIdent scopedIdent2) = do
+    alphaCheck scopedIdent1 scopedIdent2
+  alphaCheck (CoreEmpty scopedEmpty1)
+             (CoreEmpty scopedEmpty2) = do
+    alphaCheck scopedEmpty1 scopedEmpty2
+  alphaCheck (CoreCons scopedCons1)
+             (CoreCons scopedCons2) = do
+    alphaCheck scopedCons1 scopedCons2
+  alphaCheck (CoreVec scopedVec1)
+             (CoreVec scopedVec2) = do
+    alphaCheck scopedVec1 scopedVec2
+  alphaCheck _ _ = notAlphaEquivalent
+
+instance AlphaEq Core where
+  alphaCheck (Core x1)
+             (Core x2) = do
+    alphaCheck x1 x2
+
+instance AlphaEq Pattern where
+  alphaCheck (PatternIdentifier n1 x1)
+             (PatternIdentifier n2 x2) = do
+    alphaCheck n1 n2
+    alphaCheck x1 x2
+  alphaCheck PatternEmpty
+             PatternEmpty = do
+    pure ()
+  alphaCheck (PatternCons nx1 x1 nxs1 xs1)
+             (PatternCons nx2 x2 nxs2 xs2) = do
+    alphaCheck nx1  nx2
+    alphaCheck x1   x2
+    alphaCheck nxs1 nxs2
+    alphaCheck xs1  xs2
+  alphaCheck (PatternVec xs1)
+             (PatternVec xs2) = do
+    alphaCheck xs1 xs2
+  alphaCheck _ _ = notAlphaEquivalent
+
+instance AlphaEq core => AlphaEq (ScopedIdent core) where
+  alphaCheck (ScopedIdent ident1 scope1)
+             (ScopedIdent ident2 scope2) = do
+    alphaCheck ident1 ident2
+    alphaCheck scope1 scope2
+
+instance AlphaEq core => AlphaEq (ScopedEmpty core) where
+  alphaCheck (ScopedEmpty scope1)
+             (ScopedEmpty scope2) = do
+    alphaCheck scope1 scope2
+
+instance AlphaEq core => AlphaEq (ScopedCons core) where
+  alphaCheck (ScopedCons hd1 tl1 scope1)
+             (ScopedCons hd2 tl2 scope2) = do
+    alphaCheck hd1    hd2
+    alphaCheck tl1    tl2
+    alphaCheck scope1 scope2
+
+instance AlphaEq core => AlphaEq (ScopedVec core) where
+  alphaCheck (ScopedVec elements1 scope1)
+             (ScopedVec elements2 scope2) = do
+    alphaCheck elements1 elements2
+    alphaCheck scope1    scope2
