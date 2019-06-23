@@ -1,6 +1,7 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards, TemplateHaskell, ViewPatterns #-}
 module Expander where
 
+import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -30,9 +31,6 @@ newtype Binding = Binding Unique
 
 type BindingTable = Map Text [(ScopeSet, Binding)]
 
-freshBinding :: Expand Binding
-freshBinding = Binding <$> liftIO newUnique
-
 data ExpansionErr
   = Ambiguous Ident
   | Unknown (Stx Text)
@@ -46,40 +44,33 @@ newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
 
 data ExpanderContext = ExpanderContext
-  { expanderState :: IORef ExpanderState
-  , expanderPhase :: !Phase
+  { _expanderState :: IORef ExpanderState
+  , _expanderPhase :: !Phase
   }
 
 data ExpanderState = ExpanderState
-  { expanderReceivedSignals :: !(Set.Set Signal)
-  , expanderEnvironments :: !(Map.Map Phase Env)
-  , expanderNextScope :: !Scope
-  , expanderBindingTable :: !BindingTable
-  , expanderExpansionEnv :: !ExpansionEnv
-  , expanderTasks :: [(Unique, ExpanderTask)]
+  { _expanderReceivedSignals :: !(Set.Set Signal)
+  , _expanderEnvironments :: !(Map.Map Phase Env)
+  , _expanderNextScope :: !Scope
+  , _expanderBindingTable :: !BindingTable
+  , _expanderExpansionEnv :: !ExpansionEnv
+  , _expanderTasks :: [(Unique, ExpanderTask)]
   }
 
 initExpanderState :: ExpanderState
 initExpanderState = ExpanderState
-  { expanderReceivedSignals = Set.empty
-  , expanderEnvironments = Map.empty
-  , expanderNextScope = Scope 0
-  , expanderBindingTable = Map.empty
-  , expanderExpansionEnv = ExpansionEnv mempty
-  , expanderTasks = []
+  { _expanderReceivedSignals = Set.empty
+  , _expanderEnvironments = Map.empty
+  , _expanderNextScope = Scope 0
+  , _expanderBindingTable = Map.empty
+  , _expanderExpansionEnv = ExpansionEnv mempty
+  , _expanderTasks = []
   }
 
 data EValue
   = EPrimMacro (Syntax -> Expand PartialCore) -- ^ For "special forms"
   | EVarMacro !PartialCore -- ^ For bound variables
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
-
-getEValue :: Binding -> Expand EValue
-getEValue b = do
-  ExpansionEnv env <- expanderExpansionEnv <$> getState
-  case Map.lookup b env of
-    Just v -> return v
-    Nothing -> throwError (InternalError "No such binding")
 
 data SyntacticCategory = Module | Declaration | Expression
 
@@ -94,26 +85,48 @@ data ExpanderTask
   = Ready Syntax
   | Blocked Signal Value -- the value is the continuation
 
+makePrisms ''Binding
+makePrisms ''ExpansionErr
+makePrisms ''Phase
+makeLenses ''ExpanderContext
+makeLenses ''ExpanderState
+makePrisms ''EValue
+makePrisms ''SyntacticCategory
+makePrisms ''ExpansionEnv
+makePrisms ''Expand
+makePrisms ''ExpanderTask
+
+
+freshBinding :: Expand Binding
+freshBinding = Binding <$> liftIO newUnique
+
+getEValue :: Binding -> Expand EValue
+getEValue b = do
+  ExpansionEnv env <- view expanderExpansionEnv <$> getState
+  case Map.lookup b env of
+    Just v -> return v
+    Nothing -> throwError (InternalError "No such binding")
+
 expanderContext :: Expand ExpanderContext
 expanderContext = Expand ask
 
 getState :: Expand ExpanderState
-getState = expanderState <$> expanderContext >>= liftIO . readIORef
+getState = view expanderState <$> expanderContext >>= liftIO . readIORef
 
 modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
 modifyState f = do
-  st <- expanderState <$> expanderContext
+  st <- view expanderState <$> expanderContext
   liftIO (modifyIORef st f)
 
 freshScope :: Expand Scope
 freshScope = do
-  sc <- expanderNextScope <$> getState
-  modifyState (\st -> st { expanderNextScope = nextScope (expanderNextScope st) })
+  sc <- view expanderNextScope <$> getState
+  modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
   return sc
 
 
 bindingTable :: Expand BindingTable
-bindingTable = expanderBindingTable <$> getState
+bindingTable = view expanderBindingTable <$> getState
 
 addBinding :: Text -> ScopeSet -> Binding -> Expand ()
 addBinding name scs b = do
@@ -121,9 +134,9 @@ addBinding name scs b = do
   -- to two bindings. That would indicate a bug in the expander but
   -- this code doesn't catch that.
   modifyState $
-    \st -> st { expanderBindingTable =
+    \st -> st { _expanderBindingTable =
                 Map.insertWith (<>) name [(scs, b)] $
-                expanderBindingTable st
+                view expanderBindingTable st
               }
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
@@ -194,16 +207,17 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
 
 
 data SplitCore = SplitCore
-  { splitCoreRoot        :: Unique
-  , splitCoreDescendants :: Map Unique (CoreF Unique)
+  { _splitCoreRoot        :: Unique
+  , _splitCoreDescendants :: Map Unique (CoreF Unique)
   }
+makeLenses ''SplitCore
 
 zonk :: SplitCore -> PartialCore
-zonk (SplitCore {..}) = PartialCore $ go splitCoreRoot
+zonk (SplitCore {..}) = PartialCore $ go _splitCoreRoot
   where
     go :: Unique -> Maybe (CoreF PartialCore)
     go unique = do
-      this <- Map.lookup unique splitCoreDescendants
+      this <- Map.lookup unique _splitCoreDescendants
       return (fmap (PartialCore . go) this)
 
 unzonk :: PartialCore -> IO SplitCore
