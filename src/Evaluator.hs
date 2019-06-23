@@ -1,6 +1,7 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, RecordWildCards #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, RecordWildCards, TemplateHaskell #-}
 module Evaluator where
 
+import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import qualified Data.Map as Map
@@ -14,15 +15,17 @@ import Value
 type Type = String
 
 data TypeError = TypeError
-  { typeErrorExpected :: Type
-  , typeErrorActual   :: Type
+  { _typeErrorExpected :: Type
+  , _typeErrorActual   :: Type
   }
+makeLenses ''TypeError
 
 data Error
   = ErrorSyntax SyntaxError
   | ErrorUnbound Var
   | ErrorType TypeError
   | ErrorCase Value
+makePrisms ''Error
 
 newtype Eval a = Eval
    { runEval :: ReaderT Env (ExceptT Error IO) a }
@@ -67,8 +70,8 @@ eval (Core (CoreApp fun arg)) = do
         eval _closureBody
     ValueSyntax _ -> do
       throwError $ ErrorType $ TypeError
-        { typeErrorExpected = "function"
-        , typeErrorActual   = "syntax"
+        { _typeErrorExpected = "function"
+        , _typeErrorActual   = "syntax"
         }
 eval (Core (CoreSyntaxError syntaxError)) = do
   throwError $ ErrorSyntax syntaxError
@@ -88,13 +91,13 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
     Syntax (Stx _ _ expr) -> case expr of
       List _ -> do
         throwError $ ErrorType $ TypeError
-          { typeErrorExpected = "id"
-          , typeErrorActual   = "list"
+          { _typeErrorExpected = "id"
+          , _typeErrorActual   = "list"
           }
       Vec _ -> do
         throwError $ ErrorType $ TypeError
-          { typeErrorExpected = "id"
-          , typeErrorActual   = "vec"
+          { _typeErrorExpected = "id"
+          , _typeErrorActual   = "vec"
           }
       Id name -> withScopeOf scope $ Id name
 eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
@@ -106,13 +109,13 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
       List vs -> withScopeOf scope $ List $ hdSyntax : vs
       Vec _ -> do
         throwError $ ErrorType $ TypeError
-          { typeErrorExpected = "list"
-          , typeErrorActual   = "vec"
+          { _typeErrorExpected = "list"
+          , _typeErrorActual   = "vec"
           }
       Id _ -> do
         throwError $ ErrorType $ TypeError
-          { typeErrorExpected = "list"
-          , typeErrorActual   = "id"
+          { _typeErrorExpected = "list"
+          , _typeErrorActual   = "id"
           }
 eval (Core (CoreVec (ScopedVec elements scope))) = do
   vec <- Vec <$> traverse evalAsSyntax elements
@@ -124,8 +127,8 @@ evalAsSyntax core = do
   case value of
     ValueClosure _ -> do
       throwError $ ErrorType $ TypeError
-        { typeErrorExpected = "syntax"
-        , typeErrorActual = "function"
+        { _typeErrorExpected = "syntax"
+        , _typeErrorActual = "function"
         }
     ValueSyntax syntax -> pure syntax
 
