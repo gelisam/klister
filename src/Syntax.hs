@@ -32,18 +32,20 @@ data Stx a = Stx
   , _stxSrcLoc   :: !SrcLoc
   , _stxValue    :: a
   }
+  deriving (Eq, Show)
 makeLenses ''Stx
 
 data ExprF a
   = Id Text
   | List [a]
   | Vec [a]
-  deriving Functor
+  deriving (Eq, Functor, Show)
 makePrisms ''ExprF
 
 
 newtype Syntax =
   Syntax (Stx (ExprF Syntax))
+  deriving (Eq, Show)
 makePrisms ''Syntax
 
 type Ident = Stx Text

@@ -1,4 +1,4 @@
-{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor, DeriveFoldable, DeriveTraversable, GeneralizedNewtypeDeriving, TemplateHaskell #-}
 module Core where
 
 import Control.Lens
@@ -12,28 +12,34 @@ data SyntaxError = SyntaxError
   { _syntaxErrorLocations :: [Syntax]
   , _syntaxErrorMessage   :: Syntax
   }
+  deriving (Eq, Show)
 makeLenses ''SyntaxError
 
-type Var = Unique
+newtype Var = Var Unique
+  deriving (AlphaEq, Eq, Ord)
+
+instance Show Var where
+  show (Var i) = show (hashUnique i)
 
 data Pattern
   = PatternIdentifier Ident Var
   | PatternEmpty
   | PatternCons Ident Var Ident Var
   | PatternVec [(Ident, Var)]
+  deriving (Eq, Show)
 makePrisms ''Pattern
 
 data ScopedIdent core = ScopedIdent
   { _scopedIdentIdentifier :: core
   , _scopedIdentScope      :: core
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedIdent
 
 data ScopedEmpty core = ScopedEmpty
   { _scopedEmptyScope :: core
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedEmpty
 
 data ScopedCons core = ScopedCons
@@ -41,14 +47,14 @@ data ScopedCons core = ScopedCons
   , _scopedConsTail  :: core
   , _scopedConsScope :: core
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedCons
 
 data ScopedVec core = ScopedVec
   { _scopedVecElements :: [core]
   , _scopedVecScope    :: core
   }
-  deriving (Functor, Foldable, Traversable)
+  deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedVec
 
 data CoreF core
@@ -63,13 +69,13 @@ data CoreF core
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreVec (ScopedVec core)
-  deriving (Functor, Foldable, Traversable)
+  deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 
 newtype Core = Core
   { unCore :: CoreF Core }
+  deriving (Eq)
 makePrisms ''Core
-
 
 instance AlphaEq SyntaxError where
   alphaCheck (SyntaxError locations1 message1)

@@ -13,6 +13,7 @@ import Data.Maybe
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Numeric.Natural
 
 import Core
@@ -25,6 +26,7 @@ import Value
 import qualified ScopeSet
 
 
+
 newtype Binding = Binding Unique
   deriving (Eq, Ord)
 
@@ -33,11 +35,14 @@ type BindingTable = Map Text [(ScopeSet, Binding)]
 data ExpansionErr
   = Ambiguous Ident
   | Unknown (Stx Text)
+  | NoProgress [ExpanderTask]
   | NotIdentifier Syntax
   | NotEmpty Syntax
   | NotCons Syntax
   | NotRightLength Natural Syntax
   | InternalError String
+  deriving (Eq, Show)
+
 
 newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
@@ -47,6 +52,13 @@ data ExpanderContext = ExpanderContext
   , _expanderPhase :: !Phase
   }
 
+mkInitContext :: IO ExpanderContext
+mkInitContext = do
+  st <- newIORef initExpanderState
+  return $ ExpanderContext { _expanderState = st
+                           , _expanderPhase = Phase 0
+                           }
+
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
   , _expanderEnvironments :: !(Map.Map Phase Env)
@@ -54,6 +66,7 @@ data ExpanderState = ExpanderState
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(Unique, ExpanderTask)]
+  , _expanderComplete :: !(Map.Map Unique (CoreF Unique))
   }
 
 initExpanderState :: ExpanderState
@@ -62,27 +75,37 @@ initExpanderState = ExpanderState
   , _expanderEnvironments = Map.empty
   , _expanderNextScope = Scope 0
   , _expanderBindingTable = Map.empty
-  , _expanderExpansionEnv = ExpansionEnv mempty
+  , _expanderExpansionEnv = mempty
   , _expanderTasks = []
+  , _expanderComplete = Map.empty
   }
 
 data EValue
-  = EPrimMacro (Syntax -> Expand SplitCore) -- ^ For "special forms"
-  | EVarMacro !Unique -- ^ For bound variables (the Unique is the binding site of the var)
+  = EPrimMacro (Unique -> Syntax -> Expand ()) -- ^ For "special forms"
+  | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
 
 data SyntacticCategory = Module | Declaration | Expression
 
 newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
+  deriving (Semigroup, Monoid)
 
 newtype Expand a = Expand
   { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
   }
   deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO)
 
+execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
+execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
+
 data ExpanderTask
   = Ready Syntax
   | Blocked Signal Value -- the value is the continuation
+  deriving (Eq)
+
+instance Show ExpanderTask where
+  show (Ready stx) = "Ready " ++ T.unpack (syntaxText stx)
+  show (Blocked on _k) = "Blocked (" ++ show on ++ ")"
 
 makePrisms ''Binding
 makePrisms ''ExpansionErr
@@ -122,6 +145,15 @@ freshScope = do
   modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
   return sc
 
+link :: Unique -> CoreF Unique -> Expand ()
+link dest layer =
+  modifyState $
+  \st -> st { _expanderComplete =
+              _expanderComplete st <> Map.singleton dest layer
+            }
+
+getTasks :: Expand [(Unique, ExpanderTask)]
+getTasks = view expanderTasks <$> getState
 
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
@@ -136,6 +168,15 @@ addBinding name scs b = do
                 Map.insertWith (<>) name [(scs, b)] $
                 view expanderBindingTable st
               }
+
+bind :: Binding -> EValue -> Expand ()
+bind b v =
+  modifyState $
+  \st ->
+    let ExpansionEnv env = view expanderExpansionEnv st
+    in st { _expanderExpansionEnv =
+            ExpansionEnv $ Map.insert b v env
+          }
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
@@ -204,6 +245,26 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
   mustBeVec other = throwError (NotRightLength 5 other)
 
 
+initializeExpansionEnv :: Expand ()
+initializeExpansionEnv =
+  traverse (uncurry addPrimitive) prims *>
+  pure ()
+
+  where
+    prims =
+      [ ( "oops"
+        , \_ stx -> throwError (InternalError $ "oops" ++ show stx)
+        )
+      ]
+
+    addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
+    addPrimitive name impl = do
+      let val = EPrimMacro impl
+      b <- freshBinding
+      -- FIXME primitive scope:
+      addBinding name ScopeSet.empty b
+      bind b val
+
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
 identifierHeaded (Syntax (Stx _ _ (List (h:_))))
@@ -212,24 +273,49 @@ identifierHeaded (Syntax (Stx _ _ (Vec (h:_))))
   | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
 identifierHeaded _ = Nothing
 
-expandExpression :: Syntax -> Expand SplitCore
-expandExpression stx
+expandExpr :: Syntax -> Expand SplitCore
+expandExpr stx = do
+  dest <- liftIO $ newUnique
+  modifyState $ \st -> st {_expanderTasks = [(dest, Ready stx)]}
+  expandTasks
+  children <- _expanderComplete <$> getState
+  return $ SplitCore {_splitCoreRoot = dest
+                     , _splitCoreDescendants = children
+                     }
+
+expandTasks :: Expand ()
+expandTasks = do
+  tasks <- getTasks
+  case tasks of
+    [] -> return ()
+    more -> do
+      forM_ more runTask
+      newTasks <- getTasks
+      if tasks == newTasks
+        then throwError (NoProgress (map snd newTasks))
+        else expandTasks
+
+runTask :: (Unique, ExpanderTask) -> Expand ()
+runTask (dest, task) =
+  case task of
+    Ready stx -> expandOneExpression dest stx
+    Blocked _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
+
+
+expandOneExpression :: Unique -> Syntax -> Expand ()
+expandOneExpression dest stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve ident
       v <- getEValue b
       case v of
-        EPrimMacro impl -> impl stx
-        EVarMacro var ->
-          do e <- liftIO $ newUnique
-             return $ SplitCore { _splitCoreRoot = e
-                                , _splitCoreDescendants = Map.singleton e (CoreVar var)
-                                }
+        EPrimMacro impl -> impl dest stx
+        EVarMacro var -> link dest (CoreVar var)
         EUserMacro _ _impl ->
-          error "Unimplemented"
+          error "Unimplemented: user-defined macros"
   | otherwise =
     case syntaxE stx of
-      Vec xs -> expandExpression (addApp Vec stx xs)
-      List xs -> expandExpression (addApp List stx xs)
+      Vec xs -> expandOneExpression dest (addApp Vec stx xs)
+      List xs -> expandOneExpression dest (addApp List stx xs)
       Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 -- | Insert a function application marker with a lexical context from

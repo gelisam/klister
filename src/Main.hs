@@ -8,8 +8,10 @@ import qualified Data.Text.IO as T
 import System.Exit (exitSuccess)
 import System.IO
 
+import Expander
 import Parser
 import Parser.Command
+import SplitCore
 import Syntax
 
 main :: IO ()
@@ -34,4 +36,8 @@ repl = forever $
        Right ok ->
          do putStrLn "Parser output:"
             T.putStrLn (syntaxText ok)
-            
+            ctx <- mkInitContext
+            c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
+            case c of
+              Left err -> putStr "Expander error: " *> print err
+              Right out -> print $ zonk out
