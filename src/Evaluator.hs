@@ -4,6 +4,7 @@ module Evaluator where
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
+import Data.Traversable
 import qualified Data.Map as Map
 
 import Syntax
@@ -21,8 +22,7 @@ data TypeError = TypeError
 makeLenses ''TypeError
 
 data Error
-  = ErrorSyntax SyntaxError
-  | ErrorUnbound Var
+  = ErrorUnbound Var
   | ErrorType TypeError
   | ErrorCase Value
 makePrisms ''Error
@@ -73,8 +73,67 @@ eval (Core (CoreApp fun arg)) = do
         { _typeErrorExpected = "function"
         , _typeErrorActual   = "syntax"
         }
-eval (Core (CoreSyntaxError syntaxError)) = do
-  throwError $ ErrorSyntax syntaxError
+    ValueMacroAction _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "function"
+        , _typeErrorActual   = "macro action"
+        }
+eval (Core (CorePure arg)) = do
+  value <- eval arg
+  pure $ ValueMacroAction
+       $ MacroActionPure value
+eval (Core (CoreBind hd tl)) = do
+  hdValue <- eval hd
+  tlValue <- eval tl
+  macroAction <- case hdValue of
+    ValueClosure _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "macro action"
+        , _typeErrorActual   = "function"
+        }
+    ValueSyntax _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "macro action"
+        , _typeErrorActual   = "syntax"
+        }
+    ValueMacroAction macroAction -> do
+      pure macroAction
+  closure <- case tlValue of
+    ValueClosure closure -> do
+      pure closure
+    ValueSyntax _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "function"
+        , _typeErrorActual   = "syntax"
+        }
+    ValueMacroAction _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "function"
+        , _typeErrorActual   = "macro action"
+        }
+  pure $ ValueMacroAction
+       $ MacroActionBind macroAction closure
+eval (Core (CoreSyntaxError syntaxErrorExpr)) = do
+  syntaxErrorValue <- for syntaxErrorExpr $ \core -> do
+    value <- eval core
+    case value of
+      ValueClosure _ -> do
+        throwError $ ErrorType $ TypeError
+          { _typeErrorExpected = "syntax"
+          , _typeErrorActual   = "function"
+          }
+      ValueSyntax syntax -> do
+        pure syntax
+      ValueMacroAction _ -> do
+        throwError $ ErrorType $ TypeError
+          { _typeErrorExpected = "syntax"
+          , _typeErrorActual   = "macro action"
+          }
+  pure $ ValueMacroAction
+       $ MacroActionSyntaxError syntaxErrorValue
+eval (Core (CoreSendSignal signal)) = do
+  pure $ ValueMacroAction
+       $ MacroActionSendSignal signal
 eval (Core (CoreSyntax syntax)) = do
   pure $ ValueSyntax syntax
 eval (Core (CoreCase scrutinee cases)) = do
@@ -131,6 +190,11 @@ evalAsSyntax core = do
         , _typeErrorActual = "function"
         }
     ValueSyntax syntax -> pure syntax
+    ValueMacroAction _ -> do
+      throwError $ ErrorType $ TypeError
+        { _typeErrorExpected = "syntax"
+        , _typeErrorActual   = "macro action"
+        }
 
 withScopeOf :: Core -> ExprF Syntax -> Eval Value
 withScopeOf scope expr = do

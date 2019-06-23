@@ -5,13 +5,15 @@ import Control.Lens
 import Data.Unique
 
 import Alpha
+import Signals
 import Syntax
 
 
-data SyntaxError = SyntaxError
-  { _syntaxErrorLocations :: [Syntax]
-  , _syntaxErrorMessage   :: Syntax
+data SyntaxError a = SyntaxError
+  { _syntaxErrorLocations :: [a]
+  , _syntaxErrorMessage   :: a
   }
+  deriving (Functor, Foldable, Traversable)
 makeLenses ''SyntaxError
 
 type Var = Unique
@@ -55,7 +57,10 @@ data CoreF core
   = CoreVar Var
   | CoreLam Ident Var core
   | CoreApp core core
-  | CoreSyntaxError SyntaxError
+  | CorePure core                       -- :: a -> Macro a
+  | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
+  | CoreSyntaxError (SyntaxError core)  -- :: Macro a
+  | CoreSendSignal Signal               -- :: Macro ()
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
@@ -71,7 +76,7 @@ newtype Core = Core
 makePrisms ''Core
 
 
-instance AlphaEq SyntaxError where
+instance AlphaEq a => AlphaEq (SyntaxError a) where
   alphaCheck (SyntaxError locations1 message1)
              (SyntaxError locations2 message2) = do
     alphaCheck locations1 locations2
