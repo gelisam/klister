@@ -56,6 +56,9 @@ flipScope = adjustScope go
       | otherwise              = ScopeSet.insert sc scs
 
 
+syntaxE :: Syntax -> ExprF Syntax
+syntaxE (Syntax (Stx _ _ e)) = e
+
 syntaxText :: Syntax -> Text
 syntaxText (Syntax (Stx _ _ e)) = go e
   where

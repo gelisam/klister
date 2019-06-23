@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, RecordWildCards, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, OverloadedStrings, RankNTypes, RecordWildCards, ViewPatterns #-}
 module Expander where
 
 import Control.Monad.Except
@@ -70,8 +70,8 @@ initExpanderState = ExpanderState
   }
 
 data EValue
-  = EPrimMacro (Syntax -> Expand PartialCore) -- ^ For "special forms"
-  | EVarMacro !PartialCore -- ^ For bound variables
+  = EPrimMacro (Syntax -> Expand SplitCore) -- ^ For "special forms"
+  | EVarMacro !Unique -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
 
 getEValue :: Binding -> Expand EValue
@@ -235,7 +235,27 @@ expandExpression :: Syntax -> Expand SplitCore
 expandExpression stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve ident
-      _v <- getEValue b
-      undefined
+      v <- getEValue b
+      case v of
+        EPrimMacro impl -> impl stx
+        EVarMacro var ->
+          do e <- liftIO $ newUnique
+             return $ SplitCore { splitCoreRoot = e
+                                , splitCoreDescendants = Map.singleton e (CoreVar var)
+                                }
+        EUserMacro _ _impl ->
+          error "Unimplemented"
   | otherwise =
-    undefined
+    case syntaxE stx of
+      Vec xs -> expandExpression (addApp Vec stx xs)
+      List xs -> expandExpression (addApp List stx xs)
+      Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+
+-- | Insert a function application marker with a lexical context from
+-- the original expression
+addApp :: (forall a . [a] -> ExprF a) -> Syntax -> [Syntax] -> Syntax
+addApp ctor (Syntax (Stx scs loc _)) args =
+  Syntax (Stx scs loc (ctor (app : args)))
+  where
+    app = Syntax (Stx scs loc (Id "#%app"))
+
