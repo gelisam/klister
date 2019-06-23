@@ -26,7 +26,6 @@ noScopes = Set.empty
 
 data Stx a = Stx ScopeSet !SrcLoc a
 
-
 data ExprF a
   = Id Text
   | List [a]
@@ -38,6 +37,30 @@ newtype Syntax =
   Syntax (Stx (ExprF Syntax))
 
 type Ident = Stx Text
+
+adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> Syntax -> Scope -> Syntax
+adjustScope f (Syntax (Stx scs srcloc e)) sc =
+  Syntax $
+  Stx (f sc scs) srcloc $
+  adjustRec e
+  where
+    adjustRec (Id x) = Id x
+    adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
+    adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
+
+addScope :: Syntax -> Scope -> Syntax
+addScope = adjustScope Set.insert
+
+removeScope :: Syntax -> Scope -> Syntax
+removeScope = adjustScope Set.delete
+
+flipScope :: Syntax -> Scope -> Syntax
+flipScope = adjustScope flip
+  where
+    flip sc scs
+      | Set.member sc scs = Set.delete sc scs
+      | otherwise         = Set.insert sc scs
+
 
 syntaxText :: Syntax -> Text
 syntaxText (Syntax (Stx _ _ e)) = go e
