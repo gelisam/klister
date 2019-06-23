@@ -34,12 +34,13 @@ freshBinding :: Expand Binding
 freshBinding = Binding <$> liftIO newUnique
 
 data ExpansionErr
-  = Ambiguous Text
+  = Ambiguous Ident
   | Unknown (Stx Text)
   | NotIdentifier Syntax
   | NotEmpty Syntax
   | NotCons Syntax
   | NotRightLength Natural Syntax
+  | InternalError String
 
 newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
@@ -72,6 +73,13 @@ data EValue
   = EPrimMacro (Syntax -> Expand PartialCore) -- ^ For "special forms"
   | EVarMacro !PartialCore -- ^ For bound variables
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
+
+getEValue :: Binding -> Expand EValue
+getEValue b = do
+  ExpansionEnv env <- expanderExpansionEnv <$> getState
+  case Map.lookup b env of
+    Just v -> return v
+    Nothing -> throwError (InternalError "No such binding")
 
 data SyntacticCategory = Module | Declaration | Expression
 
@@ -125,25 +133,24 @@ allMatchingBindings x scs = do
     filter (flip ScopeSet.isSubsetOf scs . fst) $
     fromMaybe [] (Map.lookup x bindings)
 
-checkUnambiguous :: Text -> ScopeSet -> [ScopeSet] -> Syntax -> Expand ()
-checkUnambiguous x best candidates _blame =
+checkUnambiguous :: ScopeSet -> [ScopeSet] -> Ident -> Expand ()
+checkUnambiguous best candidates blame =
   let bestSize = ScopeSet.size best
       candidateSizes = map ScopeSet.size candidates
   in
     if length (filter (== bestSize) candidateSizes) > 1
-      then throwError (Ambiguous x)
+      then throwError (Ambiguous blame)
       else return ()
 
-resolve :: Syntax -> Expand Binding
-resolve stx@(Syntax (Stx scs srcLoc (Id x))) = do
+resolve :: Ident -> Expand Binding
+resolve stx@(Stx scs srcLoc x) = do
   bs <- allMatchingBindings x scs
   case bs of
     [] -> throwError (Unknown (Stx scs srcLoc x))
     candidates ->
       let best = maximumOn (ScopeSet.size . fst) candidates
-      in checkUnambiguous x (fst best) (map fst candidates) stx *>
+      in checkUnambiguous (fst best) (map fst candidates) stx *>
          return (snd best)
-resolve other = throwError (NotIdentifier other)
 
 mustBeIdent :: Syntax -> Expand (Stx Text)
 mustBeIdent (Syntax (Stx scs srcloc (Id x))) = return (Stx scs srcloc x)
@@ -225,4 +232,10 @@ identifierHeaded (Syntax (Stx _ _ (Vec (h:_))))
 identifierHeaded _ = Nothing
 
 expandExpression :: Syntax -> Expand SplitCore
-expandExpression _stx = undefined
+expandExpression stx
+  | Just ident <- identifierHeaded stx = do
+      b <- resolve ident
+      _v <- getEValue b
+      undefined
+  | otherwise =
+    undefined
