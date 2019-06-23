@@ -78,7 +78,7 @@ makePrisms ''CoreF
 
 newtype Core = Core
   { unCore :: CoreF Core }
-  deriving (Eq)
+  deriving (Eq, Show)
 makePrisms ''Core
 
 instance AlphaEq a => AlphaEq (SyntaxError a) where

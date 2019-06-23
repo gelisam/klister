@@ -18,17 +18,19 @@ data TypeError = TypeError
   { _typeErrorExpected :: Type
   , _typeErrorActual   :: Type
   }
+  deriving (Eq, Show)
 makeLenses ''TypeError
 
-data Error
-  = ErrorUnbound Var
-  | ErrorType TypeError
-  | ErrorCase Value
-makePrisms ''Error
+data EvalError
+  = EvalErrorUnbound Var
+  | EvalErrorType TypeError
+  | EvalErrorCase Value
+  deriving (Eq, Show)
+makePrisms ''EvalError
 
 newtype Eval a = Eval
-   { runEval :: ReaderT Env (ExceptT Error IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader Env, MonadError Error)
+   { runEval :: ReaderT Env (ExceptT EvalError IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader Env, MonadError EvalError)
 
 withEnv :: Env -> Eval a -> Eval a
 withEnv = local . const
@@ -43,12 +45,20 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Map.insert x (n, v) . inserter rest
 
 
+apply :: Closure -> Value -> Eval Value
+apply (Closure {..}) value = do
+  let env = Map.insert _closureVar
+                       (_closureIdent, value)
+                       _closureEnv
+  withEnv env $ do
+    eval _closureBody
+
 eval :: Core -> Eval Value
 eval (Core (CoreVar var)) = do
   env <- ask
   case Map.lookup var env of
     Just (_ident, value) -> pure value
-    _ -> throwError $ ErrorUnbound var
+    _ -> throwError $ EvalErrorUnbound var
 eval (Core (CoreLam ident var body)) = do
   env <- ask
   pure $ ValueClosure $ Closure
@@ -58,13 +68,9 @@ eval (Core (CoreLam ident var body)) = do
     , _closureBody  = body
     }
 eval (Core (CoreApp fun arg)) = do
-  Closure {..} <- evalAsClosure fun
-  argValue <- eval arg
-  let env = Map.insert _closureVar
-                       (_closureIdent, argValue)
-                       _closureEnv
-  withEnv env $ do
-    eval _closureBody
+  closure <- evalAsClosure fun
+  value <- eval arg
+  apply closure value
 eval (Core (CorePure arg)) = do
   value <- eval arg
   pure $ ValueMacroAction
@@ -96,12 +102,12 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   case identSyntax of
     Syntax (Stx _ _ expr) -> case expr of
       List _ -> do
-        throwError $ ErrorType $ TypeError
+        throwError $ EvalErrorType $ TypeError
           { _typeErrorExpected = "id"
           , _typeErrorActual   = "list"
           }
       Vec _ -> do
-        throwError $ ErrorType $ TypeError
+        throwError $ EvalErrorType $ TypeError
           { _typeErrorExpected = "id"
           , _typeErrorActual   = "vec"
           }
@@ -114,12 +120,12 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
     Syntax (Stx _ _ expr) -> case expr of
       List vs -> withScopeOf scope $ List $ hdSyntax : vs
       Vec _ -> do
-        throwError $ ErrorType $ TypeError
+        throwError $ EvalErrorType $ TypeError
           { _typeErrorExpected = "list"
           , _typeErrorActual   = "vec"
           }
       Id _ -> do
-        throwError $ ErrorType $ TypeError
+        throwError $ EvalErrorType $ TypeError
           { _typeErrorExpected = "list"
           , _typeErrorActual   = "id"
           }
@@ -134,12 +140,12 @@ evalAsClosure core = do
     ValueClosure closure -> do
       pure closure
     ValueSyntax _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "function"
         , _typeErrorActual   = "syntax"
         }
     ValueMacroAction _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "function"
         , _typeErrorActual   = "macro action"
         }
@@ -149,14 +155,14 @@ evalAsSyntax core = do
   value <- eval core
   case value of
     ValueClosure _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "syntax"
         , _typeErrorActual   = "function"
         }
     ValueSyntax syntax -> do
       pure syntax
     ValueMacroAction _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "syntax"
         , _typeErrorActual   = "macro action"
         }
@@ -166,12 +172,12 @@ evalAsMacroAction core = do
   value <- eval core
   case value of
     ValueClosure _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "macro action"
         , _typeErrorActual   = "function"
         }
     ValueSyntax _ -> do
-      throwError $ ErrorType $ TypeError
+      throwError $ EvalErrorType $ TypeError
         { _typeErrorExpected = "macro action"
         , _typeErrorActual   = "syntax"
         }
@@ -186,7 +192,7 @@ withScopeOf scope expr = do
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
 doCase :: Value -> [(Pattern, Core)] -> Eval Value
-doCase v0 []               = throwError (ErrorCase v0)
+doCase v0 []               = throwError (EvalErrorCase v0)
 doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
   where
     match next (PatternIdentifier n x) rhs =
