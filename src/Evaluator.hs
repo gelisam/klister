@@ -43,6 +43,14 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Map.insert x (n, v) . inserter rest
 
 
+apply :: Closure -> Value -> Eval Value
+apply (Closure {..}) value = do
+  let env = Map.insert _closureVar
+                       (_closureIdent, value)
+                       _closureEnv
+  withEnv env $ do
+    eval _closureBody
+
 eval :: Core -> Eval Value
 eval (Core (CoreVar var)) = do
   env <- ask
@@ -58,13 +66,9 @@ eval (Core (CoreLam ident var body)) = do
     , _closureBody  = body
     }
 eval (Core (CoreApp fun arg)) = do
-  Closure {..} <- evalAsClosure fun
-  argValue <- eval arg
-  let env = Map.insert _closureVar
-                       (_closureIdent, argValue)
-                       _closureEnv
-  withEnv env $ do
-    eval _closureBody
+  closure <- evalAsClosure fun
+  value <- eval arg
+  apply closure value
 eval (Core (CorePure arg)) = do
   value <- eval arg
   pure $ ValueMacroAction
