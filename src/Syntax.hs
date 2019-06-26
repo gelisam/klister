@@ -12,6 +12,7 @@ import qualified Data.Text as T
 import Alpha
 import Scope
 import ScopeSet (ScopeSet)
+import ShortShow
 import qualified ScopeSet
 import Signals (Signal)
 
@@ -128,3 +129,15 @@ instance AlphaEq Syntax where
   alphaCheck (Syntax x1)
              (Syntax x2) = do
     alphaCheck x1 x2
+
+
+instance ShortShow a => ShortShow (Stx a) where
+  shortShow (Stx _ _ x) = shortShow x
+
+instance ShortShow a => ShortShow (ExprF a) where
+  shortShow (Id x) = shortShow x
+  shortShow (List xs) = shortShow xs
+  shortShow (Vec xs) = shortShow xs
+
+instance ShortShow Syntax where
+  shortShow (Syntax x) = shortShow x

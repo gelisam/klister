@@ -16,6 +16,7 @@ import Core.Builder
 import Expander
 import Parser
 import PartialCore
+import ShortShow
 import SplitCore
 import Syntax
 
@@ -95,8 +96,8 @@ testExpansionFails input okp =
 ----------------------------
 -- Stolen from HUnit
 
-assertAlphaEq :: (AlphaEq a, Show a) => String -> a -> a -> Assertion
+assertAlphaEq :: (AlphaEq a, ShortShow a) => String -> a -> a -> Assertion
 assertAlphaEq preface expected actual =
   unless (alphaEq actual expected) (assertFailure msg)
  where msg = (if null preface then "" else preface ++ "\n") ++
-             "expected: " ++ show expected ++ "\n but got: " ++ show actual
+             "expected: " ++ shortShow expected ++ "\n but got: " ++ shortShow actual

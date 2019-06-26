@@ -5,11 +5,12 @@
 {-# LANGUAGE TemplateHaskell #-}
 module Core where
 
-import Control.Lens
+import Control.Lens hiding (elements)
 import Control.Monad
 import Data.Unique
 
 import Alpha
+import ShortShow
 import Signals
 import Syntax
 
@@ -194,3 +195,130 @@ instance AlphaEq core => AlphaEq (ScopedVec core) where
              (ScopedVec elements2 scope2) = do
     alphaCheck elements1 elements2
     alphaCheck scope1    scope2
+
+
+instance ShortShow a => ShortShow (SyntaxError a) where
+  shortShow (SyntaxError locations message)
+    = "(SyntaxError "
+   ++ shortShow locations
+   ++ " "
+   ++ shortShow message
+   ++ ")"
+
+instance ShortShow Var where
+  shortShow (Var x) = shortShow x
+
+instance ShortShow core => ShortShow (CoreF core) where
+  shortShow (CoreVar var)
+    = "(Var "
+   ++ shortShow var
+   ++ ")"
+  shortShow (CoreLam _ x body)
+    = "(Lam "
+   ++ shortShow x
+   ++ " "
+   ++ shortShow body
+   ++ ")"
+  shortShow (CoreApp fun arg)
+    = "(App "
+   ++ shortShow fun
+   ++ " "
+   ++ shortShow arg
+   ++ ")"
+  shortShow (CorePure x)
+    = "(Pure "
+   ++ shortShow x
+   ++ ")"
+  shortShow (CoreBind hd tl)
+    = "(Bind "
+   ++ shortShow hd
+   ++ " "
+   ++ shortShow tl
+   ++ ")"
+  shortShow (CoreSyntaxError syntaxError)
+    = "(SyntaxError "
+   ++ shortShow syntaxError
+   ++ ")"
+  shortShow (CoreSendSignal signal)
+    = "(SendSignal "
+   ++ shortShow signal
+   ++ ")"
+  shortShow (CoreSyntax syntax)
+    = "(Syntax "
+   ++ shortShow syntax
+   ++ ")"
+  shortShow (CoreCase scrutinee cases)
+    = "(Case "
+   ++ shortShow scrutinee
+   ++ " "
+   ++ shortShow cases
+   ++ ")"
+  shortShow (CoreIdentifier stx)
+    = "(Identifier "
+   ++ shortShow stx
+   ++ ")"
+  shortShow (CoreIdent scopedIdent)
+    = "(Ident "
+   ++ shortShow scopedIdent
+   ++ ")"
+  shortShow (CoreEmpty scopedEmpty)
+    = "(Empty "
+   ++ shortShow scopedEmpty
+   ++ ")"
+  shortShow (CoreCons scopedCons)
+    = "(Cons "
+   ++ shortShow scopedCons
+   ++ ")"
+  shortShow (CoreVec scopedVec)
+    = "(Vec "
+   ++ shortShow scopedVec
+   ++ ")"
+
+instance ShortShow Core where
+  shortShow (Core x) = shortShow x
+
+instance ShortShow Pattern where
+  shortShow (PatternIdentifier _ x) = shortShow x
+  shortShow PatternEmpty = "Empty"
+  shortShow (PatternCons _ x _ xs)
+    = "(Cons "
+   ++ shortShow x
+   ++ " "
+   ++ shortShow xs
+   ++ ")"
+  shortShow (PatternVec xs)
+    = "(Vec "
+   ++ shortShow (map snd xs)
+   ++ ")"
+
+instance ShortShow core => ShortShow (ScopedIdent core) where
+  shortShow (ScopedIdent ident scope)
+    = "(ScopedIdent "
+   ++ shortShow ident
+   ++ " "
+   ++ shortShow scope
+   ++ ")"
+
+instance ShortShow core => ShortShow (ScopedEmpty core) where
+  shortShow (ScopedEmpty scope)
+    = "(ScopedEmpty "
+   ++ shortShow scope
+   ++ ")"
+
+instance ShortShow core => ShortShow (ScopedCons core) where
+  shortShow (ScopedCons hd tl scope)
+    = "(ScopedCons "
+   ++ shortShow hd
+   ++ " "
+   ++ shortShow tl
+   ++ " "
+   ++ shortShow scope
+   ++ ")"
+
+instance ShortShow core => ShortShow (ScopedVec core) where
+  shortShow (ScopedVec elements scope)
+    = "(ScopedVec "
+   ++ shortShow elements
+   ++ " "
+   ++ shortShow scope
+   ++ ")"
