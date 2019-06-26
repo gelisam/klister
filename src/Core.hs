@@ -87,6 +87,7 @@ newtype Core = Core
   deriving (Eq, Show)
 makePrisms ''Core
 
+
 instance AlphaEq a => AlphaEq (SyntaxError a) where
   alphaCheck (SyntaxError locations1 message1)
              (SyntaxError locations2 message2) = do
@@ -105,9 +106,20 @@ instance AlphaEq core => AlphaEq (CoreF core) where
              (CoreApp fun2 arg2) = do
     alphaCheck fun1 fun2
     alphaCheck arg1 arg2
+  alphaCheck (CorePure x1)
+             (CorePure x2) = do
+    alphaCheck x1 x2
+  alphaCheck (CoreBind hd1 tl1)
+             (CoreBind hd2 tl2) = do
+    alphaCheck hd1 hd2
+    alphaCheck tl1 tl2
   alphaCheck (CoreSyntaxError syntaxError1)
              (CoreSyntaxError syntaxError2) = do
     alphaCheck syntaxError1 syntaxError2
+    alphaCheck syntaxError1 syntaxError2
+  alphaCheck (CoreSendSignal signal1)
+             (CoreSendSignal signal2) = do
+    alphaCheck signal1 signal2
   alphaCheck (CoreSyntax syntax1)
              (CoreSyntax syntax2) = do
     alphaCheck syntax1 syntax2
