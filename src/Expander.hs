@@ -302,6 +302,18 @@ initializeExpansionEnv =
             addReady contDest cont
             link dest $ CoreBind actDest contDest
         )
+      , ( "syntax-error"
+        , \dest stx -> do
+            (Stx scs srcloc (_, args)) <- mustBeCons stx
+            (Stx _ _ (msg, locs)) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
+            msgDest <- liftIO newUnique
+            addReady msgDest msg
+            locDests <- flip traverse locs $ \loc -> do
+              locDest <- liftIO newUnique
+              addReady locDest loc
+              pure locDest
+            link dest $ CoreSyntaxError (SyntaxError locDests msgDest)
+        )
       ]
 
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
