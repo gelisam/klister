@@ -44,7 +44,7 @@ testExpander input spec = do
       case c of
         Left err -> assertFailure (show err)
         Right expanded ->
-          case runPartialCore $ zonk expanded of
+          case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
             Just done -> assertAlphaEq (T.unpack input) output done
 

@@ -12,23 +12,22 @@ import qualified Data.Map as Map
 import Core
 import PartialCore
 
-
 data SplitCore = SplitCore
   { _splitCoreRoot        :: Unique
   , _splitCoreDescendants :: Map Unique (CoreF Unique)
   }
 makeLenses ''SplitCore
 
-zonk :: SplitCore -> PartialCore
-zonk (SplitCore {..}) = PartialCore $ go _splitCoreRoot
+unsplit :: SplitCore -> PartialCore
+unsplit (SplitCore {..}) = PartialCore $ go _splitCoreRoot
   where
     go :: Unique -> Maybe (CoreF PartialCore)
     go unique = do
       this <- Map.lookup unique _splitCoreDescendants
       return (fmap (PartialCore . go) this)
 
-unzonk :: PartialCore -> IO SplitCore
-unzonk partialCore = do
+split :: PartialCore -> IO SplitCore
+split partialCore = do
   root <- newUnique
   ((), childMap) <- runWriterT $ go root (unPartialCore partialCore)
   return $ SplitCore root childMap

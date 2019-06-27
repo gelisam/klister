@@ -42,4 +42,4 @@ repl = forever $
               Left err -> putStr "Expander error: " *> print err
               Right out -> do
                 putStrLn "Expander Output:"
-                print $ zonk out
+                print $ unsplit out
