@@ -9,6 +9,7 @@ import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Parser.Common
+import Signals
 import Syntax
 import Syntax.Lexical
 import qualified ScopeSet
@@ -21,12 +22,17 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> vec <|> ident
+expr = list <|> vec <|> ident <|> signal
 
 ident :: Parser Syntax
 ident =
   do Located srcloc x <- lexeme identName
      return $ Syntax $ Stx ScopeSet.empty srcloc (Id x)
+
+signal :: Parser Syntax
+signal =
+  do Located srcloc s <- lexeme signalNum
+     return $ Syntax $ Stx ScopeSet.empty srcloc (Sig s)
 
 list :: Parser Syntax
 list =
@@ -45,7 +51,11 @@ vec =
 identName :: Parser Text
 identName = takeWhile1P (Just "identifier character") isLetter
 
-
+signalNum :: Parser Signal
+signalNum = toSignal <$> takeWhile1P (Just "signal (digits)") isDigit
+  where
+    toSignal :: Text -> Signal
+    toSignal = Signal . read . T.unpack
 
 lexeme :: Parser a -> Parser (Located a)
 lexeme = located . L.lexeme eatWhitespace

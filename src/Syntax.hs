@@ -10,6 +10,7 @@ import Alpha
 import Scope
 import ScopeSet (ScopeSet)
 import qualified ScopeSet
+import Signals (Signal)
 
 
 data SrcPos = SrcPos
@@ -37,6 +38,7 @@ makeLenses ''Stx
 
 data ExprF a
   = Id Text
+  | Sig Signal
   | List [a]
   | Vec [a]
   deriving (Eq, Functor, Show)
@@ -66,6 +68,7 @@ instance HasScopes Syntax where
     adjustRec e
     where
       adjustRec (Id x) = Id x
+      adjustRec (Sig s) = Sig s
       adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
       adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
 
@@ -90,6 +93,7 @@ syntaxText :: Syntax -> Text
 syntaxText (Syntax (Stx _ _ e)) = go e
   where
     go (Id x) = x
+    go (Sig s) = T.pack (show s)
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
     go (Vec xs) = "[" <> T.intercalate " " (map syntaxText xs) <> "]"
 

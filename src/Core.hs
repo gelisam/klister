@@ -2,6 +2,7 @@
 module Core where
 
 import Control.Lens
+import Control.Monad
 import Data.Unique
 
 import Alpha
@@ -65,10 +66,11 @@ data CoreF core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
-  | CoreSendSignal Signal               -- :: Macro ()
+  | CoreSendSignal core                 -- :: Macro ()
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
+  | CoreSignal Signal
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
@@ -124,6 +126,9 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreVec scopedVec1)
              (CoreVec scopedVec2) = do
     alphaCheck scopedVec1 scopedVec2
+  alphaCheck (CoreSignal s1)
+             (CoreSignal s2) =
+    guard $ s1 == s2
   alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq Core where

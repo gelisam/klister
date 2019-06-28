@@ -6,6 +6,7 @@ import Data.Unique
 
 import Core
 import ScopeSet ()
+import Signals
 import Syntax
 
 fakeLoc :: SrcLoc
@@ -19,3 +20,6 @@ lam f = do
   v <- Var <$> newUnique
   body <- f (Core (CoreVar v))
   return (Core (CoreLam fakeIdent v body))
+
+sig :: Int -> IO Core
+sig s = return $ Core $ CoreSignal $ Signal s

@@ -314,6 +314,13 @@ initializeExpansionEnv =
               pure locDest
             link dest $ CoreSyntaxError (SyntaxError locDests msgDest)
         )
+      , ( "send-signal"
+        , \dest stx -> do
+            (Stx _ _ (_ :: Syntax, sig)) <- mustBeVec stx
+            sigDest <- liftIO newUnique
+            addReady sigDest sig
+            link dest $ CoreSendSignal sigDest
+        )
       ]
 
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
@@ -385,6 +392,7 @@ expandOneExpression dest stx
     case syntaxE stx of
       Vec xs -> expandOneExpression dest (addApp Vec stx xs)
       List xs -> expandOneExpression dest (addApp List stx xs)
+      Sig s -> expandLiteralSignal dest s
       Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 -- | Insert a function application marker with a lexical context from
@@ -394,6 +402,10 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   Syntax (Stx scs loc (ctor (app : args)))
   where
     app = Syntax (Stx scs loc (Id "#%app"))
+
+-- | Link the destination to a literal signal object
+expandLiteralSignal :: Unique -> Signal -> Expand ()
+expandLiteralSignal dest signal = link dest (CoreSignal signal)
 
 interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
 interpretMacroAction (MacroActionPure value) = do

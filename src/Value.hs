@@ -1,8 +1,9 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings, TemplateHaskell #-}
 module Value where
 
 import Control.Lens
 import Data.Map
+import Data.Text (Text)
 
 import Signals
 import Syntax
@@ -22,7 +23,16 @@ data Value
   = ValueClosure Closure
   | ValueSyntax Syntax
   | ValueMacroAction MacroAction
+  | ValueSignal Signal
   deriving (Eq, Show)
+
+
+-- | Find a simple description that is suitable for inclusion in error messages.
+describeVal :: Value -> Text
+describeVal (ValueClosure _) = "function"
+describeVal (ValueSyntax _) = "syntax"
+describeVal (ValueMacroAction _) = "macro action"
+describeVal (ValueSignal _) = "signal"
 
 data Closure = Closure
   { _closureEnv   :: Env

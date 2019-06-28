@@ -1,18 +1,20 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, RecordWildCards, TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings, RecordWildCards, TemplateHaskell #-}
 module Evaluator where
 
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import qualified Data.Map as Map
+import Data.Text (Text)
 
-import Syntax
 import Core
+import Signals
+import Syntax
 import Value
 
 
 -- TODO: more precise representation
-type Type = String
+type Type = Text
 
 data TypeError = TypeError
   { _typeErrorExpected :: Type
@@ -84,9 +86,12 @@ eval (Core (CoreSyntaxError syntaxErrorExpr)) = do
   syntaxErrorValue <- traverse evalAsSyntax syntaxErrorExpr
   pure $ ValueMacroAction
        $ MacroActionSyntaxError syntaxErrorValue
-eval (Core (CoreSendSignal signal)) = do
+eval (Core (CoreSendSignal signalExpr)) = do
+  theSignal <- evalAsSignal signalExpr
   pure $ ValueMacroAction
-       $ MacroActionSendSignal signal
+       $ MacroActionSendSignal theSignal
+eval (Core (CoreSignal signal)) =
+  pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do
   pure $ ValueSyntax syntax
 eval (Core (CoreCase scrutinee cases)) = do
@@ -101,6 +106,11 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   identSyntax <- evalAsSyntax ident
   case identSyntax of
     Syntax (Stx _ _ expr) -> case expr of
+      Sig _ -> do
+        throwError $ EvalErrorType $ TypeError
+          { _typeErrorExpected = "id"
+          , _typeErrorActual   = "signal"
+          }
       List _ -> do
         throwError $ EvalErrorType $ TypeError
           { _typeErrorExpected = "id"
@@ -129,9 +139,21 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
           { _typeErrorExpected = "list"
           , _typeErrorActual   = "id"
           }
+      Sig _ -> do
+        throwError $ EvalErrorType $ TypeError
+          { _typeErrorExpected = "list"
+          , _typeErrorActual   = "signal"
+          }
 eval (Core (CoreVec (ScopedVec elements scope))) = do
   vec <- Vec <$> traverse evalAsSyntax elements
   withScopeOf scope vec
+
+evalErrorType :: Text -> Value -> Eval a
+evalErrorType expected got =
+  throwError $ EvalErrorType $ TypeError
+    { _typeErrorExpected = expected
+    , _typeErrorActual   = describeVal got
+    }
 
 evalAsClosure :: Core -> Eval Closure
 evalAsClosure core = do
@@ -139,50 +161,28 @@ evalAsClosure core = do
   case value of
     ValueClosure closure -> do
       pure closure
-    ValueSyntax _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "function"
-        , _typeErrorActual   = "syntax"
-        }
-    ValueMacroAction _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "function"
-        , _typeErrorActual   = "macro action"
-        }
+    other -> evalErrorType "function" other
+
+evalAsSignal :: Core -> Eval Signal
+evalAsSignal core = do
+  value <- eval core
+  case value of
+    ValueSignal s -> pure s
+    other -> evalErrorType "signal" other
 
 evalAsSyntax :: Core -> Eval Syntax
 evalAsSyntax core = do
   value <- eval core
   case value of
-    ValueClosure _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "syntax"
-        , _typeErrorActual   = "function"
-        }
-    ValueSyntax syntax -> do
-      pure syntax
-    ValueMacroAction _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "syntax"
-        , _typeErrorActual   = "macro action"
-        }
+    ValueSyntax syntax -> pure syntax
+    other -> evalErrorType "syntax" other
 
 evalAsMacroAction :: Core -> Eval MacroAction
 evalAsMacroAction core = do
   value <- eval core
   case value of
-    ValueClosure _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "macro action"
-        , _typeErrorActual   = "function"
-        }
-    ValueSyntax _ -> do
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "macro action"
-        , _typeErrorActual   = "syntax"
-        }
-    ValueMacroAction macroAction -> do
-      pure macroAction
+    ValueMacroAction macroAction -> pure macroAction
+    other -> evalErrorType "macro action" other
 
 withScopeOf :: Core -> ExprF Syntax -> Eval Value
 withScopeOf scope expr = do

@@ -15,7 +15,6 @@ import Core.Builder
 import Expander
 import Parser
 import PartialCore
-import Signals
 import SplitCore
 
 main :: IO ()
@@ -29,8 +28,13 @@ miniTests =
   testGroup "Mini-tests"
    [ testCase (show input) (testExpander input output)
    | (input, output) <-
-     [("[lambda [x] x]",
-       lam $ \x -> pure x)]
+     [ ( "[lambda [x] x]"
+       , lam $ \x -> pure x
+       )
+     , ( "42"
+       , sig 42
+       )
+     ]
    ]
 
 testExpander :: Text -> IO Core -> Assertion
