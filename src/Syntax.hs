@@ -1,4 +1,7 @@
-{-# LANGUAGE DeriveFunctor, FlexibleInstances, OverloadedStrings, TemplateHaskell #-}
+{-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Syntax where
 
 import Control.Lens hiding (List)

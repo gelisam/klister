@@ -1,4 +1,5 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Alpha where
 
 import Control.Applicative

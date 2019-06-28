@@ -1,4 +1,6 @@
-{-# LANGUAGE OverloadedStrings, TemplateHaskell, ViewPatterns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 module Parser.Command (Command(..), readCommand) where
 
 import Control.Lens

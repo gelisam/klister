@@ -1,4 +1,14 @@
-{-# LANGUAGE FlexibleInstances, GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings, RecordWildCards, RankNTypes, ScopedTypeVariables, TemplateHaskell, TypeApplications, TypeFamilies, ViewPatterns #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE ViewPatterns #-}
 module Expander where
 
 import Control.Lens hiding (List, children)

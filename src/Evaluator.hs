@@ -1,4 +1,8 @@
-{-# LANGUAGE GeneralizedNewtypeDeriving, LambdaCase, OverloadedStrings, RecordWildCards, TemplateHaskell #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Evaluator where
 
 import Control.Lens hiding (List, elements)
