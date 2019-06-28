@@ -172,6 +172,29 @@ getTasks = view expanderTasks <$> getState
 clearTasks :: Expand ()
 clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
 
+currentPhase :: Expand Phase
+currentPhase = Expand $ view expanderPhase <$> ask
+
+inEarlierPhase :: Expand a -> Expand a
+inEarlierPhase act =
+  Expand $
+  local (over expanderPhase $
+         \(Phase p) -> Phase (1 + p)) $
+  runExpand act
+
+currentEnv :: Expand Env
+currentEnv = do
+  phase <- currentPhase
+  maybe mempty id . view (expanderEnvironments . at phase) <$> getState
+
+expandEval :: Eval a -> Expand a
+expandEval evalAction = do
+  env <- currentEnv
+  out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
+  case out of
+    Left err -> throwError $ MacroEvaluationError err
+    Right val -> return val
+
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
 
