@@ -40,6 +40,7 @@ data ExpansionErr
   | NotEmpty Syntax
   | NotCons Syntax
   | NotRightLength Natural Syntax
+  | NotVec Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError EvalError
   | InternalError String
@@ -249,6 +250,11 @@ instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
     return (Stx scs srcloc (v, w, x, y, z))
   mustBeVec other = throwError (NotRightLength 5 other)
 
+instance MustBeVec [Syntax] where
+  mustBeVec (Syntax (Stx scs srcloc (Vec xs))) =
+    return (Stx scs srcloc xs)
+  mustBeVec other = throwError (NotVec other)
+
 
 initializeExpansionEnv :: Expand ()
 initializeExpansionEnv =
@@ -263,8 +269,8 @@ initializeExpansionEnv =
         )
       , ( "lambda"
         , \ dest stx -> do
-            (Stx _ _ (_, arg, body)) <- mustBeVec stx
-            (Stx _ _ theArg) <- mustBeVec @Syntax arg
+            Stx _ _ (_, arg, body) <- mustBeVec stx
+            Stx _ _ theArg <- mustBeVec @Syntax arg
             x <- mustBeIdent theArg
             sc <- freshScope
             let body' = addScope body sc
@@ -278,48 +284,77 @@ initializeExpansionEnv =
         )
       , ( "#%app"
         , \ dest stx -> do
-            (Stx _ _ (_, fun, arg)) <- mustBeVec stx
+            Stx _ _ (_, fun, arg) <- mustBeVec stx
             funDest <- schedule fun
             argDest <- schedule arg
             link dest $ CoreApp funDest argDest
         )
       , ( "pure"
         , \ dest stx -> do
-            (Stx _ _ (_ :: Syntax, v)) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, v) <- mustBeVec stx
             argDest <- schedule v
             link dest $ CorePure argDest
         )
       , ( ">>="
         , \ dest stx -> do
-            (Stx _ _ (_, act, cont)) <- mustBeVec stx
+            Stx _ _ (_, act, cont) <- mustBeVec stx
             actDest <- schedule act
             contDest <- schedule cont
             link dest $ CoreBind actDest contDest
         )
       , ( "syntax-error"
         , \dest stx -> do
-            (Stx scs srcloc (_, args)) <- mustBeCons stx
-            (Stx _ _ (msg, locs)) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
+            Stx scs srcloc (_, args) <- mustBeCons stx
+            Stx _ _ (msg, locs) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
             msgDest <- schedule msg
             locDests <- traverse schedule locs
             link dest $ CoreSyntaxError (SyntaxError locDests msgDest)
         )
       , ( "send-signal"
         , \dest stx -> do
-            (Stx _ _ (_ :: Syntax, sig)) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, sig) <- mustBeVec stx
             sigDest <- schedule sig
             link dest $ CoreSendSignal sigDest
         )
       , ( "quote"
         , \dest stx -> do
-            (Stx _ _ (_ :: Syntax, quoted)) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, quoted) <- mustBeVec stx
             link dest $ CoreSyntax quoted
         )
       , ( "ident"
         , \dest stx -> do
-            (Stx _ _ (_ :: Syntax, someId)) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, someId) <- mustBeVec stx
             x@(Stx _ _ _) <- mustBeIdent someId
             link dest $ CoreIdentifier x
+        )
+      , ( "ident-syntax"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, someId, source) <- mustBeVec stx
+            idDest <- schedule someId
+            sourceDest <- schedule source
+            link dest $ CoreIdent $ ScopedIdent idDest sourceDest
+        )
+      , ( "empty-list-syntax"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, source) <- mustBeVec stx
+            sourceDest <- schedule source
+            link dest $ CoreEmpty $ ScopedEmpty sourceDest
+        )
+      , ( "cons-list-syntax"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, car, cdr, source) <- mustBeVec stx
+            carDest <- schedule car
+            cdrDest <- schedule cdr
+            sourceDest <- schedule source
+            link dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
+        )
+      , ( "vec-syntax"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, vec, source) <- mustBeVec stx
+            Stx _ _ vecItems <- mustBeVec vec
+            vecDests <- traverse schedule vecItems
+            sourceDest <- schedule source
+            link dest $ CoreVec $ ScopedVec vecDests sourceDest
         )
       ]
 
