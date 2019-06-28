@@ -41,6 +41,7 @@ data ExpansionErr
   | NotCons Syntax
   | NotRightLength Natural Syntax
   | NotVec Syntax
+  | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError EvalError
   | InternalError String
@@ -270,17 +271,10 @@ initializeExpansionEnv =
       , ( "lambda"
         , \ dest stx -> do
             Stx _ _ (_, arg, body) <- mustBeVec stx
-            Stx _ _ theArg <- mustBeVec @Syntax arg
-            x <- mustBeIdent theArg
-            sc <- freshScope
-            let body' = addScope body sc
-            let (Stx argScopes _ arg') = addScope x sc
-            b <- freshBinding
-            addBinding arg' argScopes b
-            coreArg <- freshVar
-            bind b (EVarMacro coreArg)
-            bodyDest <- schedule body'
-            link dest $ CoreLam x coreArg bodyDest
+            Stx _ _ theArg <- mustBeVec arg
+            (sc, arg', coreArg) <- prepareVar theArg
+            bodyDest <- schedule $ addScope body sc
+            link dest $ CoreLam arg' coreArg bodyDest
         )
       , ( "#%app"
         , \ dest stx -> do
@@ -356,7 +350,60 @@ initializeExpansionEnv =
             sourceDest <- schedule source
             link dest $ CoreVec $ ScopedVec vecDests sourceDest
         )
+      , ( "syntax-case"
+        , \dest stx -> do
+            Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
+            Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
+            scrutDest <- schedule scrutinee
+            patternDests <- traverse (mustBeVec >=> expandPatternCase) patterns
+            link dest $ CoreCase scrutDest patternDests
+        )
       ]
+
+    expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, Unique)
+    -- TODO match case keywords hygienically
+    expandPatternCase (Stx _ _ (lhs, rhs)) =
+      case lhs of
+        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "ident")),
+                              patVar])) -> do
+          (sc, x', var) <- prepareVar patVar
+          let rhs' = addScope rhs sc
+          rhsDest <- schedule rhs'
+          let patOut = PatternIdentifier x' var
+          return (patOut, rhsDest)
+        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "vec")),
+                              Syntax (Stx _ _ (Vec vars))])) -> do
+          varInfo <- traverse prepareVar vars
+          let rhs' = foldr (flip addScope) rhs [sc | (sc, _, _) <- varInfo]
+          rhsDest <- schedule rhs'
+          let patOut = PatternVec [(ident, var) | (_, ident, var) <- varInfo]
+          return (patOut, rhsDest)
+        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "cons")),
+                              car,
+                              cdr])) -> do
+          (sc, car', carVar) <- prepareVar car
+          (sc', cdr', cdrVar) <- prepareVar cdr
+          let rhs' = addScope (addScope rhs sc) sc'
+          rhsDest <- schedule rhs'
+          let patOut = PatternCons car' carVar cdr' cdrVar
+          return (patOut, rhsDest)
+        Syntax (Stx _ _ (List [])) -> do
+          rhsDest <- schedule rhs
+          return (PatternEmpty, rhsDest)
+        other ->
+          throwError $ UnknownPattern other
+
+    prepareVar :: Syntax -> Expand (Scope, Ident, Var)
+    prepareVar varStx = do
+      sc <- freshScope
+      x <- mustBeIdent varStx
+      let x'@(Stx xScopes _ xName) = addScope x sc
+      b <- freshBinding
+      addBinding xName xScopes b
+      var <- freshVar
+      bind b (EVarMacro var)
+      return (sc, x', var)
+
 
     schedule :: Syntax -> Expand Unique
     schedule stx = do
