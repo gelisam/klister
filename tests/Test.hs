@@ -1,3 +1,4 @@
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -16,6 +17,7 @@ import Expander
 import Parser
 import PartialCore
 import SplitCore
+import Syntax
 
 main :: IO ()
 main = defaultMain tests
@@ -25,20 +27,37 @@ tests = testGroup "Expander tests" [ miniTests ]
 
 miniTests :: TestTree
 miniTests =
-  testGroup "Mini-tests"
-   [ testCase (show input) (testExpander input output)
-   | (input, output) <-
-     [ ( "[lambda [x] x]"
-       , lam $ \x -> pure x
-       )
-     , ( "42"
-       , sig 42
-       )
-     , ( "[send-signal 0]"
-       , sendSig =<< sig 0
-       )
-     ]
-   ]
+  testGroup "Mini-tests" [ expectedSuccess, expectedFailure]
+  where
+    expectedSuccess =
+      testGroup "Expected to succeed"
+      [ testCase (show input) (testExpander input output)
+      | (input, output) <-
+        [ ( "[lambda [x] x]"
+          , lam $ \x -> pure x
+          )
+        , ( "[lambda [x] [lambda [x] x]]"
+          , lam $ \_ -> lam $ \y -> pure y
+          )
+        , ( "42"
+          , sig 42
+          )
+        , ( "[send-signal 0]"
+          , sendSig =<< sig 0
+          )
+        ]
+      ]
+    expectedFailure =
+      testGroup "Expected to fail"
+      [ testCase (show input) (testExpansionFails input predicate)
+      | (input, predicate) <-
+        [ ( "x"
+          , \case
+              Unknown (Stx _ _ "x") -> True
+              _ -> False
+            )
+        ]
+      ]
 
 testExpander :: Text -> IO Core -> Assertion
 testExpander input spec = do
@@ -54,6 +73,24 @@ testExpander input spec = do
           case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
             Just done -> assertAlphaEq (T.unpack input) output done
+
+testExpansionFails :: Text -> (ExpansionErr -> Bool) -> Assertion
+testExpansionFails input okp =
+  case readExpr "<test suite>" input of
+    Left err -> assertFailure (show err)
+    Right expr -> do
+      ctx <- mkInitContext
+      c <- execExpand (initializeExpansionEnv *> expandExpr expr) ctx
+      case c of
+        Left err
+          | okp err -> return ()
+          | otherwise ->
+            assertFailure $ "An error was expected but not this one: " ++ show err
+        Right expanded ->
+          case runPartialCore $ unsplit expanded of
+            Nothing -> assertFailure "Incomplete expansion"
+            Just _ -> assertFailure "Error expected, but expansion succeeded"
+
 
 ----------------------------
 -- Stolen from HUnit
