@@ -273,55 +273,61 @@ initializeExpansionEnv =
             addBinding arg' argScopes b
             coreArg <- freshVar
             bind b (EVarMacro coreArg)
-            bodyDest <- liftIO newUnique
-            addReady bodyDest body'
+            bodyDest <- schedule body'
             link dest $ CoreLam x coreArg bodyDest
         )
       , ( "#%app"
         , \ dest stx -> do
             (Stx _ _ (_, fun, arg)) <- mustBeVec stx
-            funDest <- liftIO newUnique
-            argDest <- liftIO newUnique
-            addReady funDest fun
-            addReady argDest arg
+            funDest <- schedule fun
+            argDest <- schedule arg
             link dest $ CoreApp funDest argDest
         )
       , ( "pure"
         , \ dest stx -> do
             (Stx _ _ (_ :: Syntax, v)) <- mustBeVec stx
-            argDest <- liftIO newUnique
-            addReady argDest v
+            argDest <- schedule v
             link dest $ CorePure argDest
         )
       , ( ">>="
         , \ dest stx -> do
             (Stx _ _ (_, act, cont)) <- mustBeVec stx
-            actDest <- liftIO newUnique
-            contDest <- liftIO newUnique
-            addReady actDest act
-            addReady contDest cont
+            actDest <- schedule act
+            contDest <- schedule cont
             link dest $ CoreBind actDest contDest
         )
       , ( "syntax-error"
         , \dest stx -> do
             (Stx scs srcloc (_, args)) <- mustBeCons stx
             (Stx _ _ (msg, locs)) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
-            msgDest <- liftIO newUnique
-            addReady msgDest msg
-            locDests <- flip traverse locs $ \loc -> do
-              locDest <- liftIO newUnique
-              addReady locDest loc
-              pure locDest
+            msgDest <- schedule msg
+            locDests <- traverse schedule locs
             link dest $ CoreSyntaxError (SyntaxError locDests msgDest)
         )
       , ( "send-signal"
         , \dest stx -> do
             (Stx _ _ (_ :: Syntax, sig)) <- mustBeVec stx
-            sigDest <- liftIO newUnique
-            addReady sigDest sig
+            sigDest <- schedule sig
             link dest $ CoreSendSignal sigDest
         )
+      , ( "quote"
+        , \dest stx -> do
+            (Stx _ _ (_ :: Syntax, quoted)) <- mustBeVec stx
+            link dest $ CoreSyntax quoted
+        )
+      , ( "ident"
+        , \dest stx -> do
+            (Stx _ _ (_ :: Syntax, someId)) <- mustBeVec stx
+            x@(Stx _ _ _) <- mustBeIdent someId
+            link dest $ CoreIdentifier x
+        )
       ]
+
+    schedule :: Syntax -> Expand Unique
+    schedule stx = do
+      dest <- liftIO newUnique
+      addReady dest stx
+      return dest
 
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
     addPrimitive name impl = do
