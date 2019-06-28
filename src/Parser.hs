@@ -48,8 +48,49 @@ vec =
      Located loc2 _ <- located (literal "]")
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (Vec xs)
 
+-- | The identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text
-identName = takeWhile1P (Just "identifier character") isLetter
+identName =
+  normalIdent <|> specialIdent
+
+  where
+    normalIdent :: Parser Text
+    normalIdent =
+      do c1 <- initial
+         cs <- many subseq
+         return (T.pack (c1 : cs))
+
+    specialIdent :: Parser Text
+    specialIdent =
+      do str <- chunk "+" <|> chunk "-" <|> chunk "..."
+         more <- many subseq
+         return (str <> T.pack more)
+
+    initial :: Parser Char
+    initial =
+      satisfy (\c -> isConstituent c || isSpecialInit c) <?>
+      "identifier-initial character"
+
+    subseq :: Parser Char
+    subseq =
+      satisfy (\c ->
+                 isConstituent c ||
+                 isSpecialInit c ||
+                 isDigit c ||
+                 generalCategory c `elem` subseqCats ||
+                 c `elem` ("+-.@" :: [Char])) <?> "identifier subsequent character"
+
+    isConstituent c =
+      c `elem` alphabet ||
+      c `elem` (map toUpper alphabet) ||
+      (ord c > 126 && generalCategory c `elem` constituentCats)
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    isSpecialInit c = c `elem` ("!$%&*/:<=>?^_~" :: [Char])
+
+    constituentCats = [UppercaseLetter, LowercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, NonSpacingMark, LetterNumber, OtherNumber, DashPunctuation, ConnectorPunctuation, OtherPunctuation, CurrencySymbol, MathSymbol, ModifierSymbol, OtherSymbol, PrivateUse]
+
+    subseqCats = [DecimalNumber, SpacingCombiningMark, EnclosingMark]
+
 
 signalNum :: Parser Signal
 signalNum = toSignal <$> takeWhile1P (Just "signal (digits)") isDigit

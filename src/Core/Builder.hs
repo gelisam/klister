@@ -23,3 +23,6 @@ lam f = do
 
 sig :: Int -> IO Core
 sig s = return $ Core $ CoreSignal $ Signal s
+
+sendSig :: Core -> IO Core
+sendSig = return . Core . CoreSendSignal

@@ -107,6 +107,9 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreSyntax syntax1)
              (CoreSyntax syntax2) = do
     alphaCheck syntax1 syntax2
+  alphaCheck (CoreSendSignal core1)
+             (CoreSendSignal core2) = do
+    alphaCheck core1 core2
   alphaCheck (CoreCase scrutinee1 cases1)
              (CoreCase scrutinee2 cases2) = do
     alphaCheck scrutinee1 scrutinee2

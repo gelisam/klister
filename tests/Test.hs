@@ -34,6 +34,9 @@ miniTests =
      , ( "42"
        , sig 42
        )
+     , ( "[send-signal 0]"
+       , sendSig =<< sig 0
+       )
      ]
    ]
 
