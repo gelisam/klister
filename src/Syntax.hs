@@ -138,6 +138,7 @@ instance ShortShow a => ShortShow (ExprF a) where
   shortShow (Id x) = shortShow x
   shortShow (List xs) = shortShow xs
   shortShow (Vec xs) = shortShow xs
+  shortShow (Sig s) = shortShow s
 
 instance ShortShow Syntax where
   shortShow (Syntax x) = shortShow x
