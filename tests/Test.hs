@@ -46,7 +46,7 @@ miniTests =
         , ( "[send-signal 0]"
           , sendSig =<< sig 0
           )
-        , ( "[lambda [f] [lambda [x] (f x)]]"
+        , ( "[lambda [f] [lambda [x] [f x]]]"
           , lam $ \f -> lam $ \x -> f `app` x
           )
         ]

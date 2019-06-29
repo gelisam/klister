@@ -506,7 +506,12 @@ expandOneExpression dest stx
       v <- getEValue b
       case v of
         EPrimMacro impl -> impl dest stx
-        EVarMacro var -> link dest (CoreVar var)
+        EVarMacro var ->
+          case syntaxE stx of
+            Id _ -> link dest (CoreVar var)
+            Sig _ -> error "Impossible - signal not ident"
+            List xs -> expandOneExpression dest (addApp List stx xs)
+            Vec xs -> expandOneExpression dest (addApp Vec stx xs)
         EUserMacro _ _impl ->
           error "Unimplemented: user-defined macros"
   | otherwise =
