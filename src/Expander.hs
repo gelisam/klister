@@ -56,7 +56,7 @@ data ExpansionErr
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError EvalError
   | InternalError String
-  deriving (Eq, Show)
+  deriving (Show)
 
 
 newtype Phase = Phase Natural
@@ -115,12 +115,11 @@ execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 data ExpanderTask
   = Ready Syntax
-  | Blocked Signal Value -- the value is the continuation
-  deriving (Eq)
+  | AwaitingSignal Signal Value -- the value is the continuation
 
 instance Show ExpanderTask where
   show (Ready stx) = "Ready " ++ T.unpack (syntaxText stx)
-  show (Blocked on _k) = "Blocked (" ++ show on ++ ")"
+  show (AwaitingSignal on _k) = "Blocked (" ++ show on ++ ")"
 
 makePrisms ''Binding
 makePrisms ''ExpansionErr
@@ -489,7 +488,7 @@ expandTasks = do
       clearTasks
       forM_ more runTask
       newTasks <- getTasks
-      if tasks == newTasks
+      if map fst tasks == map fst newTasks
         then throwError (NoProgress (map snd newTasks))
         else expandTasks
 
@@ -497,7 +496,7 @@ runTask :: (Unique, ExpanderTask) -> Expand ()
 runTask (dest, task) =
   case task of
     Ready stx -> expandOneExpression dest stx
-    Blocked _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
+    AwaitingSignal _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
 
 
 expandOneExpression :: Unique -> Syntax -> Expand ()
