@@ -35,16 +35,19 @@ miniTests =
       [ testCase (show input) (testExpander input output)
       | (input, output) <-
         [ ( "[lambda [x] x]"
-          , lam $ \x -> pure x
+          , lam $ \x -> x
           )
         , ( "[lambda [x] [lambda [x] x]]"
-          , lam $ \_ -> lam $ \y -> pure y
+          , lam $ \_ -> lam $ \y -> y
           )
         , ( "42"
           , sig 42
           )
         , ( "[send-signal 0]"
           , sendSig =<< sig 0
+          )
+        , ( "[lambda [f] [lambda [x] (f x)]]"
+          , lam $ \f -> lam $ \x -> f `app` x
           )
         ]
       ]

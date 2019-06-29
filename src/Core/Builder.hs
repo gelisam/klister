@@ -15,11 +15,15 @@ fakeLoc = SrcLoc "<fake>" (SrcPos 0 0) (SrcPos 0 0)
 fakeIdent :: Ident
 fakeIdent = Stx mempty fakeLoc (T.pack "fake")
 
-lam :: (Core -> IO Core) -> IO Core
+lam :: (IO Core -> IO Core) -> IO Core
 lam f = do
   v <- Var <$> newUnique
-  body <- f (Core (CoreVar v))
+  body <- f (pure (Core (CoreVar v)))
   return (Core (CoreLam fakeIdent v body))
+
+app :: IO Core -> IO Core -> IO Core
+app fun arg = Core
+          <$> (CoreApp <$> fun <*> arg)
 
 sig :: Int -> IO Core
 sig s = return $ Core $ CoreSignal $ Signal s
