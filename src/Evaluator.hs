@@ -8,10 +8,10 @@ module Evaluator where
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
-import qualified Data.Map as Map
 import Data.Text (Text)
 
 import Core
+import Env
 import Signals
 import Syntax
 import Value
@@ -35,26 +35,27 @@ data EvalError
 makePrisms ''EvalError
 
 newtype Eval a = Eval
-   { runEval :: ReaderT Env (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader Env, MonadError EvalError)
+   { runEval :: ReaderT (Env Value) (ExceptT EvalError IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader (Env Value), MonadError EvalError)
 
-withEnv :: Env -> Eval a -> Eval a
+withEnv :: Env Value -> Eval a -> Eval a
 withEnv = local . const
 
 withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
-withExtendedEnv n x v act = local (Map.insert x (n, v)) act
+withExtendedEnv n x v act = local (Env.insert x n v) act
 
 withManyExtendedEnv :: [(Ident, Var, Value)] -> Eval a -> Eval a
 withManyExtendedEnv exts act = local (inserter exts) act
   where
     inserter [] = id
-    inserter ((n, x, v) : rest) = Map.insert x (n, v) . inserter rest
+    inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
 
 apply :: Closure -> Value -> Eval Value
 apply (Closure {..}) value = do
-  let env = Map.insert _closureVar
-                       (_closureIdent, value)
+  let env = Env.insert _closureVar
+                       _closureIdent
+                       value
                        _closureEnv
   withEnv env $ do
     eval _closureBody
@@ -62,8 +63,8 @@ apply (Closure {..}) value = do
 eval :: Core -> Eval Value
 eval (Core (CoreVar var)) = do
   env <- ask
-  case Map.lookup var env of
-    Just (_ident, value) -> pure value
+  case lookupVal var env of
+    Just value -> pure value
     _ -> throwError $ EvalErrorUnbound var
 eval (Core (CoreLam ident var body)) = do
   env <- ask

@@ -3,15 +3,14 @@
 module Value where
 
 import Control.Lens
-import Data.Map
 import Data.Text (Text)
 
+import Core
+import Env
 import Signals
 import Syntax
-import Core
 
 
-type Env = Map Var (Ident, Value)
 
 data MacroAction
   = MacroActionPure Value
@@ -36,7 +35,7 @@ describeVal (ValueMacroAction _) = "macro action"
 describeVal (ValueSignal _) = "signal"
 
 data Closure = Closure
-  { _closureEnv   :: Env
+  { _closureEnv   :: Env Value
   , _closureIdent :: Ident
   , _closureVar   :: Var
   , _closureBody  :: Core

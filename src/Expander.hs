@@ -27,6 +27,7 @@ import qualified Data.Text as T
 import Numeric.Natural
 
 import Core
+import Env
 import Evaluator
 import Scope
 import ScopeSet (ScopeSet)
@@ -75,7 +76,7 @@ mkInitContext = do
 
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
-  , _expanderEnvironments :: !(Map.Map Phase Env)
+  , _expanderEnvironments :: !(Map.Map Phase (Env Value))
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
@@ -182,10 +183,10 @@ inEarlierPhase act =
          \(Phase p) -> Phase (1 + p)) $
   runExpand act
 
-currentEnv :: Expand Env
+currentEnv :: Expand (Env Value)
 currentEnv = do
   phase <- currentPhase
-  maybe mempty id . view (expanderEnvironments . at phase) <$> getState
+  maybe Env.empty id . view (expanderEnvironments . at phase) <$> getState
 
 expandEval :: Eval a -> Expand a
 expandEval evalAction = do
@@ -543,7 +544,7 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
     Right boundResult -> do
       phase <- view expanderPhase
       s <- getState
-      let env = fromMaybe Map.empty
+      let env = fromMaybe Env.empty
                           (s ^. expanderEnvironments . at phase)
       evalResult <- liftIO
                   $ runExceptT
