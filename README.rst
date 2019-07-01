@@ -17,8 +17,10 @@ Overall Design
 ==============
 
 The macro expander itself is a set-of-scopes expander, based on
-Matthew Flatt's paper from POPL 2016 and described quite accessibly in
+`Matthew Flatt's paper`_ from POPL 2016 and described quite accessibly in
 his talk from `Strange Loop`_.
+
+.. _Matthew Flatt's paper: https://www.cs.utah.edu/plt/publications/popl16-f.pdf
 
 .. _Strange Loop: https://www.youtube.com/watch?v=Or_yKiI3Ha4
 
