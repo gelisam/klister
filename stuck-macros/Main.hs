@@ -1,6 +1,10 @@
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ViewPatterns #-}
 module Main where
 
 import Control.Monad (forever)
+import Control.Monad.Except
+import Control.Monad.Reader
 
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -8,11 +12,15 @@ import qualified Data.Text.IO as T
 import System.Exit (exitSuccess)
 import System.IO
 
+import qualified Env as Env
+import Evaluator
 import Expander
 import Parser
 import Parser.Command
+import PartialCore
 import SplitCore
 import Syntax
+import Value
 
 main :: IO ()
 main =
@@ -40,6 +48,13 @@ repl = forever $
             c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
             case c of
               Left err -> putStr "Expander error: " *> print err
-              Right out -> do
+              Right (unsplit -> out) -> do
                 putStrLn "Expander Output:"
-                print $ unsplit out
+                print out
+                case runPartialCore out of
+                  Nothing -> putStrLn "Expression incomplete, can't evaluate"
+                  Just expr ->
+                    runExceptT (runReaderT (runEval (eval expr)) Env.empty) >>=
+                    \case
+                      Left evalErr -> print evalErr
+                      Right val -> T.putStrLn (valueText val)

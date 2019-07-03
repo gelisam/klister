@@ -4,6 +4,7 @@ module Value where
 
 import Control.Lens
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Core
 import Env
@@ -26,6 +27,11 @@ data Value
   | ValueSignal Signal
   deriving (Eq, Show)
 
+valueText :: Value -> Text
+valueText (ValueClosure _) = "#<closure>"
+valueText (ValueSyntax stx) = "'" <> syntaxText stx
+valueText (ValueMacroAction m) = T.pack (show m)
+valueText (ValueSignal s) = "#!" <> T.pack (show s)
 
 -- | Find a simple description that is suitable for inclusion in error messages.
 describeVal :: Value -> Text

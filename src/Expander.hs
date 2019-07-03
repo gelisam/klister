@@ -19,8 +19,8 @@ import Data.IORef
 import Data.Unique
 import Data.List.Extra
 import Data.Map (Map)
-import Data.Maybe
 import qualified Data.Map as Map
+import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -113,13 +113,26 @@ newtype Expand a = Expand
 execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
+data TaskAwaitMacro = TaskAwaitMacro
+  { awaitMacroDependsOn :: [Unique] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
+  , awaitMacroLocation :: Unique -- the destination into which the macro will be expanded.
+  , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
+  }
+
+instance Show TaskAwaitMacro where
+  show (TaskAwaitMacro _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
+
 data ExpanderTask
   = Ready Syntax
   | AwaitingSignal Signal Value -- the value is the continuation
+  | AwaitingMacro TaskAwaitMacro --   at the second Unique.
+
 
 instance Show ExpanderTask where
   show (Ready stx) = "Ready " ++ T.unpack (syntaxText stx)
-  show (AwaitingSignal on _k) = "Blocked (" ++ show on ++ ")"
+  show (AwaitingSignal on _k) = "AwaitingSignal (" ++ show on ++ ")"
+  show (AwaitingMacro t) = "AwaitingMacro (" ++ show t ++ ")"
+
 
 makePrisms ''Binding
 makePrisms ''ExpansionErr
@@ -166,6 +179,11 @@ link dest layer =
               _expanderComplete st <> Map.singleton dest layer
             }
 
+linkStatus :: Unique -> Expand (Maybe (CoreF Unique))
+linkStatus slot = do
+  complete <- view expanderComplete <$> getState
+  return $ Map.lookup slot complete
+
 getTasks :: Expand [(Unique, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
@@ -198,8 +216,8 @@ expandEval evalAction = do
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
 
-addBinding :: Text -> ScopeSet -> Binding -> Expand ()
-addBinding name scs b = do
+addBinding :: Ident -> Binding -> Expand ()
+addBinding (Stx scs _ name) b = do
   -- Note: assumes invariant that a name-scopeset pair is never mapped
   -- to two bindings. That would indicate a bug in the expander but
   -- this code doesn't catch that.
@@ -391,6 +409,18 @@ initializeExpansionEnv =
             patternDests <- traverse (mustBeVec >=> expandPatternCase) patterns
             link dest $ CoreCase scrutDest patternDests
         )
+      , ( "let-syntax"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, macro, body) <- mustBeVec stx
+            Stx _ _ (mName, mdef) <- mustBeVec macro
+            sc <- freshScope
+            m <- mustBeIdent mName
+            let m' = addScope m sc
+            b <- freshBinding
+            addBinding m' b
+            macroDest <- schedule mdef
+            afterMacro macroDest dest (addScope body sc)
+        )
       ]
 
     expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, Unique)
@@ -430,9 +460,9 @@ initializeExpansionEnv =
     prepareVar varStx = do
       sc <- freshScope
       x <- mustBeIdent varStx
-      let x'@(Stx xScopes _ xName) = addScope x sc
+      let x' = addScope x sc
       b <- freshBinding
-      addBinding xName xScopes b
+      addBinding x' b
       var <- freshVar
       bind b (EVarMacro var)
       return (sc, x', var)
@@ -444,13 +474,17 @@ initializeExpansionEnv =
       addReady dest stx
       return dest
 
+
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
     addPrimitive name impl = do
       let val = EPrimMacro impl
       b <- freshBinding
       -- FIXME primitive scope:
-      addBinding name ScopeSet.empty b
+      addBinding (Stx ScopeSet.empty fakeLoc name) b
       bind b val
+
+    fakeLoc :: SrcLoc
+    fakeLoc = SrcLoc "internals" (SrcPos 0 0) (SrcPos 0 0)
 
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
@@ -460,6 +494,15 @@ addReady dest stx =
   modifyState $
   \st -> st { _expanderTasks = (dest, Ready stx) : view expanderTasks st
             }
+
+afterMacro :: Unique -> Unique -> Syntax -> Expand ()
+afterMacro mdest dest stx =
+  modifyState $
+  \st -> st { _expanderTasks =
+              (dest, AwaitingMacro (TaskAwaitMacro [mdest] mdest stx)) :
+              view expanderTasks st
+            }
+
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
@@ -497,7 +540,33 @@ runTask (dest, task) =
   case task of
     Ready stx -> expandOneExpression dest stx
     AwaitingSignal _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
+    AwaitingMacro (TaskAwaitMacro deps mdest stx) -> do
+      newDeps <- concat <$> traverse dependencies deps
+      case newDeps of
+        (_:_) ->
+          later newDeps mdest stx
+        [] ->
+          error "Unimplemented: expanding macro scopes"
 
+  where
+    later deps mdest stx =
+      modifyState $
+      \st -> st { _expanderTasks =
+                  (dest, AwaitingMacro (TaskAwaitMacro deps mdest stx)) :
+                  view expanderTasks st
+                }
+
+
+-- | Compute the dependencies of a particular slot. The dependencies
+-- are the un-linked child slots. If there are no dependencies, then
+-- the sub-expression is complete. If the slot is not linked then it
+-- depends on itself.
+dependencies :: Unique -> Expand [Unique]
+dependencies slot =
+  linkStatus slot >>=
+  \case
+    Nothing -> pure [slot]
+    Just c -> foldMap id <$> traverse dependencies c
 
 expandOneExpression :: Unique -> Syntax -> Expand ()
 expandOneExpression dest stx
