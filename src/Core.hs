@@ -124,9 +124,6 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreSyntax syntax1)
              (CoreSyntax syntax2) = do
     alphaCheck syntax1 syntax2
-  alphaCheck (CoreSendSignal core1)
-             (CoreSendSignal core2) = do
-    alphaCheck core1 core2
   alphaCheck (CoreCase scrutinee1 cases1)
              (CoreCase scrutinee2 cases2) = do
     alphaCheck scrutinee1 scrutinee2
@@ -134,6 +131,9 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreIdentifier stx1)
              (CoreIdentifier stx2) = do
     alphaCheck stx1 stx2
+  alphaCheck (CoreSignal s1)
+             (CoreSignal s2) =
+    guard $ s1 == s2
   alphaCheck (CoreIdent scopedIdent1)
              (CoreIdent scopedIdent2) = do
     alphaCheck scopedIdent1 scopedIdent2
@@ -146,9 +146,6 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreVec scopedVec1)
              (CoreVec scopedVec2) = do
     alphaCheck scopedVec1 scopedVec2
-  alphaCheck (CoreSignal s1)
-             (CoreSignal s2) =
-    guard $ s1 == s2
   alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq Core where
@@ -257,6 +254,8 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(Identifier "
    ++ shortShow stx
    ++ ")"
+  shortShow (CoreSignal signal)
+    = shortShow signal
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
    ++ shortShow scopedIdent
