@@ -29,6 +29,7 @@ import Numeric.Natural
 import Core
 import Env
 import Evaluator
+import PartialCore
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -55,6 +56,8 @@ data ExpansionErr
   | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError EvalError
+  | ValueNotMacro Value
+  | ValueNotSyntax Value
   | InternalError String
   deriving (Show)
 
@@ -122,6 +125,7 @@ data TaskAwaitMacro = TaskAwaitMacro
 instance Show TaskAwaitMacro where
   show (TaskAwaitMacro _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
 
+
 data ExpanderTask
   = Ready Syntax
   | AwaitingSignal Signal Value -- the value is the continuation
@@ -183,6 +187,12 @@ linkStatus :: Unique -> Expand (Maybe (CoreF Unique))
 linkStatus slot = do
   complete <- view expanderComplete <$> getState
   return $ Map.lookup slot complete
+
+linkedCore :: Unique -> Expand (Maybe Core)
+linkedCore slot =
+  runPartialCore . unsplit . SplitCore slot . view expanderComplete <$>
+  getState
+
 
 getTasks :: Expand [(Unique, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
@@ -474,7 +484,6 @@ initializeExpansionEnv =
       addReady dest stx
       return dest
 
-
     addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
     addPrimitive name impl = do
       let val = EPrimMacro impl
@@ -530,10 +539,23 @@ expandTasks = do
     more -> do
       clearTasks
       forM_ more runTask
-      newTasks <- getTasks
-      if map fst tasks == map fst newTasks
-        then throwError (NoProgress (map snd newTasks))
-        else expandTasks
+      _newTasks <- getTasks
+      -- TODO: Fix cycle detection
+
+      -- The problem here is that multi-step expansion leaves the same
+      -- destinations behind in the task queue, even though work has
+      -- been done. We can't compare tasks for equality because they
+      -- contain closures, and we probably want to go higher-order on
+      -- those, or we want things like network connection handles in
+      -- values.
+
+      -- The solution may be to annotate each task with a Unique, and
+      -- compare those for task equality. This would capture progress.
+
+      -- if tasks == newTasks
+      --   then throwError (NoProgress (map snd newTasks))
+      --   else expandTasks
+      expandTasks
 
 runTask :: (Unique, ExpanderTask) -> Expand ()
 runTask (dest, task) =
@@ -546,7 +568,24 @@ runTask (dest, task) =
         (_:_) ->
           later newDeps mdest stx
         [] ->
-          error "Unimplemented: expanding macro scopes"
+          linkedCore mdest >>=
+          \case
+            Nothing -> error "Internal error - macro body not fully expanded"
+            Just macroImpl -> do
+              let macroExpr = Core $ CoreApp macroImpl (Core $ CoreSyntax stx)
+              macroVal <- inEarlierPhase $ expandEval $ eval macroExpr
+              case macroVal of
+                ValueMacroAction act -> do
+                  res <- interpretMacroAction act
+                  case res of
+                    Left (_sig, _kont) -> error "Unimplemented - blocking on signals"
+                    Right v ->
+                      case v of
+                        ValueSyntax expansionResult ->
+                          addReady dest expansionResult
+                        other -> throwError $ ValueNotSyntax other
+                other ->
+                  throwError $ ValueNotMacro other
 
   where
     later deps mdest stx =

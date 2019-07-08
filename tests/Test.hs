@@ -49,6 +49,9 @@ miniTests =
         , ( "[lambda [f] [lambda [x] [f x]]]"
           , lam $ \f -> lam $ \x -> f `app` x
           )
+        , ( "[let-syntax [m [lambda [_] [pure [quote [lambda [x] x]]]]] m]"
+          , lam $ \x -> x
+          )
         ]
       ]
     expectedFailure =
