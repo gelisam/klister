@@ -601,7 +601,10 @@ runTask (dest, task) =
           \case
             Nothing -> error "Internal error - macro body not fully expanded"
             Just macroImpl -> do
-              let macroExpr = Core $ CoreApp macroImpl (Core $ CoreSyntax stx)
+              stepScope <- freshScope
+              let macroExpr = Core $ CoreApp macroImpl $
+                              Core $ CoreSyntax $
+                              addScope stx stepScope
               macroVal <- inEarlierPhase $ expandEval $ eval macroExpr
               case macroVal of
                 ValueMacroAction act -> do
@@ -611,7 +614,7 @@ runTask (dest, task) =
                     Right v ->
                       case v of
                         ValueSyntax expansionResult ->
-                          addReady dest expansionResult
+                          addReady dest (flipScope expansionResult stepScope)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
