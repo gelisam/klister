@@ -1,6 +1,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Evaluator where
@@ -229,6 +230,8 @@ doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
       \case
         (ValueSyntax (Syntax (Stx _ _ (Vec vs))))
           | length vs == length xs ->
-            withManyExtendedEnv [(n, x, (ValueSyntax v)) | (n,x) <- xs, v <- vs] $
+            withManyExtendedEnv [(n, x, (ValueSyntax v))
+                                | (n,x) <- xs
+                                | v <- vs] $
             eval rhs
         _ -> next
