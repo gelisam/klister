@@ -9,6 +9,7 @@ import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Core
 import Env
@@ -33,6 +34,13 @@ data EvalError
   | EvalErrorCase Value
   deriving (Eq, Show)
 makePrisms ''EvalError
+
+evalErrorText :: EvalError -> Text
+evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
+evalErrorText (EvalErrorType (TypeError expected got)) =
+  "Wrong type. Expected a " <> expected <> " but got a " <> got
+evalErrorText (EvalErrorCase val) =
+  "Didn't match any pattern: " <> valueText val
 
 newtype Eval a = Eval
    { runEval :: ReaderT (Env Value) (ExceptT EvalError IO) a }

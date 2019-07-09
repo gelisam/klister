@@ -82,7 +82,7 @@ expansionErrText (UnknownPattern stx) =
 expansionErrText (MacroRaisedSyntaxError err) =
   "Syntax error from macro: " <> T.pack (show err)
 expansionErrText (MacroEvaluationError err) =
-  "Error during macro evaluation: " <> T.pack (show err)
+  "Error during macro evaluation: \n\t" <> evalErrorText err
 expansionErrText (ValueNotMacro val) =
   "Not a macro monad value: " <> valueText val
 expansionErrText (ValueNotSyntax val) =
