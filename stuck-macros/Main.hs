@@ -47,7 +47,8 @@ repl = forever $
             ctx <- mkInitContext
             c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
             case c of
-              Left err -> putStr "Expander error: " *> print err
+              Left err -> putStr "Expander error: " *>
+                          T.putStrLn (expansionErrText err)
               Right (unsplit -> out) -> do
                 putStrLn "Expander Output:"
                 print out

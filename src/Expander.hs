@@ -62,6 +62,35 @@ data ExpansionErr
   deriving (Show)
 
 
+expansionErrText :: ExpansionErr -> Text
+expansionErrText (Ambiguous x) = "Ambiguous identifier " <> T.pack (show x)
+expansionErrText (Unknown x) = "Unknown: " <> T.pack (show x)
+expansionErrText (NoProgress tasks) =
+  "No progress was possible: " <> T.pack (show tasks)
+expansionErrText (NotIdentifier stx) =
+  "Not an identifier: " <> syntaxText stx
+expansionErrText (NotEmpty stx) = "Expected (), but got " <> syntaxText stx
+expansionErrText (NotCons stx) =
+  "Expected non-empty parens, but got " <> syntaxText stx
+expansionErrText (NotRightLength len stx) =
+  "Expected " <> T.pack (show len) <>
+  " entries between square brackets, but got " <> syntaxText stx
+expansionErrText (NotVec stx) =
+  "Expected square-bracketed vec but got " <> syntaxText stx
+expansionErrText (UnknownPattern stx) =
+  "Unknown pattern " <> syntaxText stx
+expansionErrText (MacroRaisedSyntaxError err) =
+  "Syntax error from macro: " <> T.pack (show err)
+expansionErrText (MacroEvaluationError err) =
+  "Error during macro evaluation: " <> T.pack (show err)
+expansionErrText (ValueNotMacro val) =
+  "Not a macro monad value: " <> valueText val
+expansionErrText (ValueNotSyntax val) =
+  "Not a syntax object: " <> valueText val
+expansionErrText (InternalError str) =
+  "Internal error during expansion! This is a bug in the implementation." <> T.pack str
+
+
 newtype Phase = Phase Natural
   deriving (Eq, Ord, Show)
 
