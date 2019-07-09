@@ -32,25 +32,35 @@ miniTests =
   where
     expectedSuccess =
       testGroup "Expected to succeed"
-      [ testCase (show input) (testExpander input output)
-      | (input, output) <-
+      [ testCase name (testExpander input output)
+      | (name, input, output) <-
         [ ( "[lambda [x] x]"
+          , "[lambda [x] x]"
           , lam $ \x -> x
           )
         , ( "[lambda [x] [lambda [x] x]]"
+          , "[lambda [x] [lambda [x] x]]"
           , lam $ \_ -> lam $ \y -> y
           )
         , ( "42"
+          , "42"
           , sig 42
           )
         , ( "[send-signal 0]"
+          , "[send-signal 0]"
           , sendSig =<< sig 0
           )
         , ( "[lambda [f] [lambda [x] [f x]]]"
+          , "[lambda [f] [lambda [x] [f x]]]"
           , lam $ \f -> lam $ \x -> f `app` x
           )
-        , ( "[let-syntax [m [lambda [_] [pure [quote [lambda [x] x]]]]] m]"
+        , ( "Trivial user macro"
+          , "[let-syntax [m [lambda [_] [pure [quote [lambda [x] x]]]]] m]"
           , lam $ \x -> x
+          )
+        , ( "Let macro"
+          , "[let-syntax [let1 [lambda [stx] (syntax-case stx [[vec [_ binder body]] (syntax-case binder [[vec [x e]] [pure [vec-syntax [[vec-syntax [[ident lambda] [vec-syntax [x] stx] body] stx] e] stx]]])])]] [let [x [lambda [x] x]] x]]"
+          , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
         ]
       ]
