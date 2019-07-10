@@ -106,13 +106,19 @@ mkInitContext = do
                            , _expanderPhase = Phase 0
                            }
 
+newtype TaskID = TaskID Unique
+  deriving (Eq, Ord)
+
+newTaskID :: Expand TaskID
+newTaskID = liftIO $ TaskID <$> newUnique
+
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
   , _expanderEnvironments :: !(Map.Map Phase (Env Value))
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
-  , _expanderTasks :: [(Unique, ExpanderTask)]
+  , _expanderTasks :: [(Unique, TaskID, ExpanderTask)]
   , _expanderComplete :: !(Map.Map Unique (CoreF Unique))
   }
 
@@ -223,7 +229,7 @@ linkedCore slot =
   getState
 
 
-getTasks :: Expand [(Unique, ExpanderTask)]
+getTasks :: Expand [(Unique, TaskID, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
 clearTasks :: Expand ()
@@ -528,18 +534,20 @@ freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
 addReady :: Unique -> Syntax -> Expand ()
-addReady dest stx =
+addReady dest stx = do
+  tid <- newTaskID
   modifyState $
-  \st -> st { _expanderTasks = (dest, Ready stx) : view expanderTasks st
-            }
+    \st -> st { _expanderTasks = (dest, tid, Ready stx) : view expanderTasks st
+              }
 
 afterMacro :: Unique -> Unique -> Syntax -> Expand ()
-afterMacro mdest dest stx =
+afterMacro mdest dest stx = do
+  tid <- newTaskID
   modifyState $
-  \st -> st { _expanderTasks =
-              (dest, AwaitingMacro (TaskAwaitMacro [mdest] mdest stx)) :
-              view expanderTasks st
-            }
+    \st -> st { _expanderTasks =
+                (dest, tid, AwaitingMacro (TaskAwaitMacro [mdest] mdest stx)) :
+                view expanderTasks st
+              }
 
 
 identifierHeaded :: Syntax -> Maybe Ident
@@ -553,7 +561,8 @@ identifierHeaded _ = Nothing
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newUnique
-  modifyState $ \st -> st {_expanderTasks = [(dest, Ready stx)]}
+  tid <- newTaskID
+  modifyState $ \st -> st {_expanderTasks = [(dest, tid, Ready stx)]}
   expandTasks
   children <- _expanderComplete <$> getState
   return $ SplitCore {_splitCoreRoot = dest
@@ -568,26 +577,15 @@ expandTasks = do
     more -> do
       clearTasks
       forM_ more runTask
-      _newTasks <- getTasks
-      -- TODO: Fix cycle detection
+      newTasks <- getTasks
+      if taskIDs tasks  == taskIDs newTasks
+        then throwError (NoProgress (map (\(_,_,t) -> t) newTasks))
+        else expandTasks
+  where
+    taskIDs tasks = Set.fromList [tid | (_, tid, _) <- tasks]
 
-      -- The problem here is that multi-step expansion leaves the same
-      -- destinations behind in the task queue, even though work has
-      -- been done. We can't compare tasks for equality because they
-      -- contain closures, and we probably want to go higher-order on
-      -- those, or we want things like network connection handles in
-      -- values.
-
-      -- The solution may be to annotate each task with a Unique, and
-      -- compare those for task equality. This would capture progress.
-
-      -- if tasks == newTasks
-      --   then throwError (NoProgress (map snd newTasks))
-      --   else expandTasks
-      expandTasks
-
-runTask :: (Unique, ExpanderTask) -> Expand ()
-runTask (dest, task) =
+runTask :: (Unique, TaskID, ExpanderTask) -> Expand ()
+runTask (dest, _tid, task) =
   case task of
     Ready stx -> expandOneExpression dest stx
     AwaitingSignal _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
@@ -620,12 +618,13 @@ runTask (dest, task) =
                   throwError $ ValueNotMacro other
 
   where
-    later deps mdest stx =
+    later deps mdest stx = do
+      tid <- newTaskID
       modifyState $
-      \st -> st { _expanderTasks =
-                  (dest, AwaitingMacro (TaskAwaitMacro deps mdest stx)) :
-                  view expanderTasks st
-                }
+        \st -> st { _expanderTasks =
+                    (dest, tid, AwaitingMacro (TaskAwaitMacro deps mdest stx)) :
+                    view expanderTasks st
+                  }
 
 
 -- | Compute the dependencies of a particular slot. The dependencies
