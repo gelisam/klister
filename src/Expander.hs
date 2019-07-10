@@ -118,8 +118,8 @@ data ExpanderState = ExpanderState
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
-  , _expanderTasks :: [(Unique, TaskID, ExpanderTask)]
-  , _expanderComplete :: !(Map.Map Unique (CoreF Unique))
+  , _expanderTasks :: [(SplitCorePtr, TaskID, ExpanderTask)]
+  , _expanderComplete :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   }
 
 initExpanderState :: ExpanderState
@@ -134,7 +134,7 @@ initExpanderState = ExpanderState
   }
 
 data EValue
-  = EPrimMacro (Unique -> Syntax -> Expand ()) -- ^ For "special forms"
+  = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
 
@@ -152,8 +152,8 @@ execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 data TaskAwaitMacro = TaskAwaitMacro
-  { awaitMacroDependsOn :: [Unique] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
-  , awaitMacroLocation :: Unique -- the destination into which the macro will be expanded.
+  { awaitMacroDependsOn :: [SplitCorePtr] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
+  , awaitMacroLocation :: SplitCorePtr -- the destination into which the macro will be expanded.
   , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
   }
 
@@ -211,25 +211,25 @@ freshScope = do
   modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
   return sc
 
-link :: Unique -> CoreF Unique -> Expand ()
+link :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 link dest layer =
   modifyState $
   \st -> st { _expanderComplete =
               _expanderComplete st <> Map.singleton dest layer
             }
 
-linkStatus :: Unique -> Expand (Maybe (CoreF Unique))
+linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
 linkStatus slot = do
   complete <- view expanderComplete <$> getState
   return $ Map.lookup slot complete
 
-linkedCore :: Unique -> Expand (Maybe Core)
+linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
   runPartialCore . unsplit . SplitCore slot . view expanderComplete <$>
   getState
 
 
-getTasks :: Expand [(Unique, TaskID, ExpanderTask)]
+getTasks :: Expand [(SplitCorePtr, TaskID, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
 clearTasks :: Expand ()
@@ -359,7 +359,7 @@ initializeExpansionEnv =
   pure ()
 
   where
-    prims :: [(Text, Unique -> Syntax -> Expand ())]
+    prims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
     prims =
       [ ( "oops"
         , \ _ stx -> throwError (InternalError $ "oops" ++ show stx)
@@ -468,7 +468,7 @@ initializeExpansionEnv =
         )
       ]
 
-    expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, Unique)
+    expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, SplitCorePtr)
     -- TODO match case keywords hygienically
     expandPatternCase (Stx _ _ (lhs, rhs)) =
       case lhs of
@@ -513,13 +513,13 @@ initializeExpansionEnv =
       return (sc, x', var)
 
 
-    schedule :: Syntax -> Expand Unique
+    schedule :: Syntax -> Expand SplitCorePtr
     schedule stx = do
-      dest <- liftIO newUnique
+      dest <- liftIO newSplitCorePtr
       addReady dest stx
       return dest
 
-    addPrimitive :: Text -> (Unique -> Syntax -> Expand ()) -> Expand ()
+    addPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addPrimitive name impl = do
       let val = EPrimMacro impl
       b <- freshBinding
@@ -533,14 +533,14 @@ initializeExpansionEnv =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
-addReady :: Unique -> Syntax -> Expand ()
+addReady :: SplitCorePtr -> Syntax -> Expand ()
 addReady dest stx = do
   tid <- newTaskID
   modifyState $
     \st -> st { _expanderTasks = (dest, tid, Ready stx) : view expanderTasks st
               }
 
-afterMacro :: Unique -> Unique -> Syntax -> Expand ()
+afterMacro :: SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 afterMacro mdest dest stx = do
   tid <- newTaskID
   modifyState $
@@ -560,7 +560,7 @@ identifierHeaded _ = Nothing
 
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
-  dest <- liftIO $ newUnique
+  dest <- liftIO $ newSplitCorePtr
   tid <- newTaskID
   modifyState $ \st -> st {_expanderTasks = [(dest, tid, Ready stx)]}
   expandTasks
@@ -584,7 +584,7 @@ expandTasks = do
   where
     taskIDs tasks = Set.fromList [tid | (_, tid, _) <- tasks]
 
-runTask :: (Unique, TaskID, ExpanderTask) -> Expand ()
+runTask :: (SplitCorePtr, TaskID, ExpanderTask) -> Expand ()
 runTask (dest, _tid, task) =
   case task of
     Ready stx -> expandOneExpression dest stx
@@ -631,14 +631,14 @@ runTask (dest, _tid, task) =
 -- are the un-linked child slots. If there are no dependencies, then
 -- the sub-expression is complete. If the slot is not linked then it
 -- depends on itself.
-dependencies :: Unique -> Expand [Unique]
+dependencies :: SplitCorePtr -> Expand [SplitCorePtr]
 dependencies slot =
   linkStatus slot >>=
   \case
     Nothing -> pure [slot]
     Just c -> foldMap id <$> traverse dependencies c
 
-expandOneExpression :: Unique -> Syntax -> Expand ()
+expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression dest stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve ident
@@ -669,7 +669,7 @@ addApp ctor (Syntax (Stx scs loc _)) args =
     app = Syntax (Stx scs loc (Id "#%app"))
 
 -- | Link the destination to a literal signal object
-expandLiteralSignal :: Unique -> Signal -> Expand ()
+expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
 expandLiteralSignal dest signal = link dest (CoreSignal signal)
 
 interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
