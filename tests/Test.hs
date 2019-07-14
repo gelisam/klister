@@ -55,11 +55,30 @@ miniTests =
           , lam $ \f -> lam $ \x -> f `app` x
           )
         , ( "Trivial user macro"
-          , "[let-syntax [m [lambda [_] [pure [quote [lambda [x] x]]]]] m]"
+          , "[let-syntax \
+            \  [m [lambda [_] \
+            \       [pure [quote [lambda [x] x]]]]] \
+            \  m]"
           , lam $ \x -> x
           )
         , ( "Let macro"
-          , "[let-syntax [let1 [lambda [stx] (syntax-case stx [[vec [_ binder body]] (syntax-case binder [[vec [x e]] [pure [vec-syntax [[vec-syntax [[ident lambda] [vec-syntax [x] stx] body] stx] e] stx]]])])]] [let [x [lambda [x] x]] x]]"
+          , "[let-syntax \
+            \  [let1 [lambda [stx] \
+            \          (syntax-case stx \
+            \            [[vec [_ binder body]] \
+            \             (syntax-case binder \
+            \               [[vec [x e]] \
+            \                {- [[lambda [x] body] e] -} \
+            \                [pure [vec-syntax \
+            \                        [[vec-syntax \
+            \                           [[ident lambda] \
+            \                            [vec-syntax [x] stx] \
+            \                            body] \
+            \                           stx] \
+            \                         e] \
+            \                        stx]]])])]] \
+            \  [let [x [lambda [x] x]] \
+            \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
         ]
