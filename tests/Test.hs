@@ -58,7 +58,7 @@ miniTests =
           , "[let-syntax \
             \  [m [lambda [_] \
             \       [pure [quote [lambda [x] x]]]]] \
-            \  m]"
+            \  anyRandomWord]"
           , lam $ \x -> x
           )
         , ( "Let macro"
@@ -77,7 +77,7 @@ miniTests =
             \                           stx] \
             \                         e] \
             \                        stx]]])])]] \
-            \  [let [x [lambda [x] x]] \
+            \  [anyRandomWord [x [lambda [x] x]] \
             \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
