@@ -1,10 +1,11 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ViewPatterns #-}
-module Parser (readExpr) where
+module Parser (readExpr, readModule) where
 
 import Data.Char
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 import Text.Megaparsec
 import qualified Text.Megaparsec.Char.Lexer as L
@@ -15,6 +16,20 @@ import Syntax
 import Syntax.Lexical
 import qualified ScopeSet
 
+
+
+readModule :: FilePath -> IO (Either Text (ParsedModule Syntax))
+readModule filename =
+  do contents <- T.readFile filename
+     case parse source filename contents of
+       Left err -> pure $ Left $ T.pack $ errorBundlePretty err
+       Right (lang, decls) ->
+         pure $ Right $ ParsedModule { _moduleSource = filename
+                                     , _moduleLanguage = lang
+                                     , _moduleContents = decls
+                                     }
+  where
+    source = (,) <$> hashLang <*> many expr <* eof
 
 readExpr :: FilePath -> Text -> Either Text Syntax
 readExpr filename fileContents =
@@ -42,12 +57,17 @@ list =
      Located loc2 _ <- located (literal ")")
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (List xs)
 
-vec  :: Parser Syntax
+vec :: Parser Syntax
 vec =
   do Located loc1 _ <- located (literal "[")
      xs <- many expr
      Located loc2 _ <- located (literal "]")
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (Vec xs)
+
+hashLang :: Parser Syntax
+hashLang =
+  do literal "#lang"
+     expr
 
 -- | The identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text

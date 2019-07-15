@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -29,6 +30,7 @@ import Numeric.Natural
 import Core
 import Env
 import Evaluator
+import Module
 import PartialCore
 import Scope
 import ScopeSet (ScopeSet)
@@ -118,8 +120,14 @@ data ExpanderState = ExpanderState
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
-  , _expanderTasks :: [(SplitCorePtr, TaskID, ExpanderTask)]
-  , _expanderComplete :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderTasks :: [(TaskID, ExpanderTask)]
+  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl (ModuleBodyF DeclPtr) SplitCorePtr))
+  , _expanderModuleName :: Maybe ModuleName
+  , _expanderModuleTop :: Maybe ModBodyPtr
+  , _expanderModuleImports :: [Import]
+  , _expanderModuleExports :: [Export]
   }
 
 initExpanderState :: ExpanderState
@@ -130,15 +138,23 @@ initExpanderState = ExpanderState
   , _expanderBindingTable = Map.empty
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
-  , _expanderComplete = Map.empty
+  , _expanderCompletedCore = Map.empty
+  , _expanderCompletedModBody = Map.empty
+  , _expanderCompletedDecls = Map.empty
+  , _expanderModuleName = Nothing
+  , _expanderModuleTop = Nothing
+  , _expanderModuleImports = []
+  , _expanderModuleExports = []
   }
 
 data EValue
   = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
+  | EPrimModuleMacro (Syntax -> Expand ())
+  | EPrimDeclMacro (DeclPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
 
-data SyntacticCategory = Module | Declaration | Expression
+data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
 newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
   deriving (Semigroup, Monoid)
@@ -162,15 +178,21 @@ instance Show TaskAwaitMacro where
 
 
 data ExpanderTask
-  = Ready Syntax
-  | AwaitingSignal Signal Value -- the value is the continuation
-  | AwaitingMacro TaskAwaitMacro --   at the second Unique.
+  = Ready SplitCorePtr Syntax
+  | AwaitingSignal SplitCorePtr Signal Value -- the value is the continuation
+  | AwaitingMacro SplitCorePtr TaskAwaitMacro
+  | ReadyDecl DeclPtr Syntax
+  | MoreDecls ModBodyPtr Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+
 
 
 instance Show ExpanderTask where
-  show (Ready stx) = "Ready " ++ T.unpack (syntaxText stx)
-  show (AwaitingSignal on _k) = "AwaitingSignal (" ++ show on ++ ")"
-  show (AwaitingMacro t) = "AwaitingMacro (" ++ show t ++ ")"
+  show (Ready _dest stx) = "Ready " ++ T.unpack (syntaxText stx)
+  show (AwaitingSignal _dest on _k) = "AwaitingSignal (" ++ show on ++ ")"
+  show (AwaitingMacro _dest t) = "AwaitingMacro (" ++ show t ++ ")"
+  show (ReadyDecl _dest stx) = "ReadyDecl " ++ T.unpack (syntaxText stx)
+  show (MoreDecls _dest stx _waiting) = "MoreDecls " ++ T.unpack (syntaxText stx)
+
 
 
 makePrisms ''Binding
@@ -214,22 +236,22 @@ freshScope = do
 link :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 link dest layer =
   modifyState $
-  \st -> st { _expanderComplete =
-              _expanderComplete st <> Map.singleton dest layer
+  \st -> st { _expanderCompletedCore =
+              _expanderCompletedCore st <> Map.singleton dest layer
             }
 
 linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
 linkStatus slot = do
-  complete <- view expanderComplete <$> getState
+  complete <- view expanderCompletedCore <$> getState
   return $ Map.lookup slot complete
 
 linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
-  runPartialCore . unsplit . SplitCore slot . view expanderComplete <$>
+  runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
   getState
 
 
-getTasks :: Expand [(SplitCorePtr, TaskID, ExpanderTask)]
+getTasks :: Expand [(TaskID, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
 clearTasks :: Expand ()
@@ -319,6 +341,7 @@ mustBeCons :: Syntax -> Expand (Stx (Syntax, [Syntax]))
 mustBeCons (Syntax (Stx scs srcloc (List (x:xs)))) = return (Stx scs srcloc (x, xs))
 mustBeCons other = throwError (NotCons other)
 
+
 class MustBeVec a where
   mustBeVec :: Syntax -> Expand (Stx a)
 
@@ -353,14 +376,49 @@ instance MustBeVec [Syntax] where
   mustBeVec other = throwError (NotVec other)
 
 
+resolveImports :: Syntax -> Expand ()
+resolveImports _ = pure () -- TODO
+
+buildExports :: Syntax -> Expand ()
+buildExports _ = pure ()
+
 initializeExpansionEnv :: Expand ()
-initializeExpansionEnv =
-  traverse (uncurry addPrimitive) prims *>
+initializeExpansionEnv = do
+  _ <- traverse (uncurry addExprPrimitive) exprPrims
+  _ <- traverse (uncurry addModulePrimitive) modPrims
+  _ <- traverse (uncurry addDeclPrimitive) declPrims
   pure ()
 
   where
-    prims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
-    prims =
+    modPrims :: [(Text, Syntax -> Expand ())]
+    modPrims =
+      [ ( "#%module"
+        , \ stx ->
+            view expanderModuleTop <$> getState >>=
+            \case
+              Just _ ->
+                error "TODO throw real error - already expanding a module"
+              Nothing -> do
+                bodyPtr <- liftIO newModBodyPtr
+                modifyState $ set expanderModuleTop (Just bodyPtr)
+                Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustBeVec stx
+                _actualName <- mustBeIdent name
+
+                resolveImports imports
+
+                readyDecls bodyPtr body
+
+                buildExports exports
+                pure ()
+        )
+      ]
+
+    declPrims :: [(Text, DeclPtr -> Syntax -> Expand ())]
+    declPrims =
+      []
+
+    exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
+    exprPrims =
       [ ( "oops"
         , \ _ stx -> throwError (InternalError $ "oops" ++ show stx)
         )
@@ -519,8 +577,25 @@ initializeExpansionEnv =
       addReady dest stx
       return dest
 
-    addPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
-    addPrimitive name impl = do
+    addModulePrimitive :: Text -> (Syntax -> Expand ()) -> Expand ()
+    addModulePrimitive name impl = do
+      let val = EPrimModuleMacro impl
+      b <- freshBinding
+      -- FIXME primitive scope:
+      addBinding (Stx ScopeSet.empty fakeLoc name) b
+      bind b val
+
+    addDeclPrimitive :: Text -> (DeclPtr -> Syntax -> Expand ()) -> Expand ()
+    addDeclPrimitive name impl = do
+      let val = EPrimDeclMacro impl
+      b <- freshBinding
+      -- FIXME primitive scope:
+      addBinding (Stx ScopeSet.empty fakeLoc name) b
+      bind b val
+
+
+    addExprPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
+    addExprPrimitive name impl = do
       let val = EPrimMacro impl
       b <- freshBinding
       -- FIXME primitive scope:
@@ -533,11 +608,32 @@ initializeExpansionEnv =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
+readyDecls :: ModBodyPtr -> Syntax -> Expand ()
+readyDecls dest (Syntax (Stx _ _ (List []))) =
+  modifyState $
+  \st -> st { _expanderCompletedModBody =
+              _expanderCompletedModBody st <> Map.singleton dest Done
+            }
+readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
+  restDest <- liftIO $ newModBodyPtr
+  declDest <- liftIO $ newDeclPtr
+  modifyState $ over expanderCompletedModBody  (<> Map.singleton dest (Decl declDest restDest))
+  tid <- newTaskID
+  modifyState $
+    over expanderTasks ((tid, MoreDecls restDest (Syntax (Stx scs loc (List ds))) declDest) :)
+  tid' <- newTaskID
+  modifyState $
+    over expanderTasks ((tid', ReadyDecl declDest d) :)
+
+readyDecls _dest _other =
+  error "TODO real error message - malformed module body"
+
+
 addReady :: SplitCorePtr -> Syntax -> Expand ()
 addReady dest stx = do
   tid <- newTaskID
   modifyState $
-    \st -> st { _expanderTasks = (dest, tid, Ready stx) : view expanderTasks st
+    \st -> st { _expanderTasks = (tid, Ready dest stx) : view expanderTasks st
               }
 
 afterMacro :: SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
@@ -545,7 +641,7 @@ afterMacro mdest dest stx = do
   tid <- newTaskID
   modifyState $
     \st -> st { _expanderTasks =
-                (dest, tid, AwaitingMacro (TaskAwaitMacro [mdest] mdest stx)) :
+                (tid, AwaitingMacro dest (TaskAwaitMacro [mdest] mdest stx)) :
                 view expanderTasks st
               }
 
@@ -562,12 +658,23 @@ expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
   tid <- newTaskID
-  modifyState $ \st -> st {_expanderTasks = [(dest, tid, Ready stx)]}
+  modifyState $ \st -> st {_expanderTasks = [(tid, Ready dest stx)]}
   expandTasks
-  children <- _expanderComplete <$> getState
+  children <- _expanderCompletedCore <$> getState
   return $ SplitCore {_splitCoreRoot = dest
                      , _splitCoreDescendants = children
                      }
+
+expandModule :: ParsedModule Syntax -> Expand CompleteModule
+expandModule src = do
+  Stx _ _ lang <- mustBeIdent (view moduleLanguage src)
+  if lang /= "kernel"
+    then throwError $ InternalError $ T.unpack $
+         "Custom languages not supported yet: " <> lang
+    else pure () -- TODO load language bindings
+  throwError $ InternalError $ T.unpack $
+    "Expanding modules not yet implemented"
+
 
 expandTasks :: Expand ()
 expandTasks = do
@@ -579,21 +686,23 @@ expandTasks = do
       forM_ more runTask
       newTasks <- getTasks
       if taskIDs tasks  == taskIDs newTasks
-        then throwError (NoProgress (map (\(_,_,t) -> t) newTasks))
+        then throwError (NoProgress (map snd newTasks))
         else expandTasks
   where
-    taskIDs tasks = Set.fromList [tid | (_, tid, _) <- tasks]
+    taskIDs = Set.fromList . map fst
 
-runTask :: (SplitCorePtr, TaskID, ExpanderTask) -> Expand ()
-runTask (dest, _tid, task) =
+runTask :: (TaskID, ExpanderTask) -> Expand ()
+runTask (tid, task) =
   case task of
-    Ready stx -> expandOneExpression dest stx
-    AwaitingSignal _on _k -> error "Unimplemented: macro monad interpretation (unblocking)"
-    AwaitingMacro (TaskAwaitMacro deps mdest stx) -> do
+    Ready dest stx ->
+      expandOneExpression dest stx
+    AwaitingSignal _dest _on _k ->
+      error "Unimplemented: macro monad interpretation (unblocking)"
+    AwaitingMacro dest (TaskAwaitMacro deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
         (_:_) ->
-          later newDeps mdest stx
+          later dest newDeps mdest stx
         [] ->
           linkedCore mdest >>=
           \case
@@ -616,15 +725,23 @@ runTask (dest, _tid, task) =
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
+    ReadyDecl dest stx ->
+      expandOneDeclaration dest stx
+    MoreDecls dest stx waitingOn -> do
+      readyYet <- view (expanderCompletedDecls . at waitingOn) <$> getState
+      case readyYet of
+        Nothing ->
+          -- Save task for later - not ready yet
+          modifyState $ over expanderTasks ((tid, task) :)
+        Just _ -> do
+          readyDecls dest stx
 
   where
-    later deps mdest stx = do
-      tid <- newTaskID
+    later dest deps mdest stx = do
+      tid' <- newTaskID
       modifyState $
-        \st -> st { _expanderTasks =
-                    (dest, tid, AwaitingMacro (TaskAwaitMacro deps mdest stx)) :
-                    view expanderTasks st
-                  }
+        over expanderTasks $
+          ((tid', AwaitingMacro dest (TaskAwaitMacro deps mdest stx)) :)
 
 
 -- | Compute the dependencies of a particular slot. The dependencies
@@ -645,6 +762,10 @@ expandOneExpression dest stx
       v <- getEValue b
       case v of
         EPrimMacro impl -> impl dest stx
+        EPrimModuleMacro _ ->
+          throwError $ InternalError "Current context won't accept modules"
+        EPrimDeclMacro _ ->
+          throwError $ InternalError "Current context won't accept declarations"
         EVarMacro var ->
           case syntaxE stx of
             Id _ -> link dest (CoreVar var)
@@ -667,6 +788,26 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   Syntax (Stx scs loc (ctor (app : args)))
   where
     app = Syntax (Stx scs loc (Id "#%app"))
+
+expandOneDeclaration :: DeclPtr -> Syntax -> Expand ()
+expandOneDeclaration dest stx
+  | Just ident <- identifierHeaded stx = do
+      b <- resolve ident
+      v <- getEValue b
+      case v of
+        EPrimMacro _ ->
+          throwError $ InternalError "Current context won't accept expressions"
+        EPrimModuleMacro _ ->
+          throwError $ InternalError "Current context won't accept modules"
+        EPrimDeclMacro impl ->
+          impl dest stx
+        EVarMacro _ ->
+          throwError $ InternalError "Current context won't accept expressions"
+        EUserMacro _ _impl ->
+          error "Unimplemented: user-defined macros - decl context"
+  | otherwise =
+    throwError $ InternalError "All declarations should be identifier-headed"
+
 
 -- | Link the destination to a literal signal object
 expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()

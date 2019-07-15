@@ -56,6 +56,14 @@ makePrisms ''Syntax
 
 type Ident = Stx Text
 
+data ParsedModule a = ParsedModule
+  { _moduleSource :: FilePath
+  , _moduleLanguage :: a
+  , _moduleContents :: [a]
+  }
+  deriving (Eq, Show)
+makeLenses ''ParsedModule
+
 class HasScopes a where
   getScopes :: a -> ScopeSet
   adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> a -> Scope -> a
@@ -142,3 +150,4 @@ instance ShortShow a => ShortShow (ExprF a) where
 
 instance ShortShow Syntax where
   shortShow (Syntax x) = shortShow x
+

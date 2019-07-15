@@ -9,6 +9,8 @@ import Control.Monad.Reader
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
+import Options.Applicative
+
 import System.Exit (exitSuccess)
 import System.IO
 
@@ -22,9 +24,27 @@ import SplitCore
 import Syntax
 import Value
 
+data Options = Options { sourceModule :: Maybe FilePath }
+
 main :: IO ()
-main =
-  hSetBuffering stdout NoBuffering *> repl
+main = execParser opts >>= mainWithOptions
+  where
+    opts = info parser mempty
+    parser = Options <$> optional (argument str (metavar "FILE"))
+
+mainWithOptions :: Options -> IO ()
+mainWithOptions opts =
+  case sourceModule opts of
+    Nothing ->
+      hSetBuffering stdout NoBuffering *> repl
+    Just file ->
+      readModule file >>=
+      \case
+        Left err -> T.putStrLn err
+        Right contents -> do
+          ctx <- mkInitContext
+          done <- execExpand (initializeExpansionEnv *> expandModule contents) ctx
+          print done
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =

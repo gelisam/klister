@@ -1,10 +1,13 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE StandaloneDeriving #-}
 module Module where
 
+import Data.Map(Map)
 import Data.Unique
 
 import Core
 import Syntax
+
 
 newtype ModuleName = ModuleName FilePath
   deriving (Eq, Ord, Show)
@@ -15,21 +18,47 @@ newtype ModulePtr = ModulePtr Unique
 newModulePtr :: IO ModulePtr
 newModulePtr = ModulePtr <$> newUnique
 
-type Imports = () -- TODO
-type Exports = () -- TODO
+type Import = () -- TODO
+type Export = () -- TODO
 
-data Module a = Module ModuleName Imports [a] Exports
+data Module f a = Module
+  { _moduleName :: ModuleName
+  , _moduleImports :: [Import]
+  , _moduleBody :: (f a)
+  , _moduleExports :: [Export]
+  }
   deriving (Functor, Show)
 
 
+type CompleteModule = Module [] (Decl [] Core)
+
 newtype DeclPtr = DeclPtr Unique
+  deriving (Eq, Ord)
 
 newDeclPtr :: IO DeclPtr
 newDeclPtr = DeclPtr <$> newUnique
 
-data Decl a
+data Decl f a
   = Define Ident Var a
   | DefineMacro Ident Var a
-  | Meta [Decl a]
+  | Meta (f (Decl f a))
   | Example a
-  deriving (Functor, Show)
+  deriving (Functor)
+
+instance Show (Decl f a) where
+  show _ = "<decl>" -- TODO
+
+
+newtype ModBodyPtr = ModBodyPtr Unique
+  deriving (Eq, Ord)
+
+newModBodyPtr :: IO ModBodyPtr
+newModBodyPtr = ModBodyPtr <$> newUnique
+
+
+data ModuleBodyF decl next = Done | Decl decl next
+
+data SplitModuleBody a = SplitModuleBody
+  { _splitModuleRoot :: ModBodyPtr
+  , _splitModuleDescendents :: Map ModBodyPtr (ModuleBodyF a ModBodyPtr)
+  }

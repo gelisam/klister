@@ -19,6 +19,7 @@ executables:
     main:        Main.hs
     source-dirs: stuck-macros
     dependencies:
+      - optparse-applicative
       - stuck-macros
 tests:
   stuck-macro-tests:
