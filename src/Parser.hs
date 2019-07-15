@@ -29,7 +29,7 @@ readModule filename =
                                      , _moduleContents = decls
                                      }
   where
-    source = (,) <$> hashLang <*> many expr <* eof
+    source = (,) <$> hashLang <*> manyStx expr <* eof
 
 readExpr :: FilePath -> Text -> Either Text Syntax
 readExpr filename fileContents =
@@ -56,6 +56,11 @@ list =
      xs <- many expr
      Located loc2 _ <- located (literal ")")
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (List xs)
+
+manyStx :: Parser Syntax -> Parser Syntax
+manyStx p =
+  do Located loc xs <- located (many p)
+     return $ Syntax $ Stx ScopeSet.empty loc (List xs)
 
 vec :: Parser Syntax
 vec =

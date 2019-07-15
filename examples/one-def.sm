@@ -1,0 +1,3 @@
+#lang kernel
+
+[define id [lambda [x] x]]

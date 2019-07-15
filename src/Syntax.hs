@@ -59,7 +59,7 @@ type Ident = Stx Text
 data ParsedModule a = ParsedModule
   { _moduleSource :: FilePath
   , _moduleLanguage :: a
-  , _moduleContents :: [a]
+  , _moduleContents :: a
   }
   deriving (Eq, Show)
 makeLenses ''ParsedModule

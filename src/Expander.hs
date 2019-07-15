@@ -123,7 +123,7 @@ data ExpanderState = ExpanderState
   , _expanderTasks :: [(TaskID, ExpanderTask)]
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl (ModuleBodyF DeclPtr) SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
   , _expanderModuleName :: Maybe ModuleName
   , _expanderModuleTop :: Maybe ModBodyPtr
   , _expanderModuleImports :: [Import]
@@ -240,6 +240,10 @@ link dest layer =
   \st -> st { _expanderCompletedCore =
               _expanderCompletedCore st <> Map.singleton dest layer
             }
+
+linkDecl :: DeclPtr -> Decl SplitCorePtr -> Expand ()
+linkDecl dest decl =
+  modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
 linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
 linkStatus slot = do
@@ -416,7 +420,19 @@ initializeExpansionEnv = do
 
     declPrims :: [(Text, DeclPtr -> Syntax -> Expand ())]
     declPrims =
-      []
+      [ ("define"
+        , \ dest stx -> do
+            Stx _ _ (_, varStx, expr) <- mustBeVec stx
+            x <- mustBeIdent varStx
+            b <- freshBinding
+            addBinding x b
+            var <- freshVar
+            bind b (EVarMacro var)
+            exprDest <- liftIO $ newSplitCorePtr
+            linkDecl dest (Define x var exprDest)
+            addReady exprDest expr
+        )
+      ]
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
@@ -658,11 +674,10 @@ identifierHeaded _ = Nothing
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  tid <- newTaskID
-  modifyState $ \st -> st {_expanderTasks = [(tid, Ready dest stx)]}
+  addReady dest stx
   expandTasks
-  children <- _expanderCompletedCore <$> getState
-  return $ SplitCore {_splitCoreRoot = dest
+  children <- view expanderCompletedCore <$> getState
+  return $ SplitCore { _splitCoreRoot = dest
                      , _splitCoreDescendants = children
                      }
 
@@ -673,9 +688,51 @@ expandModule src = do
     then throwError $ InternalError $ T.unpack $
          "Custom languages not supported yet: " <> lang
     else pure () -- TODO load language bindings
-  throwError $ InternalError $ T.unpack $
-    "Expanding modules not yet implemented"
+  modBodyDest <- liftIO $ newModBodyPtr
+  -- TODO error if module top is already set to something
+  modifyState $ set expanderModuleTop $ Just modBodyDest
+  readyDecls modBodyDest (view moduleContents src)
+  expandTasks
+  body <- getBody modBodyDest
+  return $ Module
+    { _moduleName = ModuleName $ view moduleSource src
+    , _moduleImports = [] -- TODO
+    , _moduleBody = body
+    , _moduleExports = [] -- TODO
+    }
+  where
+    getBody :: ModBodyPtr -> Expand [Decl Core]
+    getBody ptr =
+      (view (expanderCompletedModBody . at ptr) <$> getState) >>=
+      \case
+        Nothing -> throwError $ InternalError "Incomplete module after expansion"
+        Just Done -> pure []
+        Just (Decl decl next) ->
+          (:) <$> getDecl decl <*> getBody next
+    getDecl ptr =
+      (view (expanderCompletedDecls . at ptr) <$> getState) >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing decl after expansion"
+        Just decl -> flatten decl
 
+    flatten :: Decl SplitCorePtr -> Expand (Decl Core)
+    flatten (Define x v e) =
+      linkedCore e >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Just e' -> pure $ Define x v e'
+    flatten (DefineMacro x v e) =
+      linkedCore e >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Just e' -> pure $ DefineMacro x v e'
+    flatten (Meta d) =
+      Meta <$> flatten d
+    flatten (Example e) =
+      linkedCore e >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Just e' -> pure $ Example e'
 
 expandTasks :: Expand ()
 expandTasks = do

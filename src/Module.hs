@@ -24,13 +24,13 @@ type Export = () -- TODO
 data Module f a = Module
   { _moduleName :: ModuleName
   , _moduleImports :: [Import]
-  , _moduleBody :: (f a)
+  , _moduleBody :: f a
   , _moduleExports :: [Export]
   }
   deriving (Functor, Show)
 
 
-type CompleteModule = Module [] (Decl [] Core)
+type CompleteModule = Module [] (Decl Core)
 
 newtype DeclPtr = DeclPtr Unique
   deriving (Eq, Ord)
@@ -38,15 +38,12 @@ newtype DeclPtr = DeclPtr Unique
 newDeclPtr :: IO DeclPtr
 newDeclPtr = DeclPtr <$> newUnique
 
-data Decl f a
+data Decl a
   = Define Ident Var a
   | DefineMacro Ident Var a
-  | Meta (f (Decl f a))
+  | Meta (Decl a)
   | Example a
-  deriving (Functor)
-
-instance Show (Decl f a) where
-  show _ = "<decl>" -- TODO
+  deriving (Functor, Show)
 
 
 newtype ModBodyPtr = ModBodyPtr Unique

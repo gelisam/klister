@@ -44,7 +44,13 @@ mainWithOptions opts =
         Right contents -> do
           ctx <- mkInitContext
           done <- execExpand (initializeExpansionEnv *> expandModule contents) ctx
-          print done
+          case done of
+            Left err -> do
+              putStrLn "Expansion error"
+              print err
+            Right out -> do
+              putStrLn "Expansion succeeded!"
+              print out
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
