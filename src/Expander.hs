@@ -168,13 +168,14 @@ execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 data TaskAwaitMacro = TaskAwaitMacro
-  { awaitMacroDependsOn :: [SplitCorePtr] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
+  { awaitMacroBinding :: Binding
+  , awaitMacroDependsOn :: [SplitCorePtr] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
   , awaitMacroLocation :: SplitCorePtr -- the destination into which the macro will be expanded.
   , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
   }
 
 instance Show TaskAwaitMacro where
-  show (TaskAwaitMacro _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
+  show (TaskAwaitMacro _ _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
 
 
 data ExpanderTask
@@ -522,7 +523,7 @@ initializeExpansionEnv = do
             b <- freshBinding
             addBinding m' b
             macroDest <- schedule mdef
-            afterMacro macroDest dest (addScope body sc)
+            afterMacro b macroDest dest (addScope body sc)
         )
       ]
 
@@ -636,12 +637,12 @@ addReady dest stx = do
     \st -> st { _expanderTasks = (tid, Ready dest stx) : view expanderTasks st
               }
 
-afterMacro :: SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-afterMacro mdest dest stx = do
+afterMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+afterMacro b mdest dest stx = do
   tid <- newTaskID
   modifyState $
     \st -> st { _expanderTasks =
-                (tid, AwaitingMacro dest (TaskAwaitMacro [mdest] mdest stx)) :
+                (tid, AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)) :
                 view expanderTasks st
               }
 
@@ -698,33 +699,19 @@ runTask (tid, task) =
       expandOneExpression dest stx
     AwaitingSignal _dest _on _k ->
       error "Unimplemented: macro monad interpretation (unblocking)"
-    AwaitingMacro dest (TaskAwaitMacro deps mdest stx) -> do
+    AwaitingMacro dest (TaskAwaitMacro b deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
         (_:_) ->
-          later dest newDeps mdest stx
+          later b dest newDeps mdest stx
         [] ->
           linkedCore mdest >>=
           \case
             Nothing -> error "Internal error - macro body not fully expanded"
             Just macroImpl -> do
-              stepScope <- freshScope
-              let macroExpr = Core $ CoreApp macroImpl $
-                              Core $ CoreSyntax $
-                              addScope stx stepScope
-              macroVal <- inEarlierPhase $ expandEval $ eval macroExpr
-              case macroVal of
-                ValueMacroAction act -> do
-                  res <- interpretMacroAction act
-                  case res of
-                    Left (_sig, _kont) -> error "Unimplemented - blocking on signals"
-                    Right v ->
-                      case v of
-                        ValueSyntax expansionResult ->
-                          addReady dest (flipScope expansionResult stepScope)
-                        other -> throwError $ ValueNotSyntax other
-                other ->
-                  throwError $ ValueNotMacro other
+              macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
+              bind b $ EUserMacro ExprMacro macroImplVal
+              addReady dest stx
     ReadyDecl dest stx ->
       expandOneDeclaration dest stx
     MoreDecls dest stx waitingOn -> do
@@ -737,11 +724,11 @@ runTask (tid, task) =
           readyDecls dest stx
 
   where
-    later dest deps mdest stx = do
+    later b dest deps mdest stx = do
       tid' <- newTaskID
       modifyState $
         over expanderTasks $
-          ((tid', AwaitingMacro dest (TaskAwaitMacro deps mdest stx)) :)
+          ((tid', AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
 
 
 -- | Compute the dependencies of a particular slot. The dependencies
@@ -772,8 +759,25 @@ expandOneExpression dest stx
             Sig _ -> error "Impossible - signal not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
-        EUserMacro _ _impl ->
-          error "Unimplemented: user-defined macros"
+        EUserMacro ExprMacro (ValueClosure macroImpl) -> do
+          stepScope <- freshScope
+          macroVal <- inEarlierPhase $ expandEval $
+                      apply macroImpl $
+                      ValueSyntax $ addScope stx stepScope
+          case macroVal of
+            ValueMacroAction act -> do
+              res <- interpretMacroAction act
+              case res of
+                Left (_sig, _kont) -> error "Unimplemented - blocking on signals"
+                Right expanded ->
+                  case expanded of
+                    ValueSyntax expansionResult ->
+                      addReady dest (flipScope expansionResult stepScope)
+                    other -> throwError $ ValueNotSyntax other
+            other ->
+              throwError $ ValueNotMacro other
+        EUserMacro _otherCat _otherVal ->
+          throwError $ InternalError $ "Invalid macro for expressions"
   | otherwise =
     case syntaxE stx of
       Vec xs -> expandOneExpression dest (addApp Vec stx xs)

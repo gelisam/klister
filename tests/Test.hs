@@ -58,7 +58,7 @@ miniTests =
           , "[let-syntax \
             \  [m [lambda [_] \
             \       [pure [quote [lambda [x] x]]]]] \
-            \  anyRandomWord]"
+            \  m]"
           , lam $ \x -> x
           )
         , ( "Let macro"
@@ -77,7 +77,7 @@ miniTests =
             \                           stx] \
             \                         e] \
             \                        stx]]])])]] \
-            \  [anyRandomWord [x [lambda [x] x]] \
+            \  [let1 [x [lambda [x] x]] \
             \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
@@ -91,7 +91,15 @@ miniTests =
           , \case
               Unknown (Stx _ _ "x") -> True
               _ -> False
-            )
+          )
+        , ("[let-syntax \
+           \  [m [lambda [_] \
+           \       [pure [quote [lambda [x] x]]]]] \
+           \  anyRandomWord]"
+           , \case
+              Unknown (Stx _ _ "anyRandomWord") -> True
+              _ -> False
+           )
         ]
       ]
 
