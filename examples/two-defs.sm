@@ -1,0 +1,7 @@
+#lang kernel
+
+[define id [lambda [x] x]]
+
+[define five [quote id]]
+
+[example [id five]]

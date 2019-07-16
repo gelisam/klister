@@ -338,6 +338,13 @@ initializeExpansionEnv = do
             linkDecl dest (Define x var exprDest)
             addReady exprDest expr
         )
+      , ("example"
+        , \ dest stx -> do
+            Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
+            exprDest <- liftIO $ newSplitCorePtr
+            linkDecl dest (Example exprDest)
+            addReady exprDest expr
+        )
       ]
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
