@@ -20,6 +20,7 @@ import Expander
 import Parser
 import Parser.Command
 import PartialCore
+import Pretty
 import SplitCore
 import Syntax
 import Value
@@ -81,6 +82,8 @@ repl = forever $
                 case runPartialCore out of
                   Nothing -> putStrLn "Expression incomplete, can't evaluate"
                   Just expr ->
+                    putStrLn "Complete expression in core:" >>
+                    prettyPrint expr >> putStrLn "" >>
                     runExceptT (runReaderT (runEval (eval expr)) Env.empty) >>=
                     \case
                       Left evalErr -> print evalErr
