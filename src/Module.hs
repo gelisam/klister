@@ -1,7 +1,9 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Module where
 
+import Control.Lens
 import Data.Map(Map)
 import Data.Unique
 
@@ -28,7 +30,7 @@ data Module f a = Module
   , _moduleExports :: [Export]
   }
   deriving (Functor, Show)
-
+makeLenses ''Module
 
 type CompleteModule = Module [] (Decl Core)
 

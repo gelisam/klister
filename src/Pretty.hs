@@ -2,9 +2,11 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Pretty (Pretty(..), pretty, prettyPrint) where
 
 import Control.Lens
+import Control.Monad.State
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
@@ -13,6 +15,7 @@ import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 
 import Core
+import Module
 import ShortShow
 import Syntax
 
@@ -132,3 +135,34 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedVec core) where
   pp env xs =
     vec (hsep $ map (pp env) (view scopedVecElements xs)) <>
     angles (pp env (view scopedVecScope xs))
+
+instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
+  ppBind env (Define n@(Stx _ _ x) v e) =
+    let env' = Map.singleton v n
+    in (hang 4 $ group $
+        text "define" <+> annotate (BindingSite v) (text x) <+> text ":=" <> line <>
+        pp (env <> env') e,
+        env')
+  ppBind _env (DefineMacro _ _ _) = (text "TODO", mempty)
+  ppBind env (Meta d) =
+    let (doc, env') = ppBind env d
+    in (hang 4 $ text "meta" <> line <> doc, env')
+  ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
+
+instance Pretty VarInfo ModuleName where
+  pp _ (ModuleName n) = viaShow n
+
+instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (Module f a) where
+  pp env m =
+    hang 4 $
+    text "module" <> pp env (view moduleName m) <> line <>
+    concatWith terpri (fst (runState (traverse go (view moduleBody m)) env))
+
+    where
+      terpri d1 d2 = d1 <> line <> d2
+      go :: a -> State (Map Var Ident) (Doc VarInfo)
+      go d =
+        do thisEnv <- get
+           let (doc, newEnv) = ppBind thisEnv d
+           put (thisEnv <> newEnv)
+           return doc

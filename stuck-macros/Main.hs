@@ -51,7 +51,7 @@ mainWithOptions opts =
               print err
             Right out -> do
               putStrLn "Expansion succeeded!"
-              print out
+              prettyPrint out
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
