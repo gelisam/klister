@@ -52,6 +52,18 @@ mainWithOptions opts =
             Right out -> do
               putStrLn "Expansion succeeded!"
               prettyPrint out
+              putStrLn ""
+              run <- runExceptT (runReaderT (runEval (evalMod out)) Env.empty)
+              case run of
+                Left err ->
+                  putStrLn "Error when evaluating module examples" *>
+                  print err
+                Right examples ->
+                  forM_ examples $ \(c, v) -> do
+                    putStr "Example "
+                    prettyPrint c
+                    putStr " is "
+                    print v
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =

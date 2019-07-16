@@ -9,11 +9,14 @@ module Evaluator where
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.State
+import Control.Monad.Writer
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Core
 import Env
+import Module
 import Signals
 import Syntax
 import Value
@@ -59,6 +62,23 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter [] = id
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
+
+evalMod :: CompleteModule -> Eval [(Core, Value)]
+evalMod m = do
+  env <- ask
+  snd <$> runWriterT (runStateT (traverse evalDecl (view moduleBody m)) env)
+
+  where
+    evalDecl :: Decl Core -> StateT (Env Value) (WriterT [(Core, Value)] Eval) ()
+    evalDecl (Define x n e) = do
+      env <- get
+      v <- lift $ lift $ withEnv env (eval e)
+      modify $ Env.insert n x v
+    evalDecl (Example e) = do
+      env <- get
+      v <- lift $ lift $ withEnv env (eval e)
+      tell [(e, v)]
+    evalDecl _ = error "TODO evaluating other decls"
 
 apply :: Closure -> Value -> Eval Value
 apply (Closure {..}) value = do

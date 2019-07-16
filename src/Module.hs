@@ -34,6 +34,7 @@ makeLenses ''Module
 
 type CompleteModule = Module [] (Decl Core)
 
+
 newtype DeclPtr = DeclPtr Unique
   deriving (Eq, Ord)
 
