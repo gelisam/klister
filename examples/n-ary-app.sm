@@ -1,0 +1,32 @@
+#lang kernel
+
+[define-macros
+  ([my-app
+    [lambda [stx]
+      (syntax-case stx
+        [[cons _ fun-and-args]
+         (syntax-case fun-and-args
+           [[cons fun args]
+            (syntax-case args
+              [() [pure fun]]
+              [[cons arg0 more-args]
+               [pure
+                [cons-list-syntax
+                  [quote my-app]
+                  [cons-list-syntax
+                    [vec-syntax [[quote #%app] fun arg0] stx]
+                    more-args
+                    stx]
+                  stx]]])])])]])]
+
+[define-macros
+  ([#%app
+    [lambda [stx]
+     (syntax-case stx
+      [[cons _ args]
+       [pure [cons-list-syntax [quote my-app] args stx]]])]])]
+
+
+[define const [lambda [x] [lambda [y] x]]]
+
+[example (const [quote a] [quote b])]

@@ -48,7 +48,7 @@ mainWithOptions opts =
           case done of
             Left err -> do
               putStrLn "Expansion error"
-              print err
+              T.putStrLn (expansionErrText err)
             Right out -> do
               putStrLn "Expansion succeeded!"
               prettyPrint out

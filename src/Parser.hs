@@ -111,7 +111,7 @@ identName =
       c `elem` (map toUpper alphabet) ||
       (ord c > 126 && generalCategory c `elem` constituentCats)
     alphabet = "abcdefghijklmnopqrstuvwxyz"
-    isSpecialInit c = c `elem` ("!$%&*/:<=>?^_~" :: [Char])
+    isSpecialInit c = c `elem` ("#!$%&*/:<=>?^_~" :: [Char])
 
     constituentCats = [UppercaseLetter, LowercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, NonSpacingMark, LetterNumber, OtherNumber, DashPunctuation, ConnectorPunctuation, OtherPunctuation, CurrencySymbol, MathSymbol, ModifierSymbol, OtherSymbol, PrivateUse]
 
