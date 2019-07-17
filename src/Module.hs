@@ -43,7 +43,7 @@ newDeclPtr = DeclPtr <$> newUnique
 
 data Decl a
   = Define Ident Var a
-  | DefineMacro Ident Var a
+  | DefineMacros [(Ident, a)]
   | Meta (Decl a)
   | Example a
   deriving (Functor, Show)

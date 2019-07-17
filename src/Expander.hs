@@ -28,12 +28,13 @@ import Control.Monad.Reader
 import Data.IORef
 
 import Data.Unique
-import Data.List.Extra
+import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.Traversable
 
 import Core
 import Env
@@ -99,11 +100,13 @@ expandModule src = do
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
         Just e' -> pure $ Define x v e'
-    flatten (DefineMacro x v e) =
-      linkedCore e >>=
-      \case
-        Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ DefineMacro x v e'
+    flatten (DefineMacros macros) =
+      DefineMacros <$>
+      for macros \(x, e) ->
+        linkedCore e >>=
+        \case
+          Nothing -> throwError $ InternalError "Missing expr after expansion"
+          Just e' -> pure $ (x, e')
     flatten (Meta d) =
       Meta <$> flatten d
     flatten (Example e) =
@@ -252,6 +255,10 @@ mustBeCons :: Syntax -> Expand (Stx (Syntax, [Syntax]))
 mustBeCons (Syntax (Stx scs srcloc (List (x:xs)))) = return (Stx scs srcloc (x, xs))
 mustBeCons other = throwError (NotCons other)
 
+mustBeList :: Syntax -> Expand (Stx [Syntax])
+mustBeList (Syntax (Stx scs srcloc (List xs))) = return (Stx scs srcloc xs)
+mustBeList other = throwError (NotList other)
+
 
 class MustBeVec a where
   mustBeVec :: Syntax -> Expand (Stx a)
@@ -337,6 +344,21 @@ initializeExpansionEnv = do
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Define x var exprDest)
             addReady exprDest expr
+        )
+      ,("define-macros"
+        , \ dest stx -> do
+            Stx _ _ (_ :: Syntax, macroList) <- mustBeVec stx
+            Stx _ _ macroDefs <- mustBeList macroList
+            macros <- for macroDefs $ \def -> do
+              Stx _ _ (mname, mdef) <- mustBeVec def
+              theName <- mustBeIdent mname
+              b <- freshBinding
+              addBinding theName b
+              macroDest <- schedule mdef
+              bind b $ EIncompleteMacro macroDest
+              return (theName, macroDest)
+            linkDecl dest $ DefineMacros macros
+
         )
       , ("example"
         , \ dest stx -> do
@@ -545,15 +567,18 @@ readyDecls dest (Syntax (Stx _ _ (List []))) =
               _expanderCompletedModBody st <> Map.singleton dest Done
             }
 readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
+  sc <- freshScope
   restDest <- liftIO $ newModBodyPtr
   declDest <- liftIO $ newDeclPtr
-  modifyState $ over expanderCompletedModBody  (<> Map.singleton dest (Decl declDest restDest))
+  modifyState $ over expanderCompletedModBody $
+    (<> Map.singleton dest (Decl declDest restDest))
   tid <- newTaskID
   modifyState $
-    over expanderTasks ((tid, MoreDecls restDest (Syntax (Stx scs loc (List ds))) declDest) :)
+    over expanderTasks $
+      ((tid, MoreDecls restDest (Syntax (Stx scs loc (List (map (flip addScope sc) ds)))) declDest) :)
   tid' <- newTaskID
   modifyState $
-    over expanderTasks ((tid', ReadyDecl declDest d) :)
+    over expanderTasks ((tid', ReadyDecl declDest (addScope d sc)) :)
 
 readyDecls _dest _other =
   error "TODO real error message - malformed module body"
@@ -667,6 +692,14 @@ expandOneExpression dest stx
             Sig _ -> error "Impossible - signal not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
+        EIncompleteMacro mdest -> do
+          tid <- newTaskID
+          let todo = TaskAwaitMacro { awaitMacroBinding = b
+                                    , awaitMacroDependsOn = [mdest]
+                                    , awaitMacroLocation = mdest
+                                    , awaitMacroSyntax = stx
+                                    }
+          modifyState $ over expanderTasks $ ((tid, AwaitingMacro dest todo) :)
         EUserMacro ExprMacro (ValueClosure macroImpl) -> do
           stepScope <- freshScope
           macroVal <- inEarlierPhase $ expandEval $
@@ -717,6 +750,8 @@ expandOneDeclaration dest stx
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->
           error "Unimplemented: user-defined macros - decl context"
+        EIncompleteMacro _ ->
+          error "Unimplemented: user-defined macros - decl context - incomplete"
   | otherwise =
     throwError $ InternalError "All declarations should be identifier-headed"
 

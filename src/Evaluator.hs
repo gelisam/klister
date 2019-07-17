@@ -78,6 +78,8 @@ evalMod m = do
       env <- get
       v <- lift $ lift $ withEnv env (eval e)
       tell [(e, v)]
+    evalDecl (DefineMacros _macros) = do
+      pure () -- TODO need multiple phases of environment available here
     evalDecl _ = error "TODO evaluating other decls"
 
 apply :: Closure -> Value -> Eval Value

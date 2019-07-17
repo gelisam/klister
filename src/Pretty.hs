@@ -143,7 +143,12 @@ instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
         text "define" <+> annotate (BindingSite v) (text x) <+> text ":=" <> line <>
         pp (env <> env') e,
         env')
-  ppBind _env (DefineMacro _ _ _) = (text "TODO", mempty)
+  ppBind env (DefineMacros macros) =
+    (text "define-macros" <> line <>
+     vsep [text x <+> text "↦" <+> pp env e -- TODO phase-specific binding environments in pprinter
+          | (Stx _ _ x, e) <- macros
+          ],
+     mempty)
   ppBind env (Meta d) =
     let (doc, env') = ppBind env d
     in (hang 4 $ text "meta" <> line <> doc, env')

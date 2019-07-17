@@ -65,6 +65,9 @@ instance Show ExpanderTask where
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
 
+instance Show TaskID where
+  show (TaskID u) = "TaskID " ++ show (hashUnique u)
+
 newTaskID :: Expand TaskID
 newTaskID = liftIO $ TaskID <$> newUnique
 
@@ -76,6 +79,7 @@ data ExpansionErr
   | NotIdentifier Syntax
   | NotEmpty Syntax
   | NotCons Syntax
+  | NotList Syntax
   | NotRightLength Natural Syntax
   | NotVec Syntax
   | UnknownPattern Syntax
@@ -96,6 +100,8 @@ expansionErrText (NotIdentifier stx) =
 expansionErrText (NotEmpty stx) = "Expected (), but got " <> syntaxText stx
 expansionErrText (NotCons stx) =
   "Expected non-empty parens, but got " <> syntaxText stx
+expansionErrText (NotList stx) =
+  "Expected parens, but got " <> syntaxText stx
 expansionErrText (NotRightLength len stx) =
   "Expected " <> T.pack (show len) <>
   " entries between square brackets, but got " <> syntaxText stx
@@ -131,6 +137,7 @@ data EValue
   | EPrimDeclMacro (DeclPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
+  | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
