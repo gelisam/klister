@@ -6,6 +6,7 @@ import Control.Monad (forever)
 import Control.Monad.Except
 import Control.Monad.Reader
 
+import Data.IORef
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -14,6 +15,7 @@ import Options.Applicative
 import System.Exit (exitSuccess)
 import System.IO
 
+import Env (Env)
 import qualified Env as Env
 import Evaluator
 import Expander
@@ -28,7 +30,9 @@ import Value
 data Options = Options { sourceModule :: Maybe FilePath }
 
 main :: IO ()
-main = execParser opts >>= mainWithOptions
+main = do
+  hSetBuffering stdout NoBuffering
+  mainWithOptions =<< execParser opts
   where
     opts = info parser mempty
     parser = Options <$> optional (argument str (metavar "FILE"))
@@ -37,7 +41,7 @@ mainWithOptions :: Options -> IO ()
 mainWithOptions opts =
   case sourceModule opts of
     Nothing ->
-      hSetBuffering stdout NoBuffering *> repl
+      repl Env.empty
     Just file ->
       readModule file >>=
       \case
@@ -58,12 +62,13 @@ mainWithOptions opts =
                 Left err ->
                   putStrLn "Error when evaluating module examples" *>
                   print err
-                Right examples ->
+                Right (modEnv, examples) ->
                   forM_ examples $ \(env, c, v) -> do
                     putStr "Example "
                     prettyPrintEnv env c
                     putStr " is "
                     prettyPrintEnv env v
+                    repl modEnv
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
@@ -74,29 +79,33 @@ tryCommand l nonCommand =
     Left err | T.isPrefixOf (T.pack ":") l -> T.putStrLn err
              | otherwise -> nonCommand l
 
-repl :: IO ()
-repl = forever $
-  do putStr "> "
-     l <- T.getLine
-     tryCommand l $ \l' -> case readExpr "<repl>" l' of
-       Left err -> T.putStrLn err
-       Right ok ->
-         do putStrLn "Parser output:"
-            T.putStrLn (syntaxText ok)
-            ctx <- mkInitContext
-            c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
-            case c of
-              Left err -> putStr "Expander error: " *>
-                          T.putStrLn (expansionErrText err)
-              Right (unsplit -> out) -> do
-                putStrLn "Expander Output:"
-                print out
-                case runPartialCore out of
-                  Nothing -> putStrLn "Expression incomplete, can't evaluate"
-                  Just expr ->
-                    putStrLn "Complete expression in core:" >>
-                    prettyPrint expr >> putStrLn "" >>
-                    runExceptT (runReaderT (runEval (eval expr)) Env.empty) >>=
-                    \case
-                      Left evalErr -> print evalErr
-                      Right val -> prettyPrint val >> putStrLn ""
+repl :: Env Value -> IO ()
+repl startEnv = do
+  theEnv <- newIORef startEnv
+  forever $
+    do putStr "> "
+       l <- T.getLine
+       tryCommand l $ \l' -> case readExpr "<repl>" l' of
+         Left err -> T.putStrLn err
+         Right ok ->
+           do putStrLn "Parser output:"
+              T.putStrLn (syntaxText ok)
+              ctx <- mkInitContext
+              c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
+              case c of
+                Left err -> putStr "Expander error: " *>
+                            T.putStrLn (expansionErrText err)
+                Right (unsplit -> out) -> do
+                  putStrLn "Expander Output:"
+                  print out
+                  case runPartialCore out of
+                    Nothing -> putStrLn "Expression incomplete, can't evaluate"
+                    Just expr -> do
+                      putStrLn "Complete expression in core:"
+                      prettyPrint expr
+                      putStrLn ""
+                      currentEnv <- readIORef theEnv
+                      runExceptT (runReaderT (runEval (eval expr)) currentEnv) >>=
+                        \case
+                          Left evalErr -> print evalErr
+                          Right val -> prettyPrint val >> putStrLn ""

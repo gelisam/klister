@@ -63,10 +63,11 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
 
-evalMod :: CompleteModule -> Eval [(Env Value, Core, Value)]
+evalMod :: CompleteModule -> Eval (Env Value, [(Env Value, Core, Value)])
 evalMod m = do
   env <- ask
-  snd <$> runWriterT (runStateT (traverse evalDecl (view moduleBody m)) env)
+  runWriterT (runStateT (traverse evalDecl (view moduleBody m)) env) <&>
+    \((_, modEnv), examples) -> (modEnv, examples)
 
   where
     evalDecl :: Decl Core -> StateT (Env Value) (WriterT [(Env Value, Core, Value)] Eval) ()
