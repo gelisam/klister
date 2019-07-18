@@ -1,7 +1,8 @@
+{-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-module Env (Env, empty, insert, lookup, lookupVal) where
+module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal) where
 
 import Prelude hiding (lookup)
 
@@ -13,10 +14,13 @@ import Core (Var(..))
 import Syntax (Ident)
 
 newtype Env a = Env (Map Var (Ident, a))
-  deriving (Eq, Show)
+  deriving (Eq, Functor, Monoid, Semigroup, Show)
 
 empty :: Env a
 empty = Env (Map.empty)
+
+singleton :: Var -> Ident -> a -> Env a
+singleton x n v = Env (Map.singleton x (n, v))
 
 insert :: Var -> Ident -> a -> Env a -> Env a
 insert x n v (Env env) = Env (Map.insert x (n, v) env)
@@ -26,6 +30,9 @@ lookup x (Env env) = Map.lookup x env
 
 lookupVal :: Var -> Env a -> Maybe a
 lookupVal x env = snd <$> lookup x env
+
+lookupIdent :: Var -> Env a -> Maybe Ident
+lookupIdent x env = fst <$> lookup x env
 
 type instance Index (Env a) = Var
 type instance IxValue (Env a) = (Ident, a)

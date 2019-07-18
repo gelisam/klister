@@ -63,13 +63,13 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
 
-evalMod :: CompleteModule -> Eval [(Core, Value)]
+evalMod :: CompleteModule -> Eval [(Env Value, Core, Value)]
 evalMod m = do
   env <- ask
   snd <$> runWriterT (runStateT (traverse evalDecl (view moduleBody m)) env)
 
   where
-    evalDecl :: Decl Core -> StateT (Env Value) (WriterT [(Core, Value)] Eval) ()
+    evalDecl :: Decl Core -> StateT (Env Value) (WriterT [(Env Value, Core, Value)] Eval) ()
     evalDecl (Define x n e) = do
       env <- get
       v <- lift $ lift $ withEnv env (eval e)
@@ -77,7 +77,7 @@ evalMod m = do
     evalDecl (Example e) = do
       env <- get
       v <- lift $ lift $ withEnv env (eval e)
-      tell [(e, v)]
+      tell [(env, e, v)]
     evalDecl (DefineMacros _macros) = do
       pure () -- TODO need multiple phases of environment available here
     evalDecl _ = error "TODO evaluating other decls"

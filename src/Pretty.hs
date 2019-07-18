@@ -3,18 +3,17 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Pretty (Pretty(..), pretty, prettyPrint) where
+module Pretty (Pretty(..), pretty, prettyPrint, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens
 import Control.Monad.State
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
 import Data.Text (Text)
 import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 
 import Core
+import Env
 import Module
 import ShortShow
 import Syntax
@@ -35,13 +34,22 @@ vec :: Doc ann -> Doc ann
 vec doc = text "[" <> align (group doc) <> "]"
 
 pretty :: Pretty ann a => a -> Text
-pretty x = renderStrict (layoutPretty defaultLayoutOptions (pp mempty x))
+pretty x = renderStrict (layoutPretty defaultLayoutOptions (pp Env.empty x))
 
 prettyPrint :: Pretty ann a => a -> IO ()
-prettyPrint x = putDoc (pp mempty x)
+prettyPrint x = putDoc (pp Env.empty x)
+
+prettyEnv :: Pretty ann a => Env v -> a -> Text
+prettyEnv env x =
+  renderStrict (layoutPretty defaultLayoutOptions (pp (fmap (const ()) env) x))
+
+prettyPrintEnv :: Pretty ann a => Env v -> a -> IO ()
+prettyPrintEnv env x =
+  putDoc (pp (fmap (const ()) env) x)
+
 
 class Pretty ann a | a -> ann where
-  pp :: Map Var Ident -> a -> Doc ann
+  pp :: Env () -> a -> Doc ann
 
 data VarInfo
   = BindingSite Var
@@ -53,13 +61,13 @@ instance Pretty VarInfo Core where
 instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreVar v) =
     annotate (UseSite v) $
-    case Map.lookup v env of
+    case Env.lookupIdent v env of
       Nothing -> string ("!!" ++ show v ++ "!!")
       Just (Stx _ _ x) -> text x
   pp env (CoreLam n@(Stx _ _ x) v body) =
     hang 2 $
     text "λ" <> annotate (BindingSite v) (text x) <> "." <+>
-    pp (env <> Map.singleton v n) body
+    pp (env <> Env.singleton v n ()) body
   pp env (CoreApp fun arg) =
     hang 2 $ parens (pp env fun <+> pp env arg)
   pp env (CorePure arg) =
@@ -95,24 +103,24 @@ instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
                (map (pp env) (view syntaxErrorLocations err))
 
 class PrettyBinder ann a | a -> ann where
-  ppBind :: Map Var Ident -> a -> (Doc ann, Map Var Ident)
+  ppBind :: Env () -> a -> (Doc ann, Env ())
 
 instance PrettyBinder VarInfo Pattern where
   ppBind _env (PatternIdentifier ident@(Stx _ _ x) v) =
-    (annotate (BindingSite v) (text x), Map.singleton v ident)
+    (annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env PatternEmpty =
-    (text "()", Map.empty)
+    (text "()", Env.empty)
   ppBind _env (PatternCons ida@(Stx _ _ xa) va idd@(Stx _ _ xd) vd) =
     (parens (text "cons" <+>
              annotate (BindingSite va) (text xa) <+>
              annotate (BindingSite vd) (text xd)),
-     Map.fromList [(va, ida), (vd, idd)])
+     Env.insert vd idd () $ Env.singleton va ida ())
   ppBind _env (PatternVec vars) =
     (vec $
      hsep [annotate (BindingSite v) (text x)
           | (Stx _ _ x, v) <- vars
           ],
-     Map.fromList [(v, x) | (x, v) <- vars])
+     foldr (\(x, v) e -> Env.insert x v () e) Env.empty [(v, x) | (x, v) <- vars])
 
 instance Pretty VarInfo core => Pretty VarInfo (ScopedIdent core) where
   pp env ident =
@@ -138,7 +146,7 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedVec core) where
 
 instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
   ppBind env (Define n@(Stx _ _ x) v e) =
-    let env' = Map.singleton v n
+    let env' = Env.singleton v n ()
     in (hang 4 $ group $
         text "define" <+> annotate (BindingSite v) (text x) <+> text ":=" <> line <>
         pp (env <> env') e,
@@ -165,7 +173,7 @@ instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (M
 
     where
       terpri d1 d2 = d1 <> line <> d2
-      go :: a -> State (Map Var Ident) (Doc VarInfo)
+      go :: a -> State (Env ()) (Doc VarInfo)
       go d =
         do thisEnv <- get
            let (doc, newEnv) = ppBind thisEnv d

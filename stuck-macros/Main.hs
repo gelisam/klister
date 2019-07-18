@@ -59,9 +59,9 @@ mainWithOptions opts =
                   putStrLn "Error when evaluating module examples" *>
                   print err
                 Right examples ->
-                  forM_ examples $ \(c, v) -> do
+                  forM_ examples $ \(env, c, v) -> do
                     putStr "Example "
-                    prettyPrint c
+                    prettyPrintEnv env c
                     putStr " is "
                     print v
 
