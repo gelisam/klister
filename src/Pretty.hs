@@ -1,11 +1,12 @@
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 module Pretty (Pretty(..), pretty, prettyPrint, prettyEnv, prettyPrintEnv) where
 
-import Control.Lens
+import Control.Lens hiding (List)
 import Control.Monad.State
 import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
 import Data.Text (Text)
@@ -17,6 +18,7 @@ import Env
 import Module
 import ShortShow
 import Syntax
+import Value
 
 text :: Text -> Doc ann
 text = PP.pretty
@@ -78,8 +80,8 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     group $ text "syntax-error" <+> pp env err
   pp env (CoreSendSignal arg) =
     group $ text "send-signal" <+> pp env arg
-  pp _env (CoreSyntax stx) =
-    string (shortShow stx) -- TODO pp stx object
+  pp env (CoreSyntax stx) =
+    pp env stx
   pp env (CoreCase scrut pats) =
     hang 2 $ group $
     group (hang 2 $ text "syntax-case" <+> pp env scrut <+> "of") <> line <>
@@ -179,3 +181,46 @@ instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (M
            let (doc, newEnv) = ppBind thisEnv d
            put (thisEnv <> newEnv)
            return doc
+
+instance Pretty VarInfo SrcLoc where
+  pp env loc =
+    string (view srcLocFilePath loc) <> text ":" <>
+    pp env (view srcLocStart loc) <> text "-" <>
+    pp env (view srcLocEnd loc)
+
+instance Pretty VarInfo SrcPos where
+  pp _env pos =
+    viaShow (view srcPosLine pos) <> text "." <>
+    viaShow (view srcPosCol pos)
+
+instance Pretty VarInfo a => Pretty VarInfo (Stx a) where
+  pp env (Stx _ loc v) =
+    text "#[" <> pp env loc <> "]<" <>
+    align (pp env v) <>
+    text ">"
+
+instance Pretty VarInfo Syntax where
+  pp env (Syntax e) = pp env e
+
+instance Pretty VarInfo (ExprF Syntax) where
+  pp _   (Id x)    = text x
+  pp _   (Sig s)   = viaShow s
+  pp env (List xs) = parens (group (vsep (map (pp env . syntaxE) xs)))
+  pp env (Vec xs)  = brackets (group (vsep (map (pp env . syntaxE) xs)))
+
+instance Pretty VarInfo Closure where
+  pp _ _ = text "#<closure>"
+
+instance Pretty VarInfo Value where
+  pp env (ValueClosure c) = pp env c
+  pp env (ValueSyntax stx) = pp env stx
+  pp env (ValueMacroAction act) = pp env act
+  pp _env (ValueSignal s) = viaShow s
+
+instance Pretty VarInfo MacroAction where
+  pp env (MacroActionPure v) = text "pure" <+> pp env v
+  pp env (MacroActionBind v k) = group (pp env v <+> text ">>=" <> line <> pp env k)
+  pp env (MacroActionSyntaxError err) =
+    text "syntax-error" <+> pp env err
+  pp _env (MacroActionSendSignal s) =
+    text "send-signal" <+> viaShow s

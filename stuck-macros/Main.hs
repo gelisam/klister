@@ -63,7 +63,7 @@ mainWithOptions opts =
                     putStr "Example "
                     prettyPrintEnv env c
                     putStr " is "
-                    print v
+                    prettyPrintEnv env v
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
@@ -99,4 +99,4 @@ repl = forever $
                     runExceptT (runReaderT (runEval (eval expr)) Env.empty) >>=
                     \case
                       Left evalErr -> print evalErr
-                      Right val -> T.putStrLn (valueText val)
+                      Right val -> prettyPrint val >> putStrLn ""
