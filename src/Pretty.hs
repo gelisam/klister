@@ -66,8 +66,8 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
       Nothing -> string ("!!" ++ show v ++ "!!")
       Just (Stx _ _ x) -> text x
   pp env (CoreLam n@(Stx _ _ x) v body) =
-    hang 2 $
-    text "λ" <> annotate (BindingSite v) (text x) <> "." <+>
+    hang 2 $ group $
+    text "λ" <> annotate (BindingSite v) (text x) <> "." <> line <>
     pp (env <> Env.singleton v n ()) body
   pp env (CoreApp fun arg) =
     hang 2 $ parens (pp env fun <+> pp env arg)
@@ -93,7 +93,7 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     group (hang 2 $ text "syntax-case" <+> pp env scrut <+> "of") <> line <>
     vsep [ parens $ hang 2 $
            let (b, env') = ppBind env pat
-           in group (b <+> "=>") <+> pp (env <> env') body
+           in group (group (b <+> "=>") <> line <> pp (env <> env') body)
          | (pat, body) <- pats
          ]
   pp _env (CoreIdentifier x) = viaShow x
@@ -166,8 +166,9 @@ instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
         pp (env <> env') e,
         env')
   ppBind env (DefineMacros macros) =
-    (text "define-macros" <> line <>
-     vsep [text x <+> text "↦" <+> pp env e -- TODO phase-specific binding environments in pprinter
+    (hang 4 $ text "define-macros" <> line <>
+     vsep [hang 2 $ group $
+           text x <+> text "↦" <> line <> pp env e -- TODO phase-specific binding environments in pprinter
           | (Stx _ _ x, e) <- macros
           ],
      mempty)
@@ -232,14 +233,16 @@ instance Pretty VarInfo Value where
   pp _env (ValueBool b) = text $ if b then "#true" else "#false"
 
 instance Pretty VarInfo MacroAction where
-  pp env (MacroActionPure v) = text "pure" <+> pp env v
-  pp env (MacroActionBind v k) = group (pp env v <+> text ">>=" <> line <> pp env k)
+  pp env (MacroActionPure v) =
+    text "pure" <+> pp env v
+  pp env (MacroActionBind v k) =
+    group (group (pp env v <> line <> text ">>=") <> line <> pp env k)
   pp env (MacroActionSyntaxError err) =
     text "syntax-error" <+> pp env err
   pp _env (MacroActionSendSignal s) =
     text "send-signal" <+> viaShow s
   pp env (MacroActionIdentEq how v1 v2) =
-    group $ text opName <+> pp env v1 <+> pp env v2
+    group $ parens $ vsep [text opName, pp env v1, pp env v2]
     where
       opName =
         case how of
