@@ -21,6 +21,7 @@ import Core
 import Env
 import Evaluator
 import Module
+import Phase
 import Signals
 import SplitCore
 import Scope
@@ -39,7 +40,7 @@ execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 
 data ExpanderTask
-  = Ready SplitCorePtr Syntax
+  = Ready SplitCorePtr Phase Syntax
   | AwaitingSignal SplitCorePtr Signal Value -- the value is the continuation
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
   | ReadyDecl DeclPtr Syntax
@@ -56,7 +57,7 @@ instance Show TaskAwaitMacro where
   show (TaskAwaitMacro _ _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
 
 instance Show ExpanderTask where
-  show (Ready _dest stx) = "Ready " ++ T.unpack (syntaxText stx)
+  show (Ready _dest p stx) = "Ready " ++ show p ++ " " ++ T.unpack (syntaxText stx)
   show (AwaitingSignal _dest on _k) = "AwaitingSignal (" ++ show on ++ ")"
   show (AwaitingMacro _dest t) = "AwaitingMacro (" ++ show t ++ ")"
   show (ReadyDecl _dest stx) = "ReadyDecl " ++ T.unpack (syntaxText stx)
@@ -120,11 +121,12 @@ expansionErrText (ValueNotSyntax val) =
 expansionErrText (InternalError str) =
   "Internal error during expansion! This is a bug in the implementation." <> T.pack str
 
-newtype Phase = Phase Natural
-  deriving (Eq, Ord, Show)
 
 newtype Binding = Binding Unique
   deriving (Eq, Ord)
+
+instance Show Binding where
+  show (Binding b) = "Binding " ++ show (hashUnique b)
 
 type BindingTable = Map Text [(ScopeSet, Binding)]
 
@@ -151,7 +153,7 @@ mkInitContext :: IO ExpanderContext
 mkInitContext = do
   st <- newIORef initExpanderState
   return $ ExpanderContext { _expanderState = st
-                           , _expanderPhase = Phase 0
+                           , _expanderPhase = runtime
                            }
 
 data ExpanderState = ExpanderState
@@ -168,6 +170,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleTop :: Maybe ModBodyPtr
   , _expanderModuleImports :: [Import]
   , _expanderModuleExports :: [Export]
+  , _expanderPhaseRoots :: !(Map Phase Scope)
   }
 
 initExpanderState :: ExpanderState
@@ -185,13 +188,57 @@ initExpanderState = ExpanderState
   , _expanderModuleTop = Nothing
   , _expanderModuleImports = []
   , _expanderModuleExports = []
+  , _expanderPhaseRoots = Map.empty
   }
+
+makeLenses ''ExpanderContext
+makeLenses ''ExpanderState
+
+expanderContext :: Expand ExpanderContext
+expanderContext = Expand ask
+
+
+getState :: Expand ExpanderState
+getState = view expanderState <$> expanderContext >>= liftIO . readIORef
+
+modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
+modifyState f = do
+  st <- view expanderState <$> expanderContext
+  liftIO (modifyIORef st f)
+
+freshScope :: Expand Scope
+freshScope = do
+  sc <- view expanderNextScope <$> getState
+  modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
+  return sc
+
+
+currentPhase :: Expand Phase
+currentPhase = Expand $ view expanderPhase <$> ask
+
+inPhase :: Phase -> Expand a -> Expand a
+inPhase p act = Expand $ local (over expanderPhase (const p)) $ runExpand act
+
+inEarlierPhase :: Expand a -> Expand a
+inEarlierPhase act =
+  Expand $ local (over expanderPhase prior) $ runExpand act
+
+
+phaseRoot :: Expand Scope
+phaseRoot = do
+  roots <- view expanderPhaseRoots <$> getState
+  p <- currentPhase
+  case Map.lookup p roots of
+    Just sc -> return sc
+    Nothing -> do
+      sc <- freshScope
+      modifyState $ over (expanderPhaseRoots . at p) $ const (Just sc)
+      return sc
 
 makePrisms ''Binding
 makePrisms ''ExpansionErr
-makePrisms ''Phase
-makeLenses ''ExpanderContext
-makeLenses ''ExpanderState
+
+
 makePrisms ''EValue
 makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv

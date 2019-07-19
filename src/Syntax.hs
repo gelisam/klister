@@ -10,6 +10,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Alpha
+import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import ShortShow
@@ -86,18 +87,22 @@ instance HasScopes Syntax where
       adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
       adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
 
-addScope :: HasScopes a => a -> Scope -> a
-addScope = adjustScope ScopeSet.insert
+addScope :: HasScopes a => Phase -> a -> Scope -> a
+addScope p = adjustScope (ScopeSet.insertAtPhase p)
 
-removeScope :: HasScopes a => a -> Scope -> a
-removeScope = adjustScope ScopeSet.delete
+removeScope :: HasScopes a => Phase -> a -> Scope -> a
+removeScope p = adjustScope (ScopeSet.deleteAtPhase p)
 
-flipScope :: Syntax -> Scope -> Syntax
-flipScope = adjustScope go
+flipScope :: HasScopes a => Phase -> a -> Scope -> a
+flipScope p = adjustScope go
   where
     go sc scs
-      | ScopeSet.member sc scs = ScopeSet.delete sc scs
-      | otherwise              = ScopeSet.insert sc scs
+      | ScopeSet.member p sc scs = ScopeSet.deleteAtPhase p sc scs
+      | otherwise                = ScopeSet.insertAtPhase p sc scs
+
+addScope' :: HasScopes a => a -> Scope -> a
+addScope' = adjustScope ScopeSet.insertUniversally
+
 
 
 syntaxE :: Syntax -> ExprF Syntax

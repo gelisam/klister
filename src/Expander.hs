@@ -26,7 +26,6 @@ module Expander (
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Data.IORef
 
 import Data.Unique
 import Data.List.Extra (maximumOn)
@@ -43,6 +42,7 @@ import Evaluator
 import Expander.Monad
 import Module
 import PartialCore
+import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -127,22 +127,7 @@ getEValue b = do
     Just v -> return v
     Nothing -> throwError (InternalError "No such binding")
 
-expanderContext :: Expand ExpanderContext
-expanderContext = Expand ask
 
-getState :: Expand ExpanderState
-getState = view expanderState <$> expanderContext >>= liftIO . readIORef
-
-modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
-modifyState f = do
-  st <- view expanderState <$> expanderContext
-  liftIO (modifyIORef st f)
-
-freshScope :: Expand Scope
-freshScope = do
-  sc <- view expanderNextScope <$> getState
-  modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
-  return sc
 
 link :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 link dest layer =
@@ -172,20 +157,12 @@ getTasks = view expanderTasks <$> getState
 clearTasks :: Expand ()
 clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
 
-currentPhase :: Expand Phase
-currentPhase = Expand $ view expanderPhase <$> ask
-
-inEarlierPhase :: Expand a -> Expand a
-inEarlierPhase act =
-  Expand $
-  local (over expanderPhase $
-         \(Phase p) -> Phase (1 + p)) $
-  runExpand act
 
 currentEnv :: Expand (Env Value)
 currentEnv = do
   phase <- currentPhase
   maybe Env.empty id . view (expanderEnvironments . at phase) <$> getState
+
 
 expandEval :: Eval a -> Expand a
 expandEval evalAction = do
@@ -212,35 +189,43 @@ addBinding (Stx scs _ name) b = do
 bind :: Binding -> EValue -> Expand ()
 bind b v =
   modifyState $
-  \st ->
-    let ExpansionEnv env = view expanderExpansionEnv st
-    in st { _expanderExpansionEnv =
-            ExpansionEnv $ Map.insert b v env
-          }
+  over expanderExpansionEnv $
+  \(ExpansionEnv env) ->
+    ExpansionEnv $ Map.insert b v env
+
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
   bindings <- bindingTable
-  return $
-    filter (flip ScopeSet.isSubsetOf scs . fst) $
-    fromMaybe [] (Map.lookup x bindings)
+  p <- currentPhase
+  let namesMatch = fromMaybe [] (Map.lookup x bindings)
+  let scopesMatch =
+        [ (scopes, b)
+        | (scopes, b) <- namesMatch
+        , ScopeSet.isSubsetOf p scopes scs
+        ]
+  return scopesMatch
+
+
 
 checkUnambiguous :: ScopeSet -> [ScopeSet] -> Ident -> Expand ()
 checkUnambiguous best candidates blame =
-  let bestSize = ScopeSet.size best
-      candidateSizes = map ScopeSet.size candidates
-  in
-    if length (filter (== bestSize) candidateSizes) > 1
-      then throwError (Ambiguous blame)
-      else return ()
+  do p <- currentPhase
+     let bestSize = ScopeSet.size p best
+     let candidateSizes = map (ScopeSet.size p) candidates
+     if length (filter (== bestSize) candidateSizes) > 1
+       then throwError (Ambiguous blame)
+       else return ()
 
 resolve :: Ident -> Expand Binding
 resolve stx@(Stx scs srcLoc x) = do
+  roots <- view expanderPhaseRoots <$> getState
+  p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of
     [] -> throwError (Unknown (Stx scs srcLoc x))
     candidates ->
-      let best = maximumOn (ScopeSet.size . fst) candidates
+      let best = maximumOn (ScopeSet.size p . fst) candidates
       in checkUnambiguous (fst best) (map fst candidates) stx *>
          return (snd best)
 
@@ -380,7 +365,9 @@ initializeExpansionEnv = do
             Stx _ _ (_, arg, body) <- mustBeVec stx
             Stx _ _ theArg <- mustBeVec arg
             (sc, arg', coreArg) <- prepareVar theArg
-            bodyDest <- schedule $ addScope body sc
+            p <- currentPhase
+            psc <- phaseRoot
+            bodyDest <- schedule $ addScope p (addScope p body sc) psc
             link dest $ CoreLam arg' coreArg bodyDest
         )
       , ( "#%app"
@@ -488,29 +475,33 @@ initializeExpansionEnv = do
             Stx _ _ (mName, mdef) <- mustBeVec macro
             sc <- freshScope
             m <- mustBeIdent mName
-            let m' = addScope m sc
+            p <- currentPhase
+            let m' = addScope p m sc
             b <- freshBinding
             addBinding m' b
-            macroDest <- schedule mdef
-            afterMacro b macroDest dest (addScope body sc)
+            macroDest <- inEarlierPhase $ do
+              psc <- phaseRoot
+              schedule (addScope (prior p) mdef psc)
+            afterMacro b macroDest dest (addScope p body sc)
         )
       ]
 
     expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, SplitCorePtr)
     -- TODO match case keywords hygienically
-    expandPatternCase (Stx _ _ (lhs, rhs)) =
+    expandPatternCase (Stx _ _ (lhs, rhs)) = do
+      p <- currentPhase
       case lhs of
         Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "ident")),
                               patVar])) -> do
           (sc, x', var) <- prepareVar patVar
-          let rhs' = addScope rhs sc
+          let rhs' = addScope p rhs sc
           rhsDest <- schedule rhs'
           let patOut = PatternIdentifier x' var
           return (patOut, rhsDest)
         Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "vec")),
                               Syntax (Stx _ _ (Vec vars))])) -> do
           varInfo <- traverse prepareVar vars
-          let rhs' = foldr (flip addScope) rhs [sc | (sc, _, _) <- varInfo]
+          let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
           rhsDest <- schedule rhs'
           let patOut = PatternVec [(ident, var) | (_, ident, var) <- varInfo]
           return (patOut, rhsDest)
@@ -519,7 +510,7 @@ initializeExpansionEnv = do
                               cdr])) -> do
           (sc, car', carVar) <- prepareVar car
           (sc', cdr', cdrVar) <- prepareVar cdr
-          let rhs' = addScope (addScope rhs sc) sc'
+          let rhs' = addScope p (addScope p rhs sc) sc'
           rhsDest <- schedule rhs'
           let patOut = PatternCons car' carVar cdr' cdrVar
           return (patOut, rhsDest)
@@ -533,7 +524,9 @@ initializeExpansionEnv = do
     prepareVar varStx = do
       sc <- freshScope
       x <- mustBeIdent varStx
-      let x' = addScope x sc
+      p <- currentPhase
+      psc <- phaseRoot
+      let x' = addScope' (addScope p x sc) psc
       b <- freshBinding
       addBinding x' b
       var <- freshVar
@@ -591,12 +584,13 @@ readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   modifyState $ over expanderCompletedModBody $
     (<> Map.singleton dest (Decl declDest restDest))
   tid <- newTaskID
+  p <- currentPhase
   modifyState $
     over expanderTasks $
-      ((tid, MoreDecls restDest (Syntax (Stx scs loc (List (map (flip addScope sc) ds)))) declDest) :)
+      ((tid, MoreDecls restDest (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
   tid' <- newTaskID
   modifyState $
-    over expanderTasks ((tid', ReadyDecl declDest (addScope d sc)) :)
+    over expanderTasks ((tid', ReadyDecl declDest (addScope p d sc)) :)
 
 readyDecls _dest _other =
   error "TODO real error message - malformed module body"
@@ -604,10 +598,9 @@ readyDecls _dest _other =
 
 addReady :: SplitCorePtr -> Syntax -> Expand ()
 addReady dest stx = do
+  p <- currentPhase
   tid <- newTaskID
-  modifyState $
-    \st -> st { _expanderTasks = (tid, Ready dest stx) : view expanderTasks st
-              }
+  modifyState $ over expanderTasks ((tid, Ready dest p stx) :)
 
 afterMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 afterMacro b mdest dest stx = do
@@ -646,8 +639,8 @@ expandTasks = do
 runTask :: (TaskID, ExpanderTask) -> Expand ()
 runTask (tid, task) =
   case task of
-    Ready dest stx ->
-      expandOneExpression dest stx
+    Ready dest p stx ->
+      inPhase p (expandOneExpression dest stx)
     AwaitingSignal _dest _on _k ->
       error "Unimplemented: macro monad interpretation (unblocking)"
     AwaitingMacro dest (TaskAwaitMacro b deps mdest stx) -> do
@@ -721,9 +714,10 @@ expandOneExpression dest stx
           modifyState $ over expanderTasks $ ((tid, AwaitingMacro dest todo) :)
         EUserMacro ExprMacro (ValueClosure macroImpl) -> do
           stepScope <- freshScope
+          p <- currentPhase
           macroVal <- inEarlierPhase $ expandEval $
                       apply macroImpl $
-                      ValueSyntax $ addScope stx stepScope
+                      ValueSyntax $ addScope p stx stepScope
           case macroVal of
             ValueMacroAction act -> do
               res <- interpretMacroAction act
@@ -732,7 +726,7 @@ expandOneExpression dest stx
                 Right expanded ->
                   case expanded of
                     ValueSyntax expansionResult ->
-                      addReady dest (flipScope expansionResult stepScope)
+                      addReady dest (flipScope p expansionResult stepScope)
                     other -> throwError $ ValueNotSyntax other
             other ->
               throwError $ ValueNotMacro other

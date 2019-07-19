@@ -101,9 +101,14 @@ miniTests =
            \       [pure [quote [lambda [x] x]]]]] \
            \  anyRandomWord]"
            , \case
-              Unknown (Stx _ _ "anyRandomWord") -> True
-              _ -> False
+               Unknown (Stx _ _ "anyRandomWord") -> True
+               _ -> False
            )
+        , ("[lambda [x] [let-syntax [m [lambda [_] x]] x]]"
+          , \case
+              Unknown (Stx _ _ "x") -> True
+              _ -> False
+          )
         ]
       ]
 
