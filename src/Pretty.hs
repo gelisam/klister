@@ -79,6 +79,13 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     group $ text "syntax-error" <+> pp env err
   pp env (CoreSendSignal arg) =
     group $ text "send-signal" <+> pp env arg
+  pp env (CoreIdentEq how e1 e2) =
+    group $ text opName <+> pp env e1 <+> pp env e2
+    where
+      opName =
+        case how of
+          Free -> "free-identifier=?"
+          Bound -> "bound-identifier=?"
   pp env (CoreSyntax stx) =
     pp env stx
   pp env (CoreCase scrut pats) =
@@ -231,3 +238,10 @@ instance Pretty VarInfo MacroAction where
     text "syntax-error" <+> pp env err
   pp _env (MacroActionSendSignal s) =
     text "send-signal" <+> viaShow s
+  pp env (MacroActionIdentEq how v1 v2) =
+    group $ text opName <+> pp env v1 <+> pp env v2
+    where
+      opName =
+        case how of
+          Free  -> "free-identifier=?"
+          Bound -> "bound-identifier=?"

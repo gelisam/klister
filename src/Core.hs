@@ -64,6 +64,9 @@ data ScopedVec core = ScopedVec
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedVec
 
+data HowEq = Free | Bound
+  deriving (Eq, Show)
+
 data CoreF core
   = CoreVar Var
   | CoreLam Ident Var core
@@ -72,6 +75,7 @@ data CoreF core
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreSendSignal core                 -- :: Macro ()
+  | CoreIdentEq HowEq core core
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
@@ -123,6 +127,11 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreSendSignal signal1)
              (CoreSendSignal signal2) = do
     alphaCheck signal1 signal2
+  alphaCheck (CoreIdentEq how1 e1 g1)
+             (CoreIdentEq how2 e2 g2) = do
+    guard $ how1 == how2
+    alphaCheck e1 e2
+    alphaCheck g1 g2
   alphaCheck (CoreSyntax syntax1)
              (CoreSyntax syntax2) = do
     alphaCheck syntax1 syntax2
@@ -250,6 +259,10 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(SendSignal "
    ++ shortShow signal
    ++ ")"
+  shortShow (CoreIdentEq how e1 e2)
+    = "(CoreIdentEq " ++ show how
+    ++ " " ++ shortShow e1
+    ++ " " ++ shortShow e2 ++ ")"
   shortShow (CoreSyntax syntax)
     = "(Syntax "
    ++ shortShow syntax

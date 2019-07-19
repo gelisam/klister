@@ -68,6 +68,7 @@ mainWithOptions opts =
                     prettyPrintEnv env c
                     putStr " is "
                     prettyPrintEnv env v
+                    putStrLn ""
                     repl modEnv
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()

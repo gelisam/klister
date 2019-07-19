@@ -75,8 +75,8 @@ bool =
   do Located loc b <- located (Bool <$> (true <|> false))
      return $ Syntax $ Stx ScopeSet.empty loc b
   where
-    true  = (literal "#t" <|> literal "#true")  $> True
-    false = (literal "#f" <|> literal "#false") $> False
+    true  = (literal "#true" <|> literal "#t")  $> True
+    false = (literal "#false" <|> literal "#f") $> False
 
 hashLang :: Parser Syntax
 hashLang =

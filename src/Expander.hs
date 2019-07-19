@@ -416,6 +416,18 @@ initializeExpansionEnv = do
             sigDest <- schedule sig
             link dest $ CoreSendSignal sigDest
         )
+      , ( "bound-identifier=?"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
+            newE <- CoreIdentEq Bound <$> schedule id1 <*> schedule id2
+            link dest newE
+        )
+      , ( "free-identifier=?"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
+            newE <- CoreIdentEq Free <$> schedule id1 <*> schedule id2
+            link dest newE
+        )
       , ( "quote"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, quoted) <- mustBeVec stx
@@ -787,8 +799,29 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
       case evalResult of
         Left evalError -> do
           throwError $ MacroEvaluationError evalError
-        Right value -> pure $ Right value
+        Right value ->
+          case value of
+            ValueMacroAction act -> interpretMacroAction act
+            other -> throwError $ ValueNotMacro other
 interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
   pure $ Left (signal, [])
+interpretMacroAction (MacroActionIdentEq how v1 v2) = do
+  id1 <- getIdent v1
+  id2 <- getIdent v2
+  case how of
+    Free -> do
+      b1 <- resolve id1
+      b2 <- resolve id2
+      return $ Right $ ValueBool $ b1 == b2
+    Bound -> do
+      return $ Right $ ValueBool $ view stxScopeSet id1 == view stxScopeSet id2
+  where
+    getIdent (ValueSyntax stx) = mustBeIdent stx
+    getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+    opName =
+      case how of
+        Free  -> "free-identifier=?"
+        Bound -> "bound-identifier=?"
+

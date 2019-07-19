@@ -1,0 +1,16 @@
+#lang kernel
+
+[define-macros
+  ([thing [lambda [stx] (syntax-error [quote not-allowed-here] stx)]])]
+[define-macros
+  ([thingp [lambda [stx]
+             (syntax-case stx
+               [[vec [_ x]]
+                [>>= [free-identifier=? [quote thing] x]
+                     [lambda [ok]
+                       [if ok [pure [quote #true]] [pure [quote #false]]]]]])]])]
+
+
+
+[example [thingp thing]]
+[example [thingp thingp]]
