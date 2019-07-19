@@ -219,7 +219,6 @@ checkUnambiguous best candidates blame =
 
 resolve :: Ident -> Expand Binding
 resolve stx@(Stx scs srcLoc x) = do
-  roots <- view expanderPhaseRoots <$> getState
   p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of

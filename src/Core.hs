@@ -10,6 +10,7 @@ import Control.Monad
 import Data.Unique
 
 import Alpha
+import Phase
 import ShortShow
 import Signals
 import Syntax
@@ -89,11 +90,18 @@ data CoreF core
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 
+instance Phased core => Phased (CoreF core) where
+  shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
+  shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
+  shift i other = fmap (shift i) other
+
 newtype Core = Core
   { unCore :: CoreF Core }
   deriving (Eq, Show)
 makePrisms ''Core
 
+instance Phased Core where
+  shift i (Core c) = Core (shift i c)
 
 instance AlphaEq a => AlphaEq (SyntaxError a) where
   alphaCheck (SyntaxError locations1 message1)

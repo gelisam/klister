@@ -69,7 +69,8 @@ insertUniversally sc scs = over universalScopes (Set.insert sc) scs
 member :: Phase -> Scope -> ScopeSet -> Bool
 member p sc scs = sc `Set.member` (scopes p scs)
 
-
+instance Phased ScopeSet where
+  shift j = over phaseScopes $ Map.mapKeys (shift j)
 
 isSubsetOf :: Phase -> ScopeSet -> ScopeSet -> Bool
 isSubsetOf p scs1 scs2 =

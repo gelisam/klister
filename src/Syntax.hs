@@ -69,23 +69,33 @@ makeLenses ''ParsedModule
 class HasScopes a where
   getScopes :: a -> ScopeSet
   adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> a -> Scope -> a
+  mapScopes :: (ScopeSet -> ScopeSet) -> a -> a
 
 instance HasScopes (Stx Text) where
   getScopes (Stx scs _ _) = scs
   adjustScope f (Stx scs srcloc x) sc = Stx (f sc scs) srcloc x
+  mapScopes f (Stx scs srcloc x) = Stx (f scs) srcloc x
 
 instance HasScopes Syntax where
   getScopes (Syntax (Stx scs _ _)) = scs
-  adjustScope f (Syntax (Stx scs srcloc e)) sc =
+  adjustScope f stx sc = mapScopes (f sc) stx
+  mapScopes f (Syntax (Stx scs srcloc e)) =
     Syntax $
-    Stx (f sc scs) srcloc $
-    adjustRec e
+    Stx (f scs) srcloc $
+    mapRec e
     where
-      adjustRec (Id x) = Id x
-      adjustRec (Sig s) = Sig s
-      adjustRec (Bool b) = Bool b
-      adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
-      adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
+      mapRec (Id x) = Id x
+      mapRec (Sig s) = Sig s
+      mapRec (Bool b) = Bool b
+      mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
+      mapRec (Vec xs) = Vec $ map (\stx -> mapScopes f stx) xs
+
+instance Phased (Stx Text) where
+  shift i = mapScopes (shift i)
+
+instance Phased Syntax where
+  shift i = mapScopes (shift i)
+
 
 addScope :: HasScopes a => Phase -> a -> Scope -> a
 addScope p = adjustScope (ScopeSet.insertAtPhase p)
@@ -102,7 +112,6 @@ flipScope p = adjustScope go
 
 addScope' :: HasScopes a => a -> Scope -> a
 addScope' = adjustScope ScopeSet.insertUniversally
-
 
 
 syntaxE :: Syntax -> ExprF Syntax
