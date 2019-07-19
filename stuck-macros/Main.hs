@@ -62,14 +62,14 @@ mainWithOptions opts =
                 Left err ->
                   putStrLn "Error when evaluating module examples" *>
                   print err
-                Right (modEnv, examples) ->
+                Right (modEnv, examples) -> do
                   forM_ examples $ \(env, c, v) -> do
                     putStr "Example "
                     prettyPrintEnv env c
                     putStr " is "
                     prettyPrintEnv env v
                     putStrLn ""
-                    repl modEnv
+                  repl modEnv
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
