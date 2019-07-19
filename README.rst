@@ -10,7 +10,7 @@ become available.
 For a description of one way in which this might be useful, please see
 this `talk`_.
 
-.. _talk https://www.youtube.com/watch?v=nUvKoG_V_U0
+.. _talk: https://www.youtube.com/watch?v=nUvKoG_V_U0
 
 
 Overall Design
