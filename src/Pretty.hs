@@ -16,7 +16,6 @@ import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Core
 import Env
 import Module
-import ShortShow
 import Syntax
 import Value
 
@@ -92,6 +91,12 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
          ]
   pp _env (CoreIdentifier x) = viaShow x
   pp _env (CoreSignal s) = viaShow s
+  pp _env (CoreBool b) = text $ if b then "#true" else "#false"
+  pp env (CoreIf b t f) =
+    group $ hang 2 $
+    group (text "if" <+> pp env b) <> line <>
+    group (text "then" <+> pp env t) <> line <>
+    group (text "else" <+> pp env f)
   pp env (CoreIdent x) = pp env x
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
@@ -205,6 +210,7 @@ instance Pretty VarInfo Syntax where
 instance Pretty VarInfo (ExprF Syntax) where
   pp _   (Id x)    = text x
   pp _   (Sig s)   = viaShow s
+  pp _   (Bool b)  = text $ if b then "#true" else "#false"
   pp env (List xs) = parens (group (vsep (map (pp env . syntaxE) xs)))
   pp env (Vec xs)  = brackets (group (vsep (map (pp env . syntaxE) xs)))
 
@@ -216,6 +222,7 @@ instance Pretty VarInfo Value where
   pp env (ValueSyntax stx) = pp env stx
   pp env (ValueMacroAction act) = pp env act
   pp _env (ValueSignal s) = viaShow s
+  pp _env (ValueBool b) = text $ if b then "#true" else "#false"
 
 instance Pretty VarInfo MacroAction where
   pp env (MacroActionPure v) = text "pure" <+> pp env v

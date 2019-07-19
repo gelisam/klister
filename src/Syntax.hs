@@ -43,6 +43,7 @@ makeLenses ''Stx
 data ExprF a
   = Id Text
   | Sig Signal
+  | Bool Bool
   | List [a]
   | Vec [a]
   deriving (Eq, Functor, Show)
@@ -81,6 +82,7 @@ instance HasScopes Syntax where
     where
       adjustRec (Id x) = Id x
       adjustRec (Sig s) = Sig s
+      adjustRec (Bool b) = Bool b
       adjustRec (List xs) = List $ map (\stx -> adjustScope f stx sc) xs
       adjustRec (Vec xs) = Vec $ map (\stx -> adjustScope f stx sc) xs
 
@@ -106,6 +108,7 @@ syntaxText (Syntax (Stx _ _ e)) = go e
   where
     go (Id x) = x
     go (Sig s) = T.pack (show s)
+    go (Bool b) = if b then "#true" else "#false"
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
     go (Vec xs) = "[" <> T.intercalate " " (map syntaxText xs) <> "]"
 
@@ -144,6 +147,7 @@ instance ShortShow a => ShortShow (Stx a) where
 
 instance ShortShow a => ShortShow (ExprF a) where
   shortShow (Id x) = shortShow x
+  shortShow (Bool b) = if b then "#true" else "#false"
   shortShow (List xs) = shortShow xs
   shortShow (Vec xs) = shortShow xs
   shortShow (Sig s) = shortShow s

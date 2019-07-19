@@ -421,6 +421,11 @@ initializeExpansionEnv = do
             Stx _ _ (_ :: Syntax, quoted) <- mustBeVec stx
             link dest $ CoreSyntax quoted
         )
+      , ( "if"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, b, t, f) <- mustBeVec stx
+            link dest =<< CoreIf <$> schedule b <*> schedule t <*> schedule f
+        )
       , ( "ident"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, someId) <- mustBeVec stx
@@ -690,6 +695,7 @@ expandOneExpression dest stx
           case syntaxE stx of
             Id _ -> link dest (CoreVar var)
             Sig _ -> error "Impossible - signal not ident"
+            Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
         EIncompleteMacro mdest -> do
@@ -724,6 +730,7 @@ expandOneExpression dest stx
       Vec xs -> expandOneExpression dest (addApp Vec stx xs)
       List xs -> expandOneExpression dest (addApp List stx xs)
       Sig s -> expandLiteralSignal dest s
+      Bool b -> link dest (CoreBool b)
       Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 -- | Insert a function application marker with a lexical context from

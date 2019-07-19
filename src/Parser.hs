@@ -3,6 +3,7 @@
 module Parser (readExpr, readModule) where
 
 import Data.Char
+import Data.Functor
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -38,7 +39,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> vec <|> ident <|> signal
+expr = list <|> vec <|> ident <|> signal <|> bool
 
 ident :: Parser Syntax
 ident =
@@ -69,6 +70,14 @@ vec =
      Located loc2 _ <- located (literal "]")
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (Vec xs)
 
+bool :: Parser Syntax
+bool =
+  do Located loc b <- located (Bool <$> (true <|> false))
+     return $ Syntax $ Stx ScopeSet.empty loc b
+  where
+    true  = (literal "#t" <|> literal "#true")  $> True
+    false = (literal "#f" <|> literal "#false") $> False
+
 hashLang :: Parser Syntax
 hashLang =
   do literal "#lang"
@@ -77,7 +86,7 @@ hashLang =
 -- | The identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text
 identName =
-  normalIdent <|> specialIdent
+  normalIdent <|> specialIdent <|> magicIdent
 
   where
     normalIdent :: Parser Text
@@ -91,6 +100,8 @@ identName =
       do str <- chunk "+" <|> chunk "-" <|> chunk "..."
          more <- many subseq
          return (str <> T.pack more)
+
+    magicIdent = literal "#%app" $> "#%app"
 
     initial :: Parser Char
     initial =
@@ -111,7 +122,7 @@ identName =
       c `elem` (map toUpper alphabet) ||
       (ord c > 126 && generalCategory c `elem` constituentCats)
     alphabet = "abcdefghijklmnopqrstuvwxyz"
-    isSpecialInit c = c `elem` ("#!$%&*/:<=>?^_~" :: [Char])
+    isSpecialInit c = c `elem` ("!$%&*/:<=>?^_~" :: [Char])
 
     constituentCats = [UppercaseLetter, LowercaseLetter, TitlecaseLetter, ModifierLetter, OtherLetter, NonSpacingMark, LetterNumber, OtherNumber, DashPunctuation, ConnectorPunctuation, OtherPunctuation, CurrencySymbol, MathSymbol, ModifierSymbol, OtherSymbol, PrivateUse]
 

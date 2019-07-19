@@ -25,6 +25,7 @@ data Value
   | ValueSyntax Syntax
   | ValueMacroAction MacroAction
   | ValueSignal Signal
+  | ValueBool Bool
   deriving (Eq, Show)
 
 valueText :: Value -> Text
@@ -32,6 +33,7 @@ valueText (ValueClosure _) = "#<closure>"
 valueText (ValueSyntax stx) = "'" <> syntaxText stx
 valueText (ValueMacroAction m) = T.pack (show m)
 valueText (ValueSignal s) = "#!" <> T.pack (show s)
+valueText (ValueBool b) = if b then "#true" else "#false"
 
 -- | Find a simple description that is suitable for inclusion in error messages.
 describeVal :: Value -> Text
@@ -39,6 +41,7 @@ describeVal (ValueClosure _) = "function"
 describeVal (ValueSyntax _) = "syntax"
 describeVal (ValueMacroAction _) = "macro action"
 describeVal (ValueSignal _) = "signal"
+describeVal (ValueBool _) = "boolean"
 
 data Closure = Closure
   { _closureEnv   :: Env Value

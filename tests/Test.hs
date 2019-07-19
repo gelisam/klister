@@ -81,6 +81,10 @@ miniTests =
             \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
+        , ( "[if #t [lambda [x] x] #f]"
+          , "[if #t [lambda [x] x] #f]"
+          , iF (bool True) (lam $ \x -> x) (bool False)
+          )
         ]
       ]
     expectedFailure =

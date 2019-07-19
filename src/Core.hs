@@ -76,6 +76,8 @@ data CoreF core
   | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
   | CoreSignal Signal
+  | CoreBool Bool
+  | CoreIf core core core
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
@@ -134,6 +136,14 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreSignal s1)
              (CoreSignal s2) =
     guard $ s1 == s2
+  alphaCheck (CoreBool b1)
+             (CoreBool b2) =
+    guard $ b1 == b2
+  alphaCheck (CoreIf b1 t1 f1)
+             (CoreIf b2 t2 f2) = do
+    alphaCheck b1 b2
+    alphaCheck t1 t2
+    alphaCheck f1 f2
   alphaCheck (CoreIdent scopedIdent1)
              (CoreIdent scopedIdent2) = do
     alphaCheck scopedIdent1 scopedIdent2
@@ -256,6 +266,12 @@ instance ShortShow core => ShortShow (CoreF core) where
    ++ ")"
   shortShow (CoreSignal signal)
     = shortShow signal
+  shortShow (CoreBool b)
+    = if b then "#true" else "#false"
+  shortShow (CoreIf b t f)
+    = "(if " ++ shortShow b ++ " " ++
+      shortShow t ++ " " ++
+      shortShow f ++ ")"
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
    ++ shortShow scopedIdent
