@@ -20,6 +20,7 @@ module Expander (
   , mkInitContext
   , initializeExpansionEnv
   , ExpansionErr(..)
+  , ExpanderContext
   ) where
 
 import Control.Lens hiding (List, children)

@@ -38,17 +38,18 @@ main = do
     parser = Options <$> optional (argument str (metavar "FILE"))
 
 mainWithOptions :: Options -> IO ()
-mainWithOptions opts =
+mainWithOptions opts = do
+  ctx <- mkInitContext
+  _ <- execExpand initializeExpansionEnv ctx
   case sourceModule opts of
     Nothing ->
-      repl Env.empty
+      repl ctx Env.empty
     Just file ->
       readModule file >>=
       \case
         Left err -> T.putStrLn err
         Right contents -> do
-          ctx <- mkInitContext
-          done <- execExpand (initializeExpansionEnv *> expandModule contents) ctx
+          done <- execExpand (expandModule contents) ctx
           case done of
             Left err -> do
               putStrLn "Expansion error"
@@ -69,7 +70,7 @@ mainWithOptions opts =
                     putStr " is "
                     prettyPrintEnv env v
                     putStrLn ""
-                  repl modEnv
+                  repl ctx modEnv
 
 tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand l nonCommand =
@@ -80,8 +81,8 @@ tryCommand l nonCommand =
     Left err | T.isPrefixOf (T.pack ":") l -> T.putStrLn err
              | otherwise -> nonCommand l
 
-repl :: Env Value -> IO ()
-repl startEnv = do
+repl :: ExpanderContext -> Env Value -> IO ()
+repl ctx startEnv = do
   theEnv <- newIORef startEnv
   forever $
     do putStr "> "
@@ -91,8 +92,7 @@ repl startEnv = do
          Right ok ->
            do putStrLn "Parser output:"
               T.putStrLn (syntaxText ok)
-              ctx <- mkInitContext
-              c <- execExpand (initializeExpansionEnv *> expandExpr ok) ctx
+              c <- execExpand (expandExpr ok) ctx
               case c of
                 Left err -> putStr "Expander error: " *>
                             T.putStrLn (expansionErrText err)
