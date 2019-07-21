@@ -180,6 +180,10 @@ instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
   ppBind env (Meta d) =
     let (doc, env') = ppBind env d
     in (hang 4 $ text "meta" <> line <> doc, env')
+  ppBind _env (Import mn x) =
+    (hang 4 $ text "import" <+> viaShow mn <+> viaShow x, mempty)
+  ppBind _env (Export x) =
+    (hang 4 $ text "export" <+> viaShow x, mempty)
   ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
 
 instance Pretty VarInfo ModuleName where
@@ -221,11 +225,12 @@ instance Pretty VarInfo Syntax where
   pp env (Syntax e) = pp env e
 
 instance Pretty VarInfo (ExprF Syntax) where
-  pp _   (Id x)    = text x
-  pp _   (Sig s)   = viaShow s
-  pp _   (Bool b)  = text $ if b then "#true" else "#false"
-  pp env (List xs) = parens (group (vsep (map (pp env . syntaxE) xs)))
-  pp env (Vec xs)  = brackets (group (vsep (map (pp env . syntaxE) xs)))
+  pp _   (Id x)     = text x
+  pp _   (String s) = viaShow s
+  pp _   (Sig s)    = viaShow s
+  pp _   (Bool b)   = text $ if b then "#true" else "#false"
+  pp env (List xs)  = parens (group (vsep (map (pp env . syntaxE) xs)))
+  pp env (Vec xs)   = brackets (group (vsep (map (pp env . syntaxE) xs)))
 
 instance Pretty VarInfo Closure where
   pp _ _ = text "#<closure>"

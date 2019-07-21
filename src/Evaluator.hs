@@ -10,8 +10,6 @@ import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.RWS.Strict
-import Control.Monad.State
-import Control.Monad.Writer
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -110,6 +108,9 @@ evalMod basePhase m =
               -- TODO revisit as part of adding exports, where an expansion
               -- environment is created
     evalDecl (Meta decl) = local prior (evalDecl decl)
+    evalDecl (Import _mn _x) = pure ()
+    evalDecl (Export _x) = pure ()
+
 
 apply :: Closure -> Value -> Eval Value
 apply (Closure {..}) value = do
@@ -183,55 +184,67 @@ eval (Core (CoreIf b t f)) =
 eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   identSyntax <- evalAsSyntax ident
   case identSyntax of
-    Syntax (Stx _ _ expr) -> case expr of
-      Sig _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "id"
-          , _typeErrorActual   = "signal"
-          }
-      Bool _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "id"
-          , _typeErrorActual   = "boolean"
-          }
-      List _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "id"
-          , _typeErrorActual   = "list"
-          }
-      Vec _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "id"
-          , _typeErrorActual   = "vec"
-          }
-      Id name -> withScopeOf scope $ Id name
+    Syntax (Stx _ _ expr) ->
+      case expr of
+        Sig _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "id"
+            , _typeErrorActual   = "signal"
+            }
+        String _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "id"
+            , _typeErrorActual   = "string"
+            }
+        Bool _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "id"
+            , _typeErrorActual   = "boolean"
+            }
+        List _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "id"
+            , _typeErrorActual   = "list"
+            }
+        Vec _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "id"
+            , _typeErrorActual   = "vec"
+            }
+        Id name -> withScopeOf scope $ Id name
 eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
 eval (Core (CoreCons (ScopedCons hd tl scope))) = do
   hdSyntax <- evalAsSyntax hd
   tlSyntax <- evalAsSyntax tl
   case tlSyntax of
-    Syntax (Stx _ _ expr) -> case expr of
-      List vs -> withScopeOf scope $ List $ hdSyntax : vs
-      Vec _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "list"
-          , _typeErrorActual   = "vec"
-          }
-      Bool _ ->
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "list"
-          , _typeErrorActual   = "boolean"
-          }
-      Id _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "list"
-          , _typeErrorActual   = "id"
-          }
-      Sig _ -> do
-        throwError $ EvalErrorType $ TypeError
-          { _typeErrorExpected = "list"
-          , _typeErrorActual   = "signal"
-          }
+    Syntax (Stx _ _ expr) ->
+      case expr of
+        List vs -> withScopeOf scope $ List $ hdSyntax : vs
+        Vec _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "list"
+            , _typeErrorActual   = "vec"
+            }
+        String _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "list"
+            , _typeErrorActual   = "string"
+            }
+        Bool _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "list"
+            , _typeErrorActual   = "boolean"
+            }
+        Id _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "list"
+            , _typeErrorActual   = "id"
+            }
+        Sig _ ->
+          throwError $ EvalErrorType $ TypeError
+            { _typeErrorExpected = "list"
+            , _typeErrorActual   = "signal"
+            }
 eval (Core (CoreVec (ScopedVec elements scope))) = do
   vec <- Vec <$> traverse evalAsSyntax elements
   withScopeOf scope vec

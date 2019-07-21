@@ -17,6 +17,7 @@ import Data.Unique
 
 import Numeric.Natural
 
+import Binding
 import Core
 import Env
 import Evaluator
@@ -26,9 +27,9 @@ import Signals
 import SplitCore
 import Scope
 import ScopeSet (ScopeSet)
-import qualified ScopeSet
 import Syntax
 import Value
+import World
 
 newtype Expand a = Expand
   { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
@@ -122,12 +123,6 @@ expansionErrText (InternalError str) =
   "Internal error during expansion! This is a bug in the implementation." <> T.pack str
 
 
-newtype Binding = Binding Unique
-  deriving (Eq, Ord)
-
-instance Show Binding where
-  show (Binding b) = "Binding " ++ show (hashUnique b)
-
 type BindingTable = Map Text [(ScopeSet, Binding)]
 
 newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
@@ -158,7 +153,7 @@ mkInitContext = do
 
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
-  , _expanderEnvironments :: !(Map.Map Phase (Env Value))
+  , _expanderWorld :: !(World Value)
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
@@ -168,15 +163,15 @@ data ExpanderState = ExpanderState
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
   , _expanderModuleName :: Maybe ModuleName
   , _expanderModuleTop :: Maybe ModBodyPtr
-  , _expanderModuleImports :: [Import]
-  , _expanderModuleExports :: [Export]
+  , _expanderModuleImports :: Imports
+  , _expanderModuleExports :: Exports
   , _expanderPhaseRoots :: !(Map Phase Scope)
   }
 
 initExpanderState :: ExpanderState
 initExpanderState = ExpanderState
   { _expanderReceivedSignals = Set.empty
-  , _expanderEnvironments = Map.empty
+  , _expanderWorld = initialWorld
   , _expanderNextScope = Scope 0
   , _expanderBindingTable = Map.empty
   , _expanderExpansionEnv = mempty
@@ -186,8 +181,8 @@ initExpanderState = ExpanderState
   , _expanderCompletedDecls = Map.empty
   , _expanderModuleName = Nothing
   , _expanderModuleTop = Nothing
-  , _expanderModuleImports = []
-  , _expanderModuleExports = []
+  , _expanderModuleImports = noImports
+  , _expanderModuleExports = noExports
   , _expanderPhaseRoots = Map.empty
   }
 

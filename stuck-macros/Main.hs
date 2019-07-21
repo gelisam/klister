@@ -15,8 +15,6 @@ import Options.Applicative
 import System.Exit (exitSuccess)
 import System.IO
 
-import Env (Env)
-import qualified Env as Env
 import Evaluator
 import Expander
 import Module

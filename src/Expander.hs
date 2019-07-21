@@ -14,6 +14,8 @@ module Expander (
   -- * Concrete expanders
     expandModule
   , expandExpr
+  -- * Module system
+  , visit
   -- * Expander monad
   , Expand
   , execExpand
@@ -38,12 +40,15 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
+import System.Directory
 
+import Binding
 import Core
 import Env
 import Evaluator
 import Expander.Monad
 import Module
+import Parser
 import PartialCore
 import Phase
 import Scope
@@ -52,6 +57,7 @@ import Signals
 import SplitCore
 import Syntax
 import Value
+import World
 import qualified ScopeSet
 
 expandExpr :: Syntax -> Expand SplitCore
@@ -79,9 +85,9 @@ expandModule src = do
   body <- getBody modBodyDest
   return $ Module
     { _moduleName = ModuleName $ view moduleSource src
-    , _moduleImports = [] -- TODO
+    , _moduleImports = noImports
     , _moduleBody = body
-    , _moduleExports = [] -- TODO
+    , _moduleExports = noExports
     }
   where
     getBody :: ModBodyPtr -> Expand [Decl Core]
@@ -118,6 +124,38 @@ expandModule src = do
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
         Just e' -> pure $ Example e'
+    flatten (Import m x) = return $ Import m x
+    flatten (Export x) = return $ Export x
+
+visit :: ModuleName -> World Value -> Expand (World Value)
+visit name@(ModuleName file) world =
+  do m <- case view (worldModules . at name) world of
+            Just m -> return m
+            Nothing ->
+              do existsp <- liftIO $ doesFileExist file
+                 when (not existsp) $
+                   throwError $ InternalError $ "No such file: " ++ show file
+                 stx <- liftIO (readModule file) >>=
+                        \case
+                          Left err -> throwError $ InternalError $ show err -- TODO
+                          Right stx -> return stx
+                 expandModule stx
+     let world' = addExpandedModule m world
+     p <- currentPhase
+     let visitedp = Set.member p $
+                    maybe Set.empty id $
+                    view (worldVisited . at name) world'
+     world'' <-
+       if visitedp
+         then return world'
+         else
+           do let i = phaseNum p
+              let m' = shift i m
+              (moreEnv, _) <- expandEval $ evalMod p m'
+              return $
+                over (worldVisited . at name) (Just . maybe (Set.singleton p) (Set.insert p)) $
+                over worldEnvironments (Map.unionWith (<>) moreEnv) world'
+     return world''
 
 
 freshBinding :: Expand Binding
@@ -164,7 +202,7 @@ clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
 currentEnv :: Expand (Env Value)
 currentEnv = do
   phase <- currentPhase
-  maybe Env.empty id . view (expanderEnvironments . at phase) <$> getState
+  maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
 
 
 expandEval :: Eval a -> Expand a
@@ -702,6 +740,7 @@ expandOneExpression dest stx
         EVarMacro var ->
           case syntaxE stx of
             Id _ -> link dest (CoreVar var)
+            String _ -> error "Impossible - string not ident"
             Sig _ -> error "Impossible - signal not ident"
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
@@ -740,6 +779,7 @@ expandOneExpression dest stx
       List xs -> expandOneExpression dest (addApp List stx xs)
       Sig s -> expandLiteralSignal dest s
       Bool b -> link dest (CoreBool b)
+      String s -> expandLiteralString dest s
       Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 -- | Insert a function application marker with a lexical context from
@@ -776,6 +816,10 @@ expandOneDeclaration dest stx
 expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
 expandLiteralSignal dest signal = link dest (CoreSignal signal)
 
+expandLiteralString :: SplitCorePtr -> Text -> Expand ()
+expandLiteralString _dest str =
+  throwError $ InternalError $ "Strings are not valid expressions yet: " ++ show str
+
 interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
 interpretMacroAction (MacroActionPure value) = do
   pure $ Right value
@@ -787,7 +831,7 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
       phase <- view expanderPhase
       s <- getState
       let env = fromMaybe Env.empty
-                          (s ^. expanderEnvironments . at phase)
+                          (s ^. expanderWorld . worldEnvironments . at phase)
       evalResult <- liftIO
                   $ runExceptT
                   $ flip runReaderT env
