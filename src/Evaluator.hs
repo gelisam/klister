@@ -9,14 +9,18 @@ module Evaluator where
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.RWS.Strict
 import Control.Monad.State
 import Control.Monad.Writer
+import Data.Map (Map)
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Core
 import Env
 import Module
+import Phase
 import Signals
 import Syntax
 import Value
@@ -63,25 +67,49 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
 
-evalMod :: CompleteModule -> Eval (Env Value, [(Env Value, Core, Value)])
-evalMod m = do
-  env <- ask
-  runWriterT (runStateT (traverse evalDecl (view moduleBody m)) env) <&>
-    \((_, modEnv), examples) -> (modEnv, examples)
+evalMod ::
+  Phase -> CompleteModule ->
+  Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
+evalMod basePhase m =
+  execRWST (traverse evalDecl (view moduleBody m)) basePhase Map.empty
 
   where
-    evalDecl :: Decl Core -> StateT (Env Value) (WriterT [(Env Value, Core, Value)] Eval) ()
+    currentEnv ::
+      Monoid w =>
+      RWST Phase w (Map Phase (Env Value)) Eval (Env Value)
+    currentEnv = do
+      p <- ask
+      envs <- get
+      case Map.lookup p envs of
+        Nothing -> return Env.empty
+        Just env -> return env
+
+    extendCurrentEnv ::
+      Monoid w =>
+      Var -> Ident -> Value ->
+      RWST Phase w (Map Phase (Env Value)) Eval ()
+    extendCurrentEnv n x v = do
+      p <- ask
+      modify $ \envs ->
+        case Map.lookup p envs of
+          Just env -> Map.insert p (Env.insert n x v env) envs
+          Nothing -> Map.insert p (Env.singleton n x v) envs
+
+
+    evalDecl :: Decl Core -> RWST Phase [(Env Value, Core, Value)] (Map Phase (Env Value)) Eval ()
     evalDecl (Define x n e) = do
-      env <- get
-      v <- lift $ lift $ withEnv env (eval e)
-      modify $ Env.insert n x v
+      env <- currentEnv
+      v <- lift $ withEnv env (eval e)
+      extendCurrentEnv n x v
     evalDecl (Example e) = do
-      env <- get
-      v <- lift $ lift $ withEnv env (eval e)
+      env <- currentEnv
+      v <- lift $ withEnv env (eval e)
       tell [(env, e, v)]
     evalDecl (DefineMacros _macros) = do
-      pure () -- TODO need multiple phases of environment available here
-    evalDecl _ = error "TODO evaluating other decls"
+      pure () -- Macros only live in the transformer environment
+              -- TODO revisit as part of adding exports, where an expansion
+              -- environment is created
+    evalDecl (Meta decl) = local prior (evalDecl decl)
 
 apply :: Closure -> Value -> Eval Value
 apply (Closure {..}) value = do

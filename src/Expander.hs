@@ -15,10 +15,13 @@ module Expander (
     expandModule
   , expandExpr
   -- * Expander monad
+  , Expand
   , execExpand
   , expansionErrText
   , mkInitContext
   , initializeExpansionEnv
+  , currentPhase
+  , expandEval
   , ExpansionErr(..)
   , ExpanderContext
   ) where

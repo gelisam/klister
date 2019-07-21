@@ -4,10 +4,13 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ViewPatterns #-}
 module Pretty (Pretty(..), pretty, prettyPrint, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
+import qualified Data.Map as Map
+import qualified Data.Set as Set
 import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
 import Data.Text (Text)
 import qualified Data.Text.Prettyprint.Doc as PP
@@ -16,8 +19,10 @@ import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Core
 import Env
 import Module
+import Phase
 import Syntax
 import Value
+import World
 
 text :: Text -> Doc ann
 text = PP.pretty
@@ -248,3 +253,24 @@ instance Pretty VarInfo MacroAction where
         case how of
           Free  -> "free-identifier=?"
           Bound -> "bound-identifier=?"
+
+instance Pretty VarInfo Phase where
+  pp = const viaShow
+
+instance Pretty VarInfo a => Pretty VarInfo (World a) where
+  pp env w =
+    vsep $ map (hang 4)
+      [vsep [ text "Expanded modules"
+            , hang 4 $
+              vsep [ pp env n <> line <> pp env m
+                   | (n, m) <- Map.toList (view worldModules w)
+                   ]
+            ]
+      , vsep [ text "Modules visited"
+             , hang 4 $
+               vsep [ pp env mn <> line <>
+                      text "{" <> group (vsep (map (pp env) ps)) <> text "}"
+                    | (mn, Set.toList -> ps) <- Map.toList (view worldVisited w)
+                    ]
+             ]
+      ]

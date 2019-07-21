@@ -4,6 +4,7 @@
 module Parser.Command (Command(..), readCommand) where
 
 import Control.Lens
+import Data.Functor
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -12,7 +13,7 @@ import Text.Megaparsec.Char
 
 import Parser.Common
 
-data Command = Command_Quit
+data Command = CommandQuit | CommandWorld
   deriving (Eq, Ord, Show, Read)
 makePrisms ''Command
 
@@ -23,4 +24,4 @@ readCommand filename fileContents =
     Right ok -> Right ok
 
 command :: Parser Command
-command = Command_Quit <$ literal "q"
+command = (literal "q" $> CommandQuit) <|> (literal "w" $> CommandWorld)

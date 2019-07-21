@@ -1,11 +1,11 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Phase (Phase, runtime, prior, Phased(..)) where
+module Phase (Phase, phaseNum, runtime, prior, Phased(..)) where
 
 import Control.Lens
 import Numeric.Natural
 
-newtype Phase = Phase Natural
+newtype Phase = Phase { phaseNum :: Natural }
   deriving (Eq, Ord, Show)
 makePrisms ''Phase
 

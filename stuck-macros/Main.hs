@@ -19,13 +19,16 @@ import Env (Env)
 import qualified Env as Env
 import Evaluator
 import Expander
+import Module
 import Parser
 import Parser.Command
 import PartialCore
+import Phase
 import Pretty
 import SplitCore
 import Syntax
 import Value
+import World
 
 data Options = Options { sourceModule :: Maybe FilePath }
 
@@ -43,51 +46,33 @@ mainWithOptions opts = do
   _ <- execExpand initializeExpansionEnv ctx
   case sourceModule opts of
     Nothing ->
-      repl ctx Env.empty
+      repl ctx initialWorld
     Just file ->
-      readModule file >>=
+      execExpand (visit (ModuleName file) initialWorld) ctx >>=
       \case
-        Left err -> T.putStrLn err
-        Right contents -> do
-          done <- execExpand (expandModule contents) ctx
-          case done of
-            Left err -> do
-              putStrLn "Expansion error"
-              T.putStrLn (expansionErrText err)
-            Right out -> do
-              putStrLn "Expansion succeeded!"
-              prettyPrint out
-              putStrLn ""
-              run <- runExceptT (runReaderT (runEval (evalMod out)) Env.empty)
-              case run of
-                Left err ->
-                  putStrLn "Error when evaluating module examples" *>
-                  print err
-                Right (modEnv, examples) -> do
-                  forM_ examples $ \(env, c, v) -> do
-                    putStr "Example "
-                    prettyPrintEnv env c
-                    putStr " is "
-                    prettyPrintEnv env v
-                    putStrLn ""
-                  repl ctx modEnv
+        Left err -> T.putStrLn (expansionErrText err)
+        Right theWorld -> repl ctx theWorld
 
-tryCommand :: T.Text -> (T.Text -> IO ()) -> IO ()
-tryCommand l nonCommand =
+tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
+tryCommand w l nonCommand =
   case readCommand "<repl>" l of
-    Right Command_Quit -> do
+    Right CommandQuit -> do
       putStrLn "Leaving."
       exitSuccess
+    Right CommandWorld -> do
+      theWorld <- readIORef w
+      prettyPrint theWorld
+      putStrLn ""
     Left err | T.isPrefixOf (T.pack ":") l -> T.putStrLn err
              | otherwise -> nonCommand l
 
-repl :: ExpanderContext -> Env Value -> IO ()
-repl ctx startEnv = do
-  theEnv <- newIORef startEnv
+repl :: ExpanderContext -> World Value -> IO ()
+repl ctx startWorld = do
+  theWorld <- newIORef startWorld
   forever $
     do putStr "> "
        l <- T.getLine
-       tryCommand l $ \l' -> case readExpr "<repl>" l' of
+       tryCommand theWorld l $ \l' -> case readExpr "<repl>" l' of
          Left err -> T.putStrLn err
          Right ok ->
            do putStrLn "Parser output:"
@@ -105,8 +90,8 @@ repl ctx startEnv = do
                       putStrLn "Complete expression in core:"
                       prettyPrint expr
                       putStrLn ""
-                      currentEnv <- readIORef theEnv
-                      runExceptT (runReaderT (runEval (eval expr)) currentEnv) >>=
+                      currentWorld <- readIORef theWorld
+                      runExceptT (runReaderT (runEval (eval expr)) (phaseEnv runtime currentWorld)) >>=
                         \case
                           Left evalErr -> print evalErr
                           Right val -> prettyPrint val >> putStrLn ""

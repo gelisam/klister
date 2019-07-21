@@ -4,7 +4,7 @@
 module Module where
 
 import Control.Lens
-import Data.Map(Map)
+import Data.Map (Map)
 import Data.Unique
 
 import Core
@@ -78,3 +78,6 @@ data SplitModuleBody a = SplitModuleBody
   { _splitModuleRoot :: ModBodyPtr
   , _splitModuleDescendents :: Map ModBodyPtr (ModuleBodyF a ModBodyPtr)
   }
+
+
+
