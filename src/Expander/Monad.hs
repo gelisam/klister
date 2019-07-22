@@ -1,4 +1,5 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Expander.Monad where
@@ -19,7 +20,6 @@ import Numeric.Natural
 
 import Binding
 import Core
-import Env
 import Evaluator
 import Module
 import ModuleName
@@ -262,3 +262,32 @@ linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
   runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
   getState
+
+freshVar :: Expand Var
+freshVar = Var <$> liftIO newUnique
+
+addReady :: SplitCorePtr -> Syntax -> Expand ()
+addReady dest stx = do
+  p <- currentPhase
+  tid <- newTaskID
+  modifyState $ over expanderTasks ((tid, Ready dest p stx) :)
+
+afterMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+afterMacro b mdest dest stx = do
+  tid <- newTaskID
+  modifyState $
+    \st -> st { _expanderTasks =
+                (tid, AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)) :
+                view expanderTasks st
+              }
+
+-- | Compute the dependencies of a particular slot. The dependencies
+-- are the un-linked child slots. If there are no dependencies, then
+-- the sub-expression is complete. If the slot is not linked then it
+-- depends on itself.
+dependencies :: SplitCorePtr -> Expand [SplitCorePtr]
+dependencies slot =
+  linkStatus slot >>=
+  \case
+    Nothing -> pure [slot]
+    Just c -> foldMap id <$> traverse dependencies c

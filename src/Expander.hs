@@ -639,8 +639,6 @@ initializeExpansionEnv = do
     fakeLoc :: SrcLoc
     fakeLoc = SrcLoc "internals" (SrcPos 0 0) (SrcPos 0 0)
 
-freshVar :: Expand Var
-freshVar = Var <$> liftIO newUnique
 
 readyDecls :: ModBodyPtr -> Syntax -> Expand ()
 readyDecls dest (Syntax (Stx _ _ (List []))) =
@@ -665,22 +663,6 @@ readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
 
 readyDecls _dest _other =
   error "TODO real error message - malformed module body"
-
-
-addReady :: SplitCorePtr -> Syntax -> Expand ()
-addReady dest stx = do
-  p <- currentPhase
-  tid <- newTaskID
-  modifyState $ over expanderTasks ((tid, Ready dest p stx) :)
-
-afterMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-afterMacro b mdest dest stx = do
-  tid <- newTaskID
-  modifyState $
-    \st -> st { _expanderTasks =
-                (tid, AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)) :
-                view expanderTasks st
-              }
 
 
 identifierHeaded :: Syntax -> Maybe Ident
@@ -746,16 +728,6 @@ runTask (tid, task) =
           ((tid', AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
 
 
--- | Compute the dependencies of a particular slot. The dependencies
--- are the un-linked child slots. If there are no dependencies, then
--- the sub-expression is complete. If the slot is not linked then it
--- depends on itself.
-dependencies :: SplitCorePtr -> Expand [SplitCorePtr]
-dependencies slot =
-  linkStatus slot >>=
-  \case
-    Nothing -> pure [slot]
-    Just c -> foldMap id <$> traverse dependencies c
 
 expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression dest stx
