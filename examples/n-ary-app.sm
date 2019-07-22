@@ -30,3 +30,6 @@
 [define const [lambda [x] [lambda [y] x]]]
 
 [example (const [quote a] [quote b])]
+
+[export #%app]
+[export const]

@@ -26,6 +26,8 @@ module Expander (
   , expandEval
   , ExpansionErr(..)
   , ExpanderContext
+  , expanderWorld
+  , getState
   ) where
 
 import Control.Lens hiding (List, children)
@@ -34,6 +36,7 @@ import Control.Monad.Reader
 
 import Data.Unique
 import Data.List.Extra (maximumOn)
+import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
@@ -51,6 +54,7 @@ import Module
 import Parser
 import PartialCore
 import Phase
+import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -127,35 +131,55 @@ expandModule src = do
     flatten (Import m x) = return $ Import m x
     flatten (Export x) = return $ Export x
 
-visit :: ModuleName -> World Value -> Expand (World Value)
-visit name@(ModuleName file) world =
-  do m <- case view (worldModules . at name) world of
-            Just m -> return m
-            Nothing ->
-              do existsp <- liftIO $ doesFileExist file
-                 when (not existsp) $
-                   throwError $ InternalError $ "No such file: " ++ show file
-                 stx <- liftIO (readModule file) >>=
-                        \case
-                          Left err -> throwError $ InternalError $ show err -- TODO
-                          Right stx -> return stx
-                 expandModule stx
-     let world' = addExpandedModule m world
+
+
+loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
+loadModuleFile name@(ModuleName file) =
+  do existsp <- liftIO $ doesFileExist file
+     when (not existsp) $
+       throwError $ InternalError $ "No such file: " ++ show file
+     stx <- liftIO (readModule file) >>=
+            \case
+              Left err -> throwError $ InternalError $ show err -- TODO
+              Right stx -> return stx
+     m <- expandModule stx
+     es <- view expanderModuleExports <$> getState
+
+     modifyState $ over expanderWorld $
+        set (worldExports . at name) (Just es) .
+        addExpandedModule m
+
+     return (m, es)
+ 
+
+visit :: ModuleName -> Expand Exports
+visit name =
+  do (world', m, es) <-
+       do world <- view expanderWorld <$> getState
+          case view (worldModules . at name) world of
+            Just m -> do
+              let es = maybe noExports id (view (worldExports . at name) world)
+              return (world, m, es)
+            Nothing -> do
+              (m, es) <- loadModuleFile name
+              w <- view expanderWorld <$> getState
+              return (w, m, es)
      p <- currentPhase
-     let visitedp = Set.member p $
-                    maybe Set.empty id $
-                    view (worldVisited . at name) world'
-     world'' <-
-       if visitedp
-         then return world'
-         else
+     visitedp <- Set.member p .
+                 maybe Set.empty id .
+                 view (expanderWorld . worldVisited . at name) <$> getState
+     if visitedp
+       then return ()
+       else
            do let i = phaseNum p
               let m' = shift i m
-              (moreEnv, _) <- expandEval $ evalMod p m'
-              return $
-                over (worldVisited . at name) (Just . maybe (Set.singleton p) (Set.insert p)) $
-                over worldEnvironments (Map.unionWith (<>) moreEnv) world'
-     return world''
+              let envs = view worldEnvironments world'
+              (moreEnvs, _) <- expandEval $ evalMod envs p m'
+              modifyState $
+                over (expanderWorld . worldVisited . at name)
+                     (Just . maybe (Set.singleton p) (Set.insert p))
+              modifyState $ set (expanderWorld . worldEnvironments) moreEnvs
+     return es
 
 
 freshBinding :: Expand Binding
@@ -205,7 +229,7 @@ currentEnv = do
   maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
 
 
-expandEval :: Eval a -> Expand a
+expandEval :: Show a => Eval a -> Expand a
 expandEval evalAction = do
   env <- currentEnv
   out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
@@ -285,6 +309,9 @@ mustBeList :: Syntax -> Expand (Stx [Syntax])
 mustBeList (Syntax (Stx scs srcloc (List xs))) = return (Stx scs srcloc xs)
 mustBeList other = throwError (NotList other)
 
+mustBeString :: Syntax -> Expand (Stx Text)
+mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
+mustBeString other = throwError (NotString other)
 
 class MustBeVec a where
   mustBeVec :: Syntax -> Expand (Stx a)
@@ -392,6 +419,32 @@ initializeExpansionEnv = do
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
             addReady exprDest expr
+        )
+      , ("import" --TODO filename relative to source location of import modname
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
+            Stx _ _ modNameStr <- mustBeString mn
+            let modName = ModuleName $ T.unpack modNameStr
+            imported@(Stx _ _ x) <- mustBeIdent ident
+            modExports <- visit modName
+            p <- currentPhase
+            b <- case getExport p x modExports of
+                   Nothing -> throwError $ InternalError $
+                              "Module " ++ show modNameStr ++
+                              " does not export " ++ show x
+                   Just b -> return b
+            addBinding imported b
+
+            linkDecl dest (Import modName imported)
+        )
+      , ("export"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, ident) <- mustBeVec stx
+            exported@(Stx _ _ x) <- mustBeIdent ident
+            p <- currentPhase
+            b <- resolve exported
+            modifyState $ over expanderModuleExports $ addExport p x b
+            linkDecl dest (Export exported)
         )
       ]
 

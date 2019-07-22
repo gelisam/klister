@@ -55,6 +55,15 @@ instance Monoid Exports where
   mempty = noExports
   mappend = (<>)
 
+getExport :: Phase -> Text -> Exports -> Maybe Binding
+getExport p x (Exports es) = view (at p) es >>= view (at x)
+
+addExport :: Phase -> Text -> Binding -> Exports -> Exports
+addExport p x b (Exports es) = Exports $ over (at p) (Just . ins) es
+  where
+    ins Nothing = Map.singleton x b
+    ins (Just m) = Map.insert x b m
+
 noExports :: Exports
 noExports = Exports Map.empty
 

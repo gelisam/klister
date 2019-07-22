@@ -23,7 +23,6 @@ import Signals
 import Syntax
 import Value
 
-
 -- TODO: more precise representation
 type Type = Text
 
@@ -66,10 +65,10 @@ withManyExtendedEnv exts act = local (inserter exts) act
 
 
 evalMod ::
-  Phase -> CompleteModule ->
+  Map Phase (Env Value) -> Phase -> CompleteModule ->
   Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
-evalMod basePhase m =
-  execRWST (traverse evalDecl (view moduleBody m)) basePhase Map.empty
+evalMod startingEnvs basePhase m =
+  execRWST (traverse evalDecl (view moduleBody m)) basePhase startingEnvs
 
   where
     currentEnv ::

@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Main where
 
+import Control.Lens hiding (argument)
 import Control.Monad (forever)
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -46,10 +47,10 @@ mainWithOptions opts = do
     Nothing ->
       repl ctx initialWorld
     Just file ->
-      execExpand (visit (ModuleName file) initialWorld) ctx >>=
+      execExpand (visit (ModuleName file) >> view expanderWorld <$> getState) ctx >>=
       \case
         Left err -> T.putStrLn (expansionErrText err)
-        Right theWorld -> repl ctx theWorld
+        Right w -> repl ctx w
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =

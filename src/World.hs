@@ -7,7 +7,9 @@ import Control.Lens
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
+import Data.Text (Text)
 
+import Binding
 import Env
 import Module
 import Phase
@@ -16,6 +18,7 @@ data World a = World
   { _worldEnvironments :: !(Map Phase (Env a))
   , _worldModules :: !(Map ModuleName CompleteModule)
   , _worldVisited :: !(Map ModuleName (Set Phase))
+  , _worldExports :: !(Map ModuleName Exports)
   }
 makeLenses ''World
 
@@ -27,6 +30,7 @@ initialWorld =
   World { _worldEnvironments = Map.empty
         , _worldModules = Map.empty
         , _worldVisited = Map.empty
+        , _worldExports = Map.empty
         }
 
 addExpandedModule :: CompleteModule -> World a -> World a

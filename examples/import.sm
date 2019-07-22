@@ -1,0 +1,6 @@
+#lang kernel
+
+[import "n-ary-app.sm" #%app]
+[import "n-ary-app.sm" const]
+
+[example (const [quote one] [quote two])]

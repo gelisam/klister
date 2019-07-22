@@ -9,6 +9,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
 import Text.Megaparsec
+import Text.Megaparsec.Char (char)
 import qualified Text.Megaparsec.Char.Lexer as L
 
 import Parser.Common
@@ -39,7 +40,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> vec <|> ident <|> signal <|> bool
+expr = list <|> vec <|> ident <|> signal <|> bool <|> string
 
 ident :: Parser Syntax
 ident =
@@ -77,6 +78,15 @@ bool =
   where
     true  = (literal "#true" <|> literal "#t")  $> True
     false = (literal "#false" <|> literal "#f") $> False
+
+string :: Parser Syntax
+string =
+  do Located loc s <- lexeme (String . T.pack <$> strChars)
+     return $ Syntax $ Stx ScopeSet.empty loc s
+  where
+    strChars = char '"' *> strContents
+    strContents = manyTill L.charLiteral (char '"')
+
 
 hashLang :: Parser Syntax
 hashLang =

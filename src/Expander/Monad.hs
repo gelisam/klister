@@ -82,6 +82,7 @@ data ExpansionErr
   | NotEmpty Syntax
   | NotCons Syntax
   | NotList Syntax
+  | NotString Syntax
   | NotRightLength Natural Syntax
   | NotVec Syntax
   | UnknownPattern Syntax
@@ -104,6 +105,8 @@ expansionErrText (NotCons stx) =
   "Expected non-empty parens, but got " <> syntaxText stx
 expansionErrText (NotList stx) =
   "Expected parens, but got " <> syntaxText stx
+expansionErrText (NotString stx) =
+  "Expected string literal, but got " <> syntaxText stx
 expansionErrText (NotRightLength len stx) =
   "Expected " <> T.pack (show len) <>
   " entries between square brackets, but got " <> syntaxText stx

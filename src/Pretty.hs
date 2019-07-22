@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pretty (Pretty(..), pretty, prettyPrint, prettyEnv, prettyPrintEnv) where
+module Pretty (Pretty(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
@@ -44,6 +44,9 @@ pretty x = renderStrict (layoutPretty defaultLayoutOptions (pp Env.empty x))
 
 prettyPrint :: Pretty ann a => a -> IO ()
 prettyPrint x = putDoc (pp Env.empty x)
+
+prettyPrintLn :: Pretty ann a => a -> IO ()
+prettyPrintLn x = putDoc (pp Env.empty x) >> putStrLn ""
 
 prettyEnv :: Pretty ann a => Env v -> a -> Text
 prettyEnv env x =
@@ -180,10 +183,10 @@ instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
   ppBind env (Meta d) =
     let (doc, env') = ppBind env d
     in (hang 4 $ text "meta" <> line <> doc, env')
-  ppBind _env (Import mn x) =
-    (hang 4 $ text "import" <+> viaShow mn <+> viaShow x, mempty)
-  ppBind _env (Export x) =
-    (hang 4 $ text "export" <+> viaShow x, mempty)
+  ppBind env (Import mn x) =
+    (hang 4 $ text "import" <+> viaShow mn <+> pp env x, mempty)
+  ppBind env (Export x) =
+    (hang 4 $ text "export" <+> pp env x, mempty)
   ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
 
 instance Pretty VarInfo ModuleName where
@@ -192,7 +195,7 @@ instance Pretty VarInfo ModuleName where
 instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (Module f a) where
   pp env m =
     hang 4 $
-    text "module" <> pp env (view moduleName m) <> line <>
+    text "module" <+> pp env (view moduleName m) <> line <>
     concatWith terpri (fst (runState (traverse go (view moduleBody m)) env))
 
     where
@@ -266,16 +269,32 @@ instance Pretty VarInfo a => Pretty VarInfo (World a) where
   pp env w =
     vsep $ map (hang 4)
       [vsep [ text "Expanded modules"
-            , hang 4 $
-              vsep [ pp env n <> line <> pp env m
-                   | (n, m) <- Map.toList (view worldModules w)
+            , vsep [ pp env m
+                   | (_, m) <- Map.toList (view worldModules w)
                    ]
             ]
       , vsep [ text "Modules visited"
-             , hang 4 $
-               vsep [ pp env mn <> line <>
+             , vsep [ hang 4 $
+                      pp env mn <> line <>
                       text "{" <> group (vsep (map (pp env) ps)) <> text "}"
                     | (mn, Set.toList -> ps) <- Map.toList (view worldVisited w)
                     ]
              ]
+      , vsep [ text "Environments"
+             , hang 4 $
+               vsep [ hang 4 $
+                      pp env p <> line <>
+                      pp env rho
+                    | (p, rho) <- Map.toList $ view worldEnvironments w
+                    ]
+             ]
       ]
+
+instance Pretty VarInfo Text where
+  pp _ = text
+
+instance Pretty VarInfo a => Pretty VarInfo (Env a) where
+  pp env rho =
+    vsep [ hang 4 $ viaShow x <+> pp env n <> line <> pp env v
+         | (x, n, v) <- Env.toList rho
+         ]
