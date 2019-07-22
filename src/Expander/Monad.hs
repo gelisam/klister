@@ -23,6 +23,7 @@ import Env
 import Evaluator
 import Module
 import ModuleName
+import PartialCore
 import Phase
 import Signals
 import SplitCore
@@ -236,9 +237,28 @@ phaseRoot = do
 
 makePrisms ''Binding
 makePrisms ''ExpansionErr
-
-
 makePrisms ''EValue
 makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
 makePrisms ''ExpanderTask
+
+linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
+linkExpr dest layer =
+  modifyState $
+  \st -> st { _expanderCompletedCore =
+              _expanderCompletedCore st <> Map.singleton dest layer
+            }
+
+linkDecl :: DeclPtr -> Decl SplitCorePtr -> Expand ()
+linkDecl dest decl =
+  modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
+
+linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
+linkStatus slot = do
+  complete <- view expanderCompletedCore <$> getState
+  return $ Map.lookup slot complete
+
+linkedCore :: SplitCorePtr -> Expand (Maybe Core)
+linkedCore slot =
+  runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
+  getState

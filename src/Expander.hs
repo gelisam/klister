@@ -36,7 +36,6 @@ import Control.Monad.Reader
 
 import Data.Unique
 import Data.List.Extra (maximumOn)
-import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
@@ -44,7 +43,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import System.Directory
-import System.FilePath
 
 import Binding
 import Core
@@ -54,9 +52,7 @@ import Expander.Monad
 import Module
 import ModuleName
 import Parser
-import PartialCore
 import Phase
-import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -196,29 +192,6 @@ getEValue b = do
   case Map.lookup b env of
     Just v -> return v
     Nothing -> throwError (InternalError "No such binding")
-
-
-
-link :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
-link dest layer =
-  modifyState $
-  \st -> st { _expanderCompletedCore =
-              _expanderCompletedCore st <> Map.singleton dest layer
-            }
-
-linkDecl :: DeclPtr -> Decl SplitCorePtr -> Expand ()
-linkDecl dest decl =
-  modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
-
-linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
-linkStatus slot = do
-  complete <- view expanderCompletedCore <$> getState
-  return $ Map.lookup slot complete
-
-linkedCore :: SplitCorePtr -> Expand (Maybe Core)
-linkedCore slot =
-  runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
-  getState
 
 
 getTasks :: Expand [(TaskID, ExpanderTask)]
@@ -466,27 +439,27 @@ initializeExpansionEnv = do
             p <- currentPhase
             psc <- phaseRoot
             bodyDest <- schedule $ addScope p (addScope p body sc) psc
-            link dest $ CoreLam arg' coreArg bodyDest
+            linkExpr dest $ CoreLam arg' coreArg bodyDest
         )
       , ( "#%app"
         , \ dest stx -> do
             Stx _ _ (_, fun, arg) <- mustBeVec stx
             funDest <- schedule fun
             argDest <- schedule arg
-            link dest $ CoreApp funDest argDest
+            linkExpr dest $ CoreApp funDest argDest
         )
       , ( "pure"
         , \ dest stx -> do
             Stx _ _ (_ :: Syntax, v) <- mustBeVec stx
             argDest <- schedule v
-            link dest $ CorePure argDest
+            linkExpr dest $ CorePure argDest
         )
       , ( ">>="
         , \ dest stx -> do
             Stx _ _ (_, act, cont) <- mustBeVec stx
             actDest <- schedule act
             contDest <- schedule cont
-            link dest $ CoreBind actDest contDest
+            linkExpr dest $ CoreBind actDest contDest
         )
       , ( "syntax-error"
         , \dest stx -> do
@@ -494,54 +467,54 @@ initializeExpansionEnv = do
             Stx _ _ (msg, locs) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
             msgDest <- schedule msg
             locDests <- traverse schedule locs
-            link dest $ CoreSyntaxError (SyntaxError locDests msgDest)
+            linkExpr dest $ CoreSyntaxError (SyntaxError locDests msgDest)
         )
       , ( "send-signal"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, sig) <- mustBeVec stx
             sigDest <- schedule sig
-            link dest $ CoreSendSignal sigDest
+            linkExpr dest $ CoreSendSignal sigDest
         )
       , ( "bound-identifier=?"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
             newE <- CoreIdentEq Bound <$> schedule id1 <*> schedule id2
-            link dest newE
+            linkExpr dest newE
         )
       , ( "free-identifier=?"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
             newE <- CoreIdentEq Free <$> schedule id1 <*> schedule id2
-            link dest newE
+            linkExpr dest newE
         )
       , ( "quote"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, quoted) <- mustBeVec stx
-            link dest $ CoreSyntax quoted
+            linkExpr dest $ CoreSyntax quoted
         )
       , ( "if"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, b, t, f) <- mustBeVec stx
-            link dest =<< CoreIf <$> schedule b <*> schedule t <*> schedule f
+            linkExpr dest =<< CoreIf <$> schedule b <*> schedule t <*> schedule f
         )
       , ( "ident"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, someId) <- mustBeVec stx
             x@(Stx _ _ _) <- mustBeIdent someId
-            link dest $ CoreIdentifier x
+            linkExpr dest $ CoreIdentifier x
         )
       , ( "ident-syntax"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, someId, source) <- mustBeVec stx
             idDest <- schedule someId
             sourceDest <- schedule source
-            link dest $ CoreIdent $ ScopedIdent idDest sourceDest
+            linkExpr dest $ CoreIdent $ ScopedIdent idDest sourceDest
         )
       , ( "empty-list-syntax"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, source) <- mustBeVec stx
             sourceDest <- schedule source
-            link dest $ CoreEmpty $ ScopedEmpty sourceDest
+            linkExpr dest $ CoreEmpty $ ScopedEmpty sourceDest
         )
       , ( "cons-list-syntax"
         , \dest stx -> do
@@ -549,7 +522,7 @@ initializeExpansionEnv = do
             carDest <- schedule car
             cdrDest <- schedule cdr
             sourceDest <- schedule source
-            link dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
+            linkExpr dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
         )
       , ( "vec-syntax"
         , \dest stx -> do
@@ -557,7 +530,7 @@ initializeExpansionEnv = do
             Stx _ _ vecItems <- mustBeVec vec
             vecDests <- traverse schedule vecItems
             sourceDest <- schedule source
-            link dest $ CoreVec $ ScopedVec vecDests sourceDest
+            linkExpr dest $ CoreVec $ ScopedVec vecDests sourceDest
         )
       , ( "syntax-case"
         , \dest stx -> do
@@ -565,7 +538,7 @@ initializeExpansionEnv = do
             Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
             scrutDest <- schedule scrutinee
             patternDests <- traverse (mustBeVec >=> expandPatternCase) patterns
-            link dest $ CoreCase scrutDest patternDests
+            linkExpr dest $ CoreCase scrutDest patternDests
         )
       , ( "let-syntax"
         , \dest stx -> do
@@ -797,7 +770,7 @@ expandOneExpression dest stx
           throwError $ InternalError "Current context won't accept declarations"
         EVarMacro var ->
           case syntaxE stx of
-            Id _ -> link dest (CoreVar var)
+            Id _ -> linkExpr dest (CoreVar var)
             String _ -> error "Impossible - string not ident"
             Sig _ -> error "Impossible - signal not ident"
             Bool _ -> error "Impossible - boolean not ident"
@@ -836,7 +809,7 @@ expandOneExpression dest stx
       Vec xs -> expandOneExpression dest (addApp Vec stx xs)
       List xs -> expandOneExpression dest (addApp List stx xs)
       Sig s -> expandLiteralSignal dest s
-      Bool b -> link dest (CoreBool b)
+      Bool b -> linkExpr dest (CoreBool b)
       String s -> expandLiteralString dest s
       Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
@@ -872,7 +845,7 @@ expandOneDeclaration dest stx
 
 -- | Link the destination to a literal signal object
 expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
-expandLiteralSignal dest signal = link dest (CoreSignal signal)
+expandLiteralSignal dest signal = linkExpr dest (CoreSignal signal)
 
 expandLiteralString :: SplitCorePtr -> Text -> Expand ()
 expandLiteralString _dest str =
