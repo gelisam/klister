@@ -12,10 +12,12 @@ import Text.Megaparsec
 import Text.Megaparsec.Char (char)
 import qualified Text.Megaparsec.Char.Lexer as L
 
+import ModuleName
 import Parser.Common
 import Signals
 import Syntax
 import Syntax.Lexical
+import Syntax.SrcLoc
 import qualified ScopeSet
 
 
@@ -23,10 +25,11 @@ import qualified ScopeSet
 readModule :: FilePath -> IO (Either Text (ParsedModule Syntax))
 readModule filename =
   do contents <- T.readFile filename
+     name <- moduleNameFromPath filename
      case parse source filename contents of
        Left err -> pure $ Left $ T.pack $ errorBundlePretty err
        Right (lang, decls) ->
-         pure $ Right $ ParsedModule { _moduleSource = filename
+         pure $ Right $ ParsedModule { _moduleSource = name
                                      , _moduleLanguage = lang
                                      , _moduleContents = decls
                                      }

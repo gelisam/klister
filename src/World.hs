@@ -9,9 +9,9 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import Data.Text (Text)
 
-import Binding
 import Env
 import Module
+import ModuleName
 import Phase
 
 data World a = World

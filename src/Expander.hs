@@ -52,6 +52,7 @@ import Env
 import Evaluator
 import Expander.Monad
 import Module
+import ModuleName
 import Parser
 import PartialCore
 import Phase
@@ -61,6 +62,7 @@ import ScopeSet (ScopeSet)
 import Signals
 import SplitCore
 import Syntax
+import Syntax.SrcLoc
 import Value
 import World
 import qualified ScopeSet
@@ -88,8 +90,9 @@ expandModule src = do
   readyDecls modBodyDest (view moduleContents src)
   expandTasks
   body <- getBody modBodyDest
+  let modName = view moduleSource src
   return $ Module
-    { _moduleName = ModuleName $ view moduleSource src
+    { _moduleName = modName
     , _moduleImports = noImports
     , _moduleBody = body
     , _moduleExports = noExports
@@ -134,13 +137,13 @@ expandModule src = do
 
 
 
-loadModuleFile :: Stx ModuleName -> Expand (CompleteModule, Exports)
-loadModuleFile (Stx _ loc name@(ModuleName file)) =
-  do origDir <- takeDirectory <$> liftIO (canonicalizePath (view srcLocFilePath loc))
-     existsp <- liftIO $ withCurrentDirectory origDir $ doesFileExist file
+loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
+loadModuleFile modName =
+  do let file = moduleNameToPath modName
+     existsp <- liftIO $ doesFileExist file
      when (not existsp) $
-       throwError $ InternalError $ "No such file: " ++ show file
-     stx <- liftIO (withCurrentDirectory origDir $ readModule file) >>=
+       throwError $ InternalError $ "No such file: " ++ show (moduleNameToPath modName)
+     stx <- liftIO (readModule file) >>=
             \case
               Left err -> throwError $ InternalError $ show err -- TODO
               Right stx -> return stx
@@ -148,19 +151,19 @@ loadModuleFile (Stx _ loc name@(ModuleName file)) =
      es <- view expanderModuleExports <$> getState
 
      modifyState $ over expanderWorld $
-        set (worldExports . at name) (Just es) .
+        set (worldExports . at modName) (Just es) .
         addExpandedModule m
 
      return (m, es)
- 
 
-visit :: Stx ModuleName -> Expand Exports
-visit modName@(Stx _ _ name) =
+
+visit :: ModuleName -> Expand Exports
+visit modName =
   do (world', m, es) <-
        do world <- view expanderWorld <$> getState
-          case view (worldModules . at name) world of
+          case view (worldModules . at modName) world of
             Just m -> do
-              let es = maybe noExports id (view (worldExports . at name) world)
+              let es = maybe noExports id (view (worldExports . at modName) world)
               return (world, m, es)
             Nothing -> do
               (m, es) <- loadModuleFile modName
@@ -169,7 +172,7 @@ visit modName@(Stx _ _ name) =
      p <- currentPhase
      visitedp <- Set.member p .
                  maybe Set.empty id .
-                 view (expanderWorld . worldVisited . at name) <$> getState
+                 view (expanderWorld . worldVisited . at modName) <$> getState
      if visitedp
        then return ()
        else
@@ -178,7 +181,7 @@ visit modName@(Stx _ _ name) =
               let envs = view worldEnvironments world'
               (moreEnvs, _) <- expandEval $ evalMod envs p m'
               modifyState $
-                over (expanderWorld . worldVisited . at name)
+                over (expanderWorld . worldVisited . at modName)
                      (Just . maybe (Set.singleton p) (Set.insert p))
               modifyState $ set (expanderWorld . worldEnvironments) moreEnvs
      return es
@@ -425,8 +428,8 @@ initializeExpansionEnv = do
       , ("import" --TODO filename relative to source location of import modname
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
-            modNameStr <- mustBeString mn
-            let modName = ModuleName . T.unpack <$> modNameStr
+            Stx _ loc modNameStr <- mustBeString mn
+            modName <- liftIO $ moduleNameFromLocatedPath loc (T.unpack modNameStr)
             imported@(Stx _ _ x) <- mustBeIdent ident
             modExports <- visit modName
             p <- currentPhase

@@ -22,6 +22,7 @@ import Core
 import Env
 import Evaluator
 import Module
+import ModuleName
 import Phase
 import Signals
 import SplitCore

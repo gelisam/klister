@@ -8,6 +8,7 @@ import Core
 import ScopeSet ()
 import Signals
 import Syntax
+import Syntax.SrcLoc
 
 fakeLoc :: SrcLoc
 fakeLoc = SrcLoc "<fake>" (SrcPos 0 0) (SrcPos 0 0)

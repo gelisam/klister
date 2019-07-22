@@ -10,28 +10,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Alpha
+import ModuleName
 import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import ShortShow
 import qualified ScopeSet
 import Signals (Signal)
-
-
-data SrcPos = SrcPos
-  { _srcPosLine :: !Int
-  , _srcPosCol  :: !Int
-  }
-  deriving (Eq, Show)
-makeLenses ''SrcPos
-
-data SrcLoc = SrcLoc
-  { _srcLocFilePath :: !FilePath
-  , _srcLocStart    :: !SrcPos
-  , _srcLocEnd      :: !SrcPos
-  }
-  deriving (Eq, Show)
-makeLenses ''SrcLoc
+import Syntax.SrcLoc
 
 data Stx a = Stx
   { _stxScopeSet :: ScopeSet
@@ -60,7 +46,7 @@ makePrisms ''Syntax
 type Ident = Stx Text
 
 data ParsedModule a = ParsedModule
-  { _moduleSource :: FilePath
+  { _moduleSource :: ModuleName
   , _moduleLanguage :: a
   , _moduleContents :: a
   }
@@ -131,8 +117,6 @@ syntaxText (Syntax (Stx _ _ e)) = go e
 
 
 
-instance AlphaEq SrcLoc where
-  alphaCheck x y = guard (x == y)
 
 instance AlphaEq a => AlphaEq (Stx a) where
   alphaCheck (Stx scopeSet1 srcLoc1 x1)

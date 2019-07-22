@@ -19,8 +19,10 @@ import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Core
 import Env
 import Module
+import ModuleName
 import Phase
 import Syntax
+import Syntax.SrcLoc
 import Value
 import World
 
@@ -190,7 +192,7 @@ instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
   ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
 
 instance Pretty VarInfo ModuleName where
-  pp _ (ModuleName n) = viaShow n
+  pp _ n = viaShow (moduleNameText n)
 
 instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (Module f a) where
   pp env m =

@@ -13,20 +13,17 @@ import qualified Data.Text.IO as T
 
 import Options.Applicative
 
-import System.Directory
 import System.Exit (exitSuccess)
-import System.FilePath
 import System.IO
 
 import Evaluator
 import Expander
-import Module
+import ModuleName
 import Parser
 import Parser.Command
 import PartialCore
 import Phase
 import Pretty
-import qualified ScopeSet
 import SplitCore
 import Syntax
 import Value
@@ -50,10 +47,8 @@ mainWithOptions opts = do
     Nothing ->
       repl ctx initialWorld
     Just file -> do
-      fakePath <- getCurrentDirectory <&> (</> "fake-file")
-      let fakeLoc = SrcLoc fakePath (SrcPos 0 0) (SrcPos 0 0)
-      let modStx = Stx ScopeSet.empty fakeLoc (ModuleName file)
-      execExpand (visit modStx >> view expanderWorld <$> getState) ctx >>=
+      mn <- moduleNameFromPath file
+      execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
         \case
           Left err -> T.putStrLn (expansionErrText err)
           Right w -> repl ctx w

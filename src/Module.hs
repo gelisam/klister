@@ -1,7 +1,29 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Module where
+module Module (
+    Module(..)
+  , moduleName
+  , moduleImports
+  , moduleExports
+  , moduleBody
+  , CompleteModule
+  , Decl(..)
+  , Imports
+  , noImports
+  , Exports
+  , getExport
+  , addExport
+  , noExports
+  , ModulePtr
+  , newModulePtr
+  , ModBodyPtr
+  , newModBodyPtr
+  , ModuleBodyF(..)
+  , SplitModuleBody(..)
+  , DeclPtr
+  , newDeclPtr
+  ) where
 
 import Control.Lens
 import Data.Map (Map)
@@ -9,16 +31,16 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Unique
+import System.Directory
+import System.FilePath
 
 import Binding
 import Core
-import Syntax
+import ModuleName
 import Phase
-
-
-newtype ModuleName = ModuleName FilePath
-  deriving (Eq, Ord, Show)
+import Syntax
 
 newtype ModulePtr = ModulePtr Unique
   deriving (Eq, Ord)
@@ -96,7 +118,7 @@ data Decl a
   | DefineMacros [(Ident, a)]
   | Meta (Decl a)
   | Example a
-  | Import (Stx ModuleName) Ident
+  | Import ModuleName Ident
   | Export Ident
   deriving (Functor, Show)
 
