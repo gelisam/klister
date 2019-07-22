@@ -44,6 +44,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import System.Directory
+import System.FilePath
 
 import Binding
 import Core
@@ -133,12 +134,13 @@ expandModule src = do
 
 
 
-loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
-loadModuleFile name@(ModuleName file) =
-  do existsp <- liftIO $ doesFileExist file
+loadModuleFile :: Stx ModuleName -> Expand (CompleteModule, Exports)
+loadModuleFile (Stx _ loc name@(ModuleName file)) =
+  do origDir <- takeDirectory <$> liftIO (canonicalizePath (view srcLocFilePath loc))
+     existsp <- liftIO $ withCurrentDirectory origDir $ doesFileExist file
      when (not existsp) $
        throwError $ InternalError $ "No such file: " ++ show file
-     stx <- liftIO (readModule file) >>=
+     stx <- liftIO (withCurrentDirectory origDir $ readModule file) >>=
             \case
               Left err -> throwError $ InternalError $ show err -- TODO
               Right stx -> return stx
@@ -152,8 +154,8 @@ loadModuleFile name@(ModuleName file) =
      return (m, es)
  
 
-visit :: ModuleName -> Expand Exports
-visit name =
+visit :: Stx ModuleName -> Expand Exports
+visit modName@(Stx _ _ name) =
   do (world', m, es) <-
        do world <- view expanderWorld <$> getState
           case view (worldModules . at name) world of
@@ -161,7 +163,7 @@ visit name =
               let es = maybe noExports id (view (worldExports . at name) world)
               return (world, m, es)
             Nothing -> do
-              (m, es) <- loadModuleFile name
+              (m, es) <- loadModuleFile modName
               w <- view expanderWorld <$> getState
               return (w, m, es)
      p <- currentPhase
@@ -423,8 +425,8 @@ initializeExpansionEnv = do
       , ("import" --TODO filename relative to source location of import modname
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
-            Stx _ _ modNameStr <- mustBeString mn
-            let modName = ModuleName $ T.unpack modNameStr
+            modNameStr <- mustBeString mn
+            let modName = ModuleName . T.unpack <$> modNameStr
             imported@(Stx _ _ x) <- mustBeIdent ident
             modExports <- visit modName
             p <- currentPhase

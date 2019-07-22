@@ -38,7 +38,7 @@ data Stx a = Stx
   , _stxSrcLoc   :: !SrcLoc
   , _stxValue    :: a
   }
-  deriving (Eq, Show)
+  deriving (Eq, Functor, Show)
 makeLenses ''Stx
 
 data ExprF a

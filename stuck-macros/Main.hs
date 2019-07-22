@@ -13,7 +13,9 @@ import qualified Data.Text.IO as T
 
 import Options.Applicative
 
+import System.Directory
 import System.Exit (exitSuccess)
+import System.FilePath
 import System.IO
 
 import Evaluator
@@ -24,6 +26,7 @@ import Parser.Command
 import PartialCore
 import Phase
 import Pretty
+import qualified ScopeSet
 import SplitCore
 import Syntax
 import Value
@@ -46,11 +49,14 @@ mainWithOptions opts = do
   case sourceModule opts of
     Nothing ->
       repl ctx initialWorld
-    Just file ->
-      execExpand (visit (ModuleName file) >> view expanderWorld <$> getState) ctx >>=
-      \case
-        Left err -> T.putStrLn (expansionErrText err)
-        Right w -> repl ctx w
+    Just file -> do
+      fakePath <- getCurrentDirectory <&> (</> "fake-file")
+      let fakeLoc = SrcLoc fakePath (SrcPos 0 0) (SrcPos 0 0)
+      let modStx = Stx ScopeSet.empty fakeLoc (ModuleName file)
+      execExpand (visit modStx >> view expanderWorld <$> getState) ctx >>=
+        \case
+          Left err -> T.putStrLn (expansionErrText err)
+          Right w -> repl ctx w
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =

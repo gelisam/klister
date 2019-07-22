@@ -96,7 +96,7 @@ data Decl a
   | DefineMacros [(Ident, a)]
   | Meta (Decl a)
   | Example a
-  | Import ModuleName Ident
+  | Import (Stx ModuleName) Ident
   | Export Ident
   deriving (Functor, Show)
 

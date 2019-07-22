@@ -9,6 +9,7 @@ dependencies:
   - containers
   - directory
   - extra
+  - filepath
   - lens
   - megaparsec
   - mtl
