@@ -22,8 +22,6 @@ import SplitCore
 import Syntax.SrcLoc
 import Syntax
 
-import Debug.Trace
-
 main :: IO ()
 main = defaultMain tests
 
