@@ -19,6 +19,9 @@ import PartialCore
 newtype SplitCorePtr = SplitCorePtr Unique
   deriving (Eq, Ord)
 
+instance Show SplitCorePtr where
+  show (SplitCorePtr u) = "(SplitCorePtr " ++ show (hashUnique u) ++ ")"
+
 newSplitCorePtr :: IO SplitCorePtr
 newSplitCorePtr = SplitCorePtr <$> newUnique
 

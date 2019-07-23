@@ -257,7 +257,7 @@ checkUnambiguous best candidates blame =
      let bestSize = ScopeSet.size p best
      let candidateSizes = map (ScopeSet.size p) candidates
      if length (filter (== bestSize) candidateSizes) > 1
-       then throwError (Ambiguous blame)
+       then throwError (Ambiguous p blame candidates)
        else return ()
 
 resolve :: Ident -> Expand Binding
@@ -362,12 +362,13 @@ initializeExpansionEnv = do
         )
       ]
 
-    declPrims :: [(Text, DeclPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, Scope -> DeclPtr -> Syntax -> Expand ())]
     declPrims =
       [ ("define"
-        , \ dest stx -> do
+        , \ sc dest stx -> do
+            p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustBeVec stx
-            x <- mustBeIdent varStx
+            x <- flip (addScope p) sc <$> mustBeIdent varStx
             b <- freshBinding
             addBinding x b
             var <- freshVar
@@ -377,35 +378,39 @@ initializeExpansionEnv = do
             addReady exprDest expr
         )
       ,("define-macros"
-        , \ dest stx -> do
+        , \ sc dest stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustBeVec stx
             Stx _ _ macroDefs <- mustBeList macroList
+            p <- currentPhase
             macros <- for macroDefs $ \def -> do
               Stx _ _ (mname, mdef) <- mustBeVec def
-              theName <- mustBeIdent mname
+              theName <- flip (addScope p) sc <$> mustBeIdent mname
               b <- freshBinding
               addBinding theName b
-              macroDest <- schedule mdef
+              macroDest <- inEarlierPhase $ do
+                psc <- phaseRoot
+                schedule (addScope p (addScope (prior p) mdef psc) sc)
               bind b $ EIncompleteMacro macroDest
               return (theName, macroDest)
             linkDecl dest $ DefineMacros macros
 
         )
       , ("example"
-        , \ dest stx -> do
+        , \ sc dest stx -> do
+            p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
-            addReady exprDest expr
+            addReady exprDest (addScope p expr sc)
         )
       , ("import" --TODO filename relative to source location of import modname
-        , \dest stx -> do
+        , \sc dest stx -> do
+            p <- currentPhase
             Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
             Stx _ loc modNameStr <- mustBeString mn
             modName <- liftIO $ moduleNameFromLocatedPath loc (T.unpack modNameStr)
-            imported@(Stx _ _ x) <- mustBeIdent ident
+            imported@(Stx _ _ x) <- flip (addScope p) sc <$> mustBeIdent ident
             modExports <- visit modName
-            p <- currentPhase
             b <- case getExport p x modExports of
                    Nothing -> throwError $ InternalError $
                               "Module " ++ show modNameStr ++
@@ -416,7 +421,7 @@ initializeExpansionEnv = do
             linkDecl dest (Import modName imported)
         )
       , ("export"
-        , \dest stx -> do
+        , \_sc dest stx -> do
             Stx _ _ (_ :: Syntax, ident) <- mustBeVec stx
             exported@(Stx _ _ x) <- mustBeIdent ident
             p <- currentPhase
@@ -619,7 +624,7 @@ initializeExpansionEnv = do
       addBinding (Stx ScopeSet.empty fakeLoc name) b
       bind b val
 
-    addDeclPrimitive :: Text -> (DeclPtr -> Syntax -> Expand ()) -> Expand ()
+    addDeclPrimitive :: Text -> (Scope -> DeclPtr -> Syntax -> Expand ()) -> Expand ()
     addDeclPrimitive name impl = do
       let val = EPrimDeclMacro impl
       b <- freshBinding
@@ -633,8 +638,17 @@ initializeExpansionEnv = do
       let val = EPrimMacro impl
       b <- freshBinding
       -- FIXME primitive scope:
-      addBinding (Stx ScopeSet.empty fakeLoc name) b
+      let ident = Stx ScopeSet.empty fakeLoc name
+      ident0 <- addRootScope ident
+      ident1 <- inEarlierPhase $ addRootScope ident
+      addBinding ident0 b
+      addBinding ident1 b
       bind b val
+
+    addRootScope stx = do
+      p <- currentPhase
+      rsc <- phaseRoot
+      return (addScope p stx rsc)
 
     fakeLoc :: SrcLoc
     fakeLoc = SrcLoc "internals" (SrcPos 0 0) (SrcPos 0 0)
@@ -656,10 +670,10 @@ readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   p <- currentPhase
   modifyState $
     over expanderTasks $
-      ((tid, MoreDecls restDest (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
+      ((tid, MoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
   tid' <- newTaskID
   modifyState $
-    over expanderTasks ((tid', ReadyDecl declDest (addScope p d sc)) :)
+    over expanderTasks ((tid', ReadyDecl declDest sc (addScope p d sc)) :)
 
 readyDecls _dest _other =
   error "TODO real error message - malformed module body"
@@ -699,8 +713,11 @@ runTask (tid, task) =
     AwaitingMacro dest (TaskAwaitMacro b deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
-        (_:_) ->
-          later b dest newDeps mdest stx
+        (_:_) -> do
+          tid' <- if Set.fromList newDeps == Set.fromList deps
+                    then return tid
+                    else newTaskID
+          laterMacro tid' b dest newDeps mdest stx
         [] ->
           linkedCore mdest >>=
           \case
@@ -709,20 +726,20 @@ runTask (tid, task) =
               macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
               bind b $ EUserMacro ExprMacro macroImplVal
               addReady dest stx
-    ReadyDecl dest stx ->
-      expandOneDeclaration dest stx
-    MoreDecls dest stx waitingOn -> do
+    ReadyDecl dest sc stx ->
+      expandOneDeclaration sc dest stx
+    MoreDecls dest sc stx waitingOn -> do
+      p <- currentPhase
       readyYet <- view (expanderCompletedDecls . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
           -- Save task for later - not ready yet
           modifyState $ over expanderTasks ((tid, task) :)
         Just _ -> do
-          readyDecls dest stx
+          readyDecls dest (addScope p stx sc)
 
   where
-    later b dest deps mdest stx = do
-      tid' <- newTaskID
+    laterMacro tid' b dest deps mdest stx =
       modifyState $
         over expanderTasks $
           ((tid', AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
@@ -793,8 +810,8 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-expandOneDeclaration :: DeclPtr -> Syntax -> Expand ()
-expandOneDeclaration dest stx
+expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> Expand ()
+expandOneDeclaration sc dest stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve ident
       v <- getEValue b
@@ -804,7 +821,7 @@ expandOneDeclaration dest stx
         EPrimModuleMacro _ ->
           throwError $ InternalError "Current context won't accept modules"
         EPrimDeclMacro impl ->
-          impl dest stx
+          impl sc dest stx
         EVarMacro _ ->
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->

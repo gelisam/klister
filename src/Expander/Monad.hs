@@ -25,6 +25,7 @@ import Module
 import ModuleName
 import PartialCore
 import Phase
+import Pretty
 import Signals
 import SplitCore
 import Scope
@@ -46,8 +47,8 @@ data ExpanderTask
   = Ready SplitCorePtr Phase Syntax
   | AwaitingSignal SplitCorePtr Signal Value -- the value is the continuation
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
-  | ReadyDecl DeclPtr Syntax
-  | MoreDecls ModBodyPtr Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+  | ReadyDecl DeclPtr Scope Syntax
+  | MoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
 
 data TaskAwaitMacro = TaskAwaitMacro
   { awaitMacroBinding :: Binding
@@ -57,14 +58,15 @@ data TaskAwaitMacro = TaskAwaitMacro
   }
 
 instance Show TaskAwaitMacro where
-  show (TaskAwaitMacro _ _ _ stx) = "TaskAwaitMacro " ++ T.unpack (syntaxText stx)
+  show (TaskAwaitMacro _ deps _ stx) =
+    "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
 instance Show ExpanderTask where
-  show (Ready _dest p stx) = "Ready " ++ show p ++ " " ++ T.unpack (syntaxText stx)
+  show (Ready _dest p stx) = "Ready " ++ show p ++ " " ++ T.unpack (pretty stx)
   show (AwaitingSignal _dest on _k) = "AwaitingSignal (" ++ show on ++ ")"
-  show (AwaitingMacro _dest t) = "AwaitingMacro (" ++ show t ++ ")"
-  show (ReadyDecl _dest stx) = "ReadyDecl " ++ T.unpack (syntaxText stx)
-  show (MoreDecls _dest stx _waiting) = "MoreDecls " ++ T.unpack (syntaxText stx)
+  show (AwaitingMacro dest t) = "AwaitingMacro (" ++ show dest ++ " " ++ show t ++ ")"
+  show (ReadyDecl _dest _sc stx) = "ReadyDecl " ++ T.unpack (syntaxText stx)
+  show (MoreDecls _dest _sc stx _waiting) = "MoreDecls " ++ T.unpack (syntaxText stx)
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
@@ -77,7 +79,7 @@ newTaskID = liftIO $ TaskID <$> newUnique
 
 
 data ExpansionErr
-  = Ambiguous Ident
+  = Ambiguous Phase Ident [ScopeSet]
   | Unknown (Stx Text)
   | NoProgress [ExpanderTask]
   | NotIdentifier Syntax
@@ -96,7 +98,10 @@ data ExpansionErr
   deriving (Show)
 
 expansionErrText :: ExpansionErr -> Text
-expansionErrText (Ambiguous x) = "Ambiguous identifier " <> T.pack (show x)
+expansionErrText (Ambiguous p x candidates) =
+  "Ambiguous identifier in phase " <> T.pack (show p) <>
+  " " <> T.pack (show x) <>
+  T.concat ["\n\t" <> T.pack (show c) | c <- candidates]
 expansionErrText (Unknown x) = "Unknown: " <> T.pack (show x)
 expansionErrText (NoProgress tasks) =
   "No progress was possible: " <> T.pack (show tasks)
@@ -136,7 +141,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 data EValue
   = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (DeclPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (Scope -> DeclPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
   | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go

@@ -2,5 +2,7 @@
 
 [import "n-ary-app.sm" #%app]
 [import "n-ary-app.sm" const]
+[import "n-ary-app.sm" lambda]
 
 [example (const [quote one] [quote two])]
+[example ([lambda (x y z) y] [quote en] [quote to] [quote tre])]

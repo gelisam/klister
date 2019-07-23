@@ -80,7 +80,7 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     text "λ" <> annotate (BindingSite v) (text x) <> "." <> line <>
     pp (env <> Env.singleton v n ()) body
   pp env (CoreApp fun arg) =
-    hang 2 $ parens (pp env fun <+> pp env arg)
+    hang 2 $ parens (pp env fun <> line <> pp env arg)
   pp env (CorePure arg) =
     text "pure" <+> pp env arg
   pp env (CoreBind act k) =

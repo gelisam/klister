@@ -17,7 +17,20 @@
                     [vec-syntax [[quote #%app] fun arg0] stx]
                     more-args
                     stx]
-                  stx]]])])])]])]
+                  stx]]])])])]]
+   [my-lam
+    [lambda [stx]
+     (syntax-case stx
+       [[vec [_ args body]]
+        (syntax-case args
+          [() [pure body]]
+          [[cons arg0 more-args]
+           [pure [vec-syntax [[quote lambda]
+                              [vec-syntax [arg0] arg0]
+                              [vec-syntax [[quote my-lam] more-args body] stx]]
+                          stx]]]
+          [[vec [arg]]
+           [pure [vec-syntax [[quote lambda] args body] stx]]])])]])]
 
 [define-macros
   ([#%app
@@ -26,10 +39,18 @@
       [[cons _ args]
        [pure [cons-list-syntax [quote my-app] args stx]]])]])]
 
+[define-macros
+  ([lambda
+    [lambda [stx]
+     (syntax-case stx
+      [[vec [_ args body]]
+       [pure [vec-syntax [[quote my-lam] args body] stx]]])]])]
 
-[define const [lambda [x] [lambda [y] x]]]
+
+[define const [lambda (x y) x]]
 
 [example (const [quote a] [quote b])]
 
 [export #%app]
 [export const]
+[export lambda]

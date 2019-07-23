@@ -1,7 +1,9 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Main where
 
+import Control.Exception
 import Control.Lens hiding (argument)
 import Control.Monad (forever)
 import Control.Monad.Except
@@ -13,7 +15,7 @@ import qualified Data.Text.IO as T
 
 import Options.Applicative
 
-import System.Exit (exitSuccess)
+import System.Exit (exitFailure, exitSuccess)
 import System.IO
 
 import Evaluator
@@ -34,7 +36,8 @@ data Options = Options { sourceModule :: Maybe FilePath }
 main :: IO ()
 main = do
   hSetBuffering stdout NoBuffering
-  mainWithOptions =<< execParser opts
+  (mainWithOptions =<< execParser opts) `catch`
+    \(e :: SomeException) -> print e >> exitFailure
   where
     opts = info parser mempty
     parser = Options <$> optional (argument str (metavar "FILE"))
