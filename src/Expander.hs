@@ -53,6 +53,7 @@ import Module
 import ModuleName
 import Parser
 import Phase
+import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -191,7 +192,7 @@ getEValue b = do
   ExpansionEnv env <- view expanderExpansionEnv <$> getState
   case Map.lookup b env of
     Just v -> return v
-    Nothing -> throwError (InternalError "No such binding")
+    Nothing -> throwError (InternalError ("No such binding: " ++ show b))
 
 
 getTasks :: Expand [(TaskID, ExpanderTask)]
@@ -384,7 +385,7 @@ initializeExpansionEnv = do
             p <- currentPhase
             macros <- for macroDefs $ \def -> do
               Stx _ _ (mname, mdef) <- mustBeVec def
-              theName <- flip (addScope p) sc <$> mustBeIdent mname
+              theName <- flip addScope' sc <$> mustBeIdent mname
               b <- freshBinding
               addBinding theName b
               macroDest <- inEarlierPhase $ do
@@ -552,7 +553,12 @@ initializeExpansionEnv = do
             sc <- freshScope
             m <- mustBeIdent mName
             p <- currentPhase
-            let m' = addScope p m sc
+            -- Here, the binding occurrence of the macro gets the
+            -- fresh scope at all phases, but later, the scope is only
+            -- added to the correct phase in potential use sites.
+            -- This prevents the body of the macro (in an earlier
+            -- phase) from being able to refer to the macro itself.
+            let m' = addScope' m sc
             b <- freshBinding
             addBinding m' b
             macroDest <- inEarlierPhase $ do

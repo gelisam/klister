@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
+import Control.Lens
 import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -18,7 +19,10 @@ import Parser
 import PartialCore
 import ShortShow
 import SplitCore
+import Syntax.SrcLoc
 import Syntax
+
+import Debug.Trace
 
 main :: IO ()
 main = defaultMain tests
@@ -107,6 +111,14 @@ miniTests =
         , ("[lambda [x] [let-syntax [m [lambda [_] x]] x]]"
           , \case
               Unknown (Stx _ _ "x") -> True
+              _ -> False
+          )
+        , ("[let-syntax [m [lambda [x] [m x]]] m]"
+          , \case
+              Unknown (Stx _ loc "m") ->
+                -- Make sure it's the use site in the macro body that
+                -- throws the error
+                view (srcLocStart . srcPosCol) loc == 29
               _ -> False
           )
         ]
