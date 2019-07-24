@@ -5,7 +5,6 @@
 module Syntax where
 
 import Control.Lens hiding (List)
-import Control.Monad
 import Data.Text (Text)
 import qualified Data.Text as T
 

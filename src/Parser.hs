@@ -114,7 +114,8 @@ identName =
          more <- many subseq
          return (str <> T.pack more)
 
-    magicIdent = literal "#%app" $> "#%app"
+    magicIdent = (literal "#%app" $> "#%app")       <|>
+                 (literal "#%module" $> "#%module")
 
     initial :: Parser Char
     initial =

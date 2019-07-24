@@ -21,13 +21,15 @@ module Expander (
   , execExpand
   , expansionErrText
   , mkInitContext
-  , initializeExpansionEnv
+  , initializeKernel
+  , initializeLanguage
   , currentPhase
   , expandEval
   , ExpansionErr(..)
   , ExpanderContext
   , expanderWorld
   , getState
+  , addRootScope
   ) where
 
 import Control.Lens hiding (List, children)
@@ -74,13 +76,22 @@ expandExpr stx = do
                      , _splitCoreDescendants = children
                      }
 
+initializeLanguage :: Stx ModuleName -> Expand ()
+initializeLanguage (Stx scs loc lang) = do
+  clearBindingTable
+  starters <- visit lang
+  forExports_ addModuleBinding starters
+  where
+    addModuleBinding p n b =
+      inPhase p $ do
+        ident <- addRootScope (Stx scs loc n)
+        addBinding ident b
+
+
 expandModule :: ParsedModule Syntax -> Expand CompleteModule
 expandModule src = do
-  Stx _ _ lang <- mustBeIdent (view moduleLanguage src)
-  if lang /= "kernel"
-    then throwError $ InternalError $ T.unpack $
-         "Custom languages not supported yet: " <> lang
-    else pure () -- TODO load language bindings
+  lang <- mustBeModName (view moduleLanguage src)
+  initializeLanguage lang
   modBodyDest <- liftIO $ newModBodyPtr
   -- TODO error if module top is already set to something
   modifyState $ set expanderModuleTop $ Just modBodyDest
@@ -88,7 +99,7 @@ expandModule src = do
   expandTasks
   body <- getBody modBodyDest
   let modName = view moduleSource src
-  return $ Module
+  return $ Expanded $ Module
     { _moduleName = modName
     , _moduleImports = noImports
     , _moduleBody = body
@@ -134,24 +145,30 @@ expandModule src = do
 
 
 
+
 loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
 loadModuleFile modName =
-  do let file = moduleNameToPath modName
-     existsp <- liftIO $ doesFileExist file
-     when (not existsp) $
-       throwError $ InternalError $ "No such file: " ++ show (moduleNameToPath modName)
-     stx <- liftIO (readModule file) >>=
-            \case
-              Left err -> throwError $ InternalError $ show err -- TODO
-              Right stx -> return stx
-     m <- expandModule stx
-     es <- view expanderModuleExports <$> getState
+  case moduleNameToPath modName of
+    Right _ ->
+      do es <- kernelExports
+         p <- currentPhase
+         return (KernelModule p, es)
+    Left file ->
+      do existsp <- liftIO $ doesFileExist file
+         when (not existsp) $
+           throwError $ InternalError $ "No such file: " ++ show (moduleNameToPath modName)
+         stx <- liftIO (readModule file) >>=
+                \case
+                  Left err -> throwError $ InternalError $ show err -- TODO
+                  Right stx -> return stx
+         m <- expandModule stx
+         es <- view expanderModuleExports <$> getState
 
-     modifyState $ over expanderWorld $
-        set (worldExports . at modName) (Just es) .
-        addExpandedModule m
+         modifyState $ over expanderWorld $
+            set (worldExports . at modName) (Just es) .
+            addExpandedModule m
 
-     return (m, es)
+         return (m, es)
 
 
 visit :: ModuleName -> Expand Exports
@@ -218,6 +235,10 @@ expandEval evalAction = do
 
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
+
+clearBindingTable :: Expand ()
+clearBindingTable =
+  modifyState $ set expanderBindingTable Map.empty
 
 addBinding :: Ident -> Binding -> Expand ()
 addBinding (Stx scs _ name) b = do
@@ -292,6 +313,14 @@ mustBeString :: Syntax -> Expand (Stx Text)
 mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
 mustBeString other = throwError (NotString other)
 
+mustBeModName :: Syntax -> Expand (Stx ModuleName)
+mustBeModName (Syntax (Stx scs srcloc (String s))) =
+  Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
+-- TODO use hygiene here instead
+mustBeModName (Syntax (Stx scs srcloc (Id "kernel"))) =
+  return (Stx scs srcloc (KernelName kernelName))
+mustBeModName other = throwError (NotModName other)
+
 class MustBeVec a where
   mustBeVec :: Syntax -> Expand (Stx a)
 
@@ -332,8 +361,12 @@ resolveImports _ = pure () -- TODO
 buildExports :: Syntax -> Expand ()
 buildExports _ = pure ()
 
-initializeExpansionEnv :: Expand ()
-initializeExpansionEnv = do
+kernelExports :: Expand Exports
+kernelExports = view expanderKernelExports <$> getState
+
+
+initializeKernel :: Expand ()
+initializeKernel = do
   _ <- traverse (uncurry addExprPrimitive) exprPrims
   _ <- traverse (uncurry addModulePrimitive) modPrims
   _ <- traverse (uncurry addDeclPrimitive) declPrims
@@ -408,13 +441,12 @@ initializeExpansionEnv = do
         , \sc dest stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
-            Stx _ loc modNameStr <- mustBeString mn
-            modName <- liftIO $ moduleNameFromLocatedPath loc (T.unpack modNameStr)
+            Stx _ _ modName <- mustBeModName mn
             imported@(Stx _ _ x) <- flip (addScope p) sc <$> mustBeIdent ident
             modExports <- visit modName
             b <- case getExport p x modExports of
                    Nothing -> throwError $ InternalError $
-                              "Module " ++ show modNameStr ++
+                              "Module " ++ show modName ++
                               " does not export " ++ show x
                    Just b -> return b
             addBinding imported b
@@ -622,42 +654,40 @@ initializeExpansionEnv = do
       addReady dest stx
       return dest
 
+    addToKernel name p b =
+      modifyState $ over expanderKernelExports $ addExport p name b
+
     addModulePrimitive :: Text -> (Syntax -> Expand ()) -> Expand ()
     addModulePrimitive name impl = do
       let val = EPrimModuleMacro impl
       b <- freshBinding
-      -- FIXME primitive scope:
-      addBinding (Stx ScopeSet.empty fakeLoc name) b
       bind b val
+      addToKernel name runtime b
 
     addDeclPrimitive :: Text -> (Scope -> DeclPtr -> Syntax -> Expand ()) -> Expand ()
     addDeclPrimitive name impl = do
       let val = EPrimDeclMacro impl
       b <- freshBinding
       -- FIXME primitive scope:
-      addBinding (Stx ScopeSet.empty fakeLoc name) b
       bind b val
+      addToKernel name runtime b
+      when (name == "import") $
+        addToKernel name (prior runtime) b
 
 
     addExprPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addExprPrimitive name impl = do
       let val = EPrimMacro impl
       b <- freshBinding
-      -- FIXME primitive scope:
-      let ident = Stx ScopeSet.empty fakeLoc name
-      ident0 <- addRootScope ident
-      ident1 <- inEarlierPhase $ addRootScope ident
-      addBinding ident0 b
-      addBinding ident1 b
       bind b val
+      addToKernel name runtime b
 
-    addRootScope stx = do
-      p <- currentPhase
-      rsc <- phaseRoot
-      return (addScope p stx rsc)
 
-    fakeLoc :: SrcLoc
-    fakeLoc = SrcLoc "internals" (SrcPos 0 0) (SrcPos 0 0)
+addRootScope :: HasScopes a => a -> Expand a
+addRootScope stx = do
+  p <- currentPhase
+  rsc <- phaseRoot
+  return (addScope p stx rsc)
 
 
 readyDecls :: ModBodyPtr -> Syntax -> Expand ()
@@ -678,8 +708,9 @@ readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
     over expanderTasks $
       ((tid, MoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
   tid' <- newTaskID
+  d' <- addRootScope d
   modifyState $
-    over expanderTasks ((tid', ReadyDecl declDest sc (addScope p d sc)) :)
+    over expanderTasks ((tid', ReadyDecl declDest sc (addScope p d' sc)) :)
 
 readyDecls _dest _other =
   error "TODO real error message - malformed module body"

@@ -7,7 +7,7 @@ module Module (
   , moduleImports
   , moduleExports
   , moduleBody
-  , CompleteModule
+  , CompleteModule(..)
   , Decl(..)
   , Imports
   , noImports
@@ -15,6 +15,8 @@ module Module (
   , getExport
   , addExport
   , noExports
+  , forExports
+  , forExports_
   , ModulePtr
   , newModulePtr
   , ModBodyPtr
@@ -26,15 +28,13 @@ module Module (
   ) where
 
 import Control.Lens
+import Data.Functor
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.Unique
-import System.Directory
-import System.FilePath
 
 import Binding
 import Core
@@ -77,6 +77,14 @@ instance Monoid Exports where
   mempty = noExports
   mappend = (<>)
 
+forExports :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f [a]
+forExports act (Exports todo) =
+  let contents = [(p, n, b) | (p, m) <- Map.toList todo, (n, b) <- Map.toList m]
+  in traverse (\(x,y,z) -> act x y z) contents
+
+forExports_ :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f ()
+forExports_ act es = forExports act es $> ()
+
 getExport :: Phase -> Text -> Exports -> Maybe Binding
 getExport p x (Exports es) = view (at p) es >>= view (at x)
 
@@ -98,7 +106,12 @@ data Module f a = Module
   deriving (Functor, Show)
 makeLenses ''Module
 
-type CompleteModule = Module [] (Decl Core)
+data CompleteModule = Expanded !(Module [] (Decl Core)) | KernelModule Phase
+  deriving Show
+
+instance Phased CompleteModule where
+  shift i (Expanded m) = Expanded (shift i m)
+  shift i (KernelModule p) = KernelModule (shift i p)
 
 instance (Functor f, Phased a) => Phased (Module f a) where
   shift i =

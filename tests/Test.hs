@@ -15,8 +15,10 @@ import Alpha
 import Core
 import Core.Builder
 import Expander
+import ModuleName
 import Parser
 import PartialCore
+import ScopeSet
 import ShortShow
 import SplitCore
 import Syntax.SrcLoc
@@ -131,13 +133,17 @@ testExpander input spec = do
     Left err -> assertFailure (show err)
     Right expr -> do
       ctx <- mkInitContext
-      c <- execExpand (initializeExpansionEnv *> expandExpr expr) ctx
+      c <- flip execExpand ctx $ do
+             initializeKernel
+             initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
+             addRootScope expr >>= expandExpr
       case c of
         Left err -> assertFailure (show err)
         Right expanded ->
           case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
             Just done -> assertAlphaEq (T.unpack input) output done
+  where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 testExpansionFails :: Text -> (ExpansionErr -> Bool) -> Assertion
 testExpansionFails input okp =
@@ -145,7 +151,11 @@ testExpansionFails input okp =
     Left err -> assertFailure (show err)
     Right expr -> do
       ctx <- mkInitContext
-      c <- execExpand (initializeExpansionEnv *> expandExpr expr) ctx
+      c <- flip execExpand ctx $ do
+             initializeKernel
+             initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
+             expandExpr =<< addRootScope expr
+
       case c of
         Left err
           | okp err -> return ()
@@ -155,7 +165,7 @@ testExpansionFails input okp =
           case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
             Just _ -> assertFailure "Error expected, but expansion succeeded"
-
+  where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 ----------------------------
 -- Stolen from HUnit

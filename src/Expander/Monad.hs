@@ -87,6 +87,7 @@ data ExpansionErr
   | NotCons Syntax
   | NotList Syntax
   | NotString Syntax
+  | NotModName Syntax
   | NotRightLength Natural Syntax
   | NotVec Syntax
   | UnknownPattern Syntax
@@ -114,6 +115,8 @@ expansionErrText (NotList stx) =
   "Expected parens, but got " <> syntaxText stx
 expansionErrText (NotString stx) =
   "Expected string literal, but got " <> syntaxText stx
+expansionErrText (NotModName stx) =
+  "Expected module name (string or `kernel'), but got " <> syntaxText stx
 expansionErrText (NotRightLength len stx) =
   "Expected " <> T.pack (show len) <>
   " entries between square brackets, but got " <> syntaxText stx
@@ -171,11 +174,12 @@ data ExpanderState = ExpanderState
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
-  , _expanderModuleName :: Maybe ModuleName
-  , _expanderModuleTop :: Maybe ModBodyPtr
-  , _expanderModuleImports :: Imports
-  , _expanderModuleExports :: Exports
+  , _expanderModuleName :: !(Maybe ModuleName)
+  , _expanderModuleTop :: !(Maybe ModBodyPtr)
+  , _expanderModuleImports :: !Imports
+  , _expanderModuleExports :: !Exports
   , _expanderPhaseRoots :: !(Map Phase Scope)
+  , _expanderKernelExports :: !Exports
   }
 
 initExpanderState :: ExpanderState
@@ -194,6 +198,7 @@ initExpanderState = ExpanderState
   , _expanderModuleImports = noImports
   , _expanderModuleExports = noExports
   , _expanderPhaseRoots = Map.empty
+  , _expanderKernelExports = noExports
   }
 
 makeLenses ''ExpanderContext

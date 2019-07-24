@@ -45,7 +45,7 @@ main = do
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts = do
   ctx <- mkInitContext
-  _ <- execExpand initializeExpansionEnv ctx
+  _ <- execExpand initializeKernel ctx
   case sourceModule opts of
     Nothing ->
       repl ctx initialWorld

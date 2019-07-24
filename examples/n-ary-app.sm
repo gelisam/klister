@@ -51,6 +51,9 @@
 
 [example (const [quote a] [quote b])]
 
+[export #%module]
 [export #%app]
 [export const]
 [export lambda]
+[export define]
+[export define-macros]

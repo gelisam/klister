@@ -35,10 +35,13 @@ initialWorld =
 
 addExpandedModule :: CompleteModule -> World a -> World a
 addExpandedModule m =
-  over (worldModules . at (view moduleName m))
+  over (worldModules . at (getName m))
   \case
     Nothing -> Just m
     Just m' -> Just m'
-
+  where
+    getName :: CompleteModule -> ModuleName
+    getName (Expanded em) = view moduleName em
+    getName (KernelModule _) = KernelName kernelName
 
 

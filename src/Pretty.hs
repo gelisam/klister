@@ -300,3 +300,7 @@ instance Pretty VarInfo a => Pretty VarInfo (Env a) where
     vsep [ hang 4 $ viaShow x <+> pp env n <> line <> pp env v
          | (x, n, v) <- Env.toList rho
          ]
+
+instance Pretty VarInfo CompleteModule where
+  pp env (Expanded em) = pp env em
+  pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"

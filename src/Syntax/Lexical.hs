@@ -3,7 +3,6 @@ module Syntax.Lexical where
 
 import Control.Lens
 
-import Syntax
 import Syntax.SrcLoc
 
 

@@ -68,7 +68,10 @@ evalMod ::
   Map Phase (Env Value) -> Phase -> CompleteModule ->
   Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
 evalMod startingEnvs basePhase m =
-  execRWST (traverse evalDecl (view moduleBody m)) basePhase startingEnvs
+  case m of
+    KernelModule _p-> return (Map.empty, []) -- TODO builtins go here, suitably shifted
+    Expanded em ->
+      execRWST (traverse evalDecl (view moduleBody em)) basePhase startingEnvs
 
   where
     currentEnv ::
