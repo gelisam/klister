@@ -481,6 +481,12 @@ initializeExpansionEnv = do
             sigDest <- schedule sig
             linkExpr dest $ CoreSendSignal sigDest
         )
+      , ( "wait-signal"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, sig) <- mustBeVec stx
+            sigDest <- schedule sig
+            linkExpr dest $ CoreWaitSignal sigDest
+        )
       , ( "bound-identifier=?"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
@@ -873,6 +879,8 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
 interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
+  pure $ Left (signal, [])
+interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
 interpretMacroAction (MacroActionIdentEq how v1 v2) = do
   id1 <- getIdent v1

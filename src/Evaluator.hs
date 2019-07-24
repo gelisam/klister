@@ -155,6 +155,10 @@ eval (Core (CoreSendSignal signalExpr)) = do
   theSignal <- evalAsSignal signalExpr
   pure $ ValueMacroAction
        $ MacroActionSendSignal theSignal
+eval (Core (CoreWaitSignal signalExpr)) = do
+  theSignal <- evalAsSignal signalExpr
+  pure $ ValueMacroAction
+       $ MacroActionWaitSignal theSignal
 eval (Core (CoreIdentEq how e1 e2)) =
   ValueMacroAction <$> (MacroActionIdentEq how <$> eval e1 <*> eval e2)
 eval (Core (CoreSignal signal)) =
