@@ -89,6 +89,14 @@ miniTests =
           , "[if #t [lambda [x] x] #f]"
           , iF (bool True) (lam $ \x -> x) (bool False)
           )
+        , ( "send a signal nobody is waiting for"
+          , "[let-syntax \n\
+            \  [signaling-id [lambda [_] \n\
+            \                  [>>= [send-signal 0] [lambda [_] \n\
+            \                  [pure [quote [lambda [x] x]]]]]]] \n\
+            \    [signaling-id]]"
+          , lam $ \x -> x
+          )
         ]
       ]
     expectedFailure =

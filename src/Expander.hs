@@ -884,6 +884,9 @@ expandLiteralString :: SplitCorePtr -> Text -> Expand ()
 expandLiteralString _dest str =
   throwError $ InternalError $ "Strings are not valid expressions yet: " ++ show str
 
+-- If we're stuck waiting on a signal, we return that signal and a continuation
+-- in the form of a sequence of closures. The first closure should be applied to
+-- the result of wait-signal, the second to the result of the first, etc.
 interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
 interpretMacroAction (MacroActionPure value) = do
   pure $ Right value
@@ -911,7 +914,8 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
 interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
-  pure $ Left (signal, [])
+  -- TODO: send the signal
+  pure $ Right $ ValueSignal signal  -- TODO: return unit instead
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
 interpretMacroAction (MacroActionIdentEq how v1 v2) = do
