@@ -59,29 +59,29 @@ miniTests =
           , lam $ \f -> lam $ \x -> f `app` x
           )
         , ( "Trivial user macro"
-          , "[let-syntax \
-            \  [m [lambda [_] \
-            \       [pure [quote [lambda [x] x]]]]] \
+          , "[let-syntax \n\
+            \  [m [lambda [_] \n\
+            \       [pure [quote [lambda [x] x]]]]] \n\
             \  m]"
           , lam $ \x -> x
           )
         , ( "Let macro"
-          , "[let-syntax \
-            \  [let1 [lambda [stx] \
-            \          (syntax-case stx \
-            \            [[vec [_ binder body]] \
-            \             (syntax-case binder \
-            \               [[vec [x e]] \
-            \                {- [[lambda [x] body] e] -} \
-            \                [pure [vec-syntax \
-            \                        [[vec-syntax \
-            \                           [[ident lambda] \
-            \                            [vec-syntax [x] stx] \
-            \                            body] \
-            \                           stx] \
-            \                         e] \
-            \                        stx]]])])]] \
-            \  [let1 [x [lambda [x] x]] \
+          , "[let-syntax \n\
+            \  [let1 [lambda [stx] \n\
+            \          (syntax-case stx \n\
+            \            [[vec [_ binder body]] \n\
+            \             (syntax-case binder \n\
+            \               [[vec [x e]] \n\
+            \                {- [[lambda [x] body] e] -} \n\
+            \                [pure [vec-syntax \n\
+            \                        [[vec-syntax \n\
+            \                           [[ident lambda] \n\
+            \                            [vec-syntax [x] stx] \n\
+            \                            body] \n\
+            \                           stx] \n\
+            \                         e] \n\
+            \                        stx]]])])]] \n\
+            \  [let1 [x [lambda [x] x]] \n\
             \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
@@ -128,7 +128,7 @@ testExpander :: Text -> IO Core -> Assertion
 testExpander input spec = do
   output <- spec
   case readExpr "<test suite>" input of
-    Left err -> assertFailure (show err)
+    Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
       c <- flip execExpand ctx $ do
@@ -136,7 +136,7 @@ testExpander input spec = do
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              addRootScope expr >>= addModuleScope >>= expandExpr
       case c of
-        Left err -> assertFailure (show err)
+        Left err -> assertFailure . T.unpack . expansionErrText $ err
         Right expanded ->
           case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
@@ -146,7 +146,7 @@ testExpander input spec = do
 testExpansionFails :: Text -> (ExpansionErr -> Bool) -> Assertion
 testExpansionFails input okp =
   case readExpr "<test suite>" input of
-    Left err -> assertFailure (show err)
+    Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
       c <- flip execExpand ctx $ do

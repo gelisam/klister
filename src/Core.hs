@@ -75,7 +75,8 @@ data CoreF core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
-  | CoreSendSignal core                 -- :: Macro ()
+  | CoreSendSignal core                 -- :: Signal -> Macro ()
+  | CoreWaitSignal core                 -- :: Signal -> Macro ()
   | CoreIdentEq HowEq core core
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
@@ -134,6 +135,9 @@ instance AlphaEq core => AlphaEq (CoreF core) where
     alphaCheck syntaxError1 syntaxError2
   alphaCheck (CoreSendSignal signal1)
              (CoreSendSignal signal2) = do
+    alphaCheck signal1 signal2
+  alphaCheck (CoreWaitSignal signal1)
+             (CoreWaitSignal signal2) = do
     alphaCheck signal1 signal2
   alphaCheck (CoreIdentEq how1 e1 g1)
              (CoreIdentEq how2 e2 g2) = do
@@ -265,6 +269,10 @@ instance ShortShow core => ShortShow (CoreF core) where
    ++ ")"
   shortShow (CoreSendSignal signal)
     = "(SendSignal "
+   ++ shortShow signal
+   ++ ")"
+  shortShow (CoreWaitSignal signal)
+    = "(WaitSignal "
    ++ shortShow signal
    ++ ")"
   shortShow (CoreIdentEq how e1 e2)

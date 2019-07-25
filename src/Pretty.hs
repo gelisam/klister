@@ -89,6 +89,8 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     group $ text "syntax-error" <+> pp env err
   pp env (CoreSendSignal arg) =
     group $ text "send-signal" <+> pp env arg
+  pp env (CoreWaitSignal arg) =
+    group $ text "wait-signal" <+> pp env arg
   pp env (CoreIdentEq how e1 e2) =
     group $ text opName <+> pp env e1 <+> pp env e2
     where
@@ -256,6 +258,8 @@ instance Pretty VarInfo MacroAction where
     text "syntax-error" <+> pp env err
   pp _env (MacroActionSendSignal s) =
     text "send-signal" <+> viaShow s
+  pp _env (MacroActionWaitSignal s) =
+    text "wait-signal" <+> viaShow s
   pp env (MacroActionIdentEq how v1 v2) =
     group $ parens $ vsep [text opName, pp env v1, pp env v2]
     where

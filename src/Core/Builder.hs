@@ -32,6 +32,9 @@ sig s = return $ Core $ CoreSignal $ Signal s
 sendSig :: Core -> IO Core
 sendSig = return . Core . CoreSendSignal
 
+waitSig :: Core -> IO Core
+waitSig = return . Core . CoreWaitSignal
+
 bool :: Bool -> IO Core
 bool b = return $ Core $ CoreBool b
 

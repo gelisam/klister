@@ -18,6 +18,7 @@ data MacroAction
   | MacroActionBind MacroAction Closure
   | MacroActionSyntaxError (SyntaxError Syntax)
   | MacroActionSendSignal Signal
+  | MacroActionWaitSignal Signal
   | MacroActionIdentEq HowEq Value Value
   deriving (Eq, Show)
 
