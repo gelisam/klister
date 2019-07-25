@@ -226,7 +226,7 @@ currentEnv = do
   maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
 
 
-expandEval :: Show a => Eval a -> Expand a
+expandEval :: Eval a -> Expand a
 expandEval evalAction = do
   env <- currentEnv
   out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
