@@ -24,8 +24,6 @@ import SplitCore
 import Syntax.SrcLoc
 import Syntax
 
-import Debug.Trace
-
 main :: IO ()
 main = defaultMain tests
 
@@ -132,11 +130,11 @@ testExpander input spec = do
   case readExpr "<test suite>" input of
     Left err -> assertFailure (show err)
     Right expr -> do
-      ctx <- mkInitContext
+      ctx <- mkInitContext (KernelName kernelName)
       c <- flip execExpand ctx $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             addRootScope expr >>= expandExpr
+             addRootScope expr >>= addModuleScope >>= expandExpr
       case c of
         Left err -> assertFailure (show err)
         Right expanded ->
@@ -150,11 +148,11 @@ testExpansionFails input okp =
   case readExpr "<test suite>" input of
     Left err -> assertFailure (show err)
     Right expr -> do
-      ctx <- mkInitContext
+      ctx <- mkInitContext (KernelName kernelName)
       c <- flip execExpand ctx $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             expandExpr =<< addRootScope expr
+             expandExpr =<< addModuleScope =<< addRootScope expr
 
       case c of
         Left err

@@ -43,14 +43,16 @@ main = do
     parser = Options <$> optional (argument str (metavar "FILE"))
 
 mainWithOptions :: Options -> IO ()
-mainWithOptions opts = do
-  ctx <- mkInitContext
-  _ <- execExpand initializeKernel ctx
+mainWithOptions opts =
   case sourceModule opts of
-    Nothing ->
+    Nothing -> do
+      ctx <- mkInitContext (KernelName kernelName)
+      void $ execExpand initializeKernel ctx
       repl ctx initialWorld
     Just file -> do
       mn <- moduleNameFromPath file
+      ctx <- mkInitContext mn
+      void $ execExpand initializeKernel ctx
       execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
         \case
           Left err -> T.putStrLn (expansionErrText err)

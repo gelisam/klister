@@ -155,12 +155,14 @@ data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 data ExpanderContext = ExpanderContext
   { _expanderState :: IORef ExpanderState
   , _expanderPhase :: !Phase
+  , _expanderModuleName :: !ModuleName
   }
 
-mkInitContext :: IO ExpanderContext
-mkInitContext = do
+mkInitContext :: ModuleName -> IO ExpanderContext
+mkInitContext mn = do
   st <- newIORef initExpanderState
   return $ ExpanderContext { _expanderState = st
+                           , _expanderModuleName = mn
                            , _expanderPhase = runtime
                            }
 
@@ -174,11 +176,11 @@ data ExpanderState = ExpanderState
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
-  , _expanderModuleName :: !(Maybe ModuleName)
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
   , _expanderPhaseRoots :: !(Map Phase Scope)
+  , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
   }
 
@@ -193,11 +195,11 @@ initExpanderState = ExpanderState
   , _expanderCompletedCore = Map.empty
   , _expanderCompletedModBody = Map.empty
   , _expanderCompletedDecls = Map.empty
-  , _expanderModuleName = Nothing
   , _expanderModuleTop = Nothing
   , _expanderModuleImports = noImports
   , _expanderModuleExports = noExports
   , _expanderPhaseRoots = Map.empty
+  , _expanderModuleRoots = Map.empty
   , _expanderKernelExports = noExports
   }
 
@@ -233,6 +235,21 @@ inEarlierPhase :: Expand a -> Expand a
 inEarlierPhase act =
   Expand $ local (over expanderPhase prior) $ runExpand act
 
+moduleScope :: ModuleName -> Expand Scope
+moduleScope mn = do
+  sc <- moduleScope' mn
+  return sc
+
+moduleScope' :: ModuleName -> Expand Scope
+moduleScope' mn = do
+  mods <- view expanderModuleRoots <$> getState
+  case Map.lookup mn mods of
+    Just sc -> return sc
+    Nothing -> do
+      sc <- freshScope
+      modifyState $ set (expanderModuleRoots . at mn) (Just sc)
+      return sc
+
 
 phaseRoot :: Expand Scope
 phaseRoot = do
@@ -242,7 +259,7 @@ phaseRoot = do
     Just sc -> return sc
     Nothing -> do
       sc <- freshScope
-      modifyState $ over (expanderPhaseRoots . at p) $ const (Just sc)
+      modifyState $ set (expanderPhaseRoots . at p) (Just sc)
       return sc
 
 makePrisms ''Binding

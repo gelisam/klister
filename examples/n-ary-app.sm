@@ -56,4 +56,6 @@
 [export const]
 [export lambda]
 [export define]
+[export example]
 [export define-macros]
+[export quote]

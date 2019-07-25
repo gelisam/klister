@@ -1,0 +1,5 @@
+#lang "n-ary-app.sm"
+
+[define f [lambda (x y z) y]]
+
+[example (f [quote æ] [quote ø] [quote å])]

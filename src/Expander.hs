@@ -30,13 +30,13 @@ module Expander (
   , expanderWorld
   , getState
   , addRootScope
+  , addModuleScope
   ) where
 
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
-
-import Data.Unique
+import Data.Foldable
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -44,6 +44,7 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
+import Data.Unique
 import System.Directory
 
 import Binding
@@ -78,32 +79,32 @@ expandExpr stx = do
 
 initializeLanguage :: Stx ModuleName -> Expand ()
 initializeLanguage (Stx scs loc lang) = do
-  clearBindingTable
   starters <- visit lang
   forExports_ addModuleBinding starters
   where
     addModuleBinding p n b =
       inPhase p $ do
-        ident <- addRootScope (Stx scs loc n)
+        ident <- addModuleScope =<< addRootScope (Stx scs loc n)
         addBinding ident b
 
 
-expandModule :: ParsedModule Syntax -> Expand CompleteModule
-expandModule src = do
-  lang <- mustBeModName (view moduleLanguage src)
-  initializeLanguage lang
-  modBodyDest <- liftIO $ newModBodyPtr
-  -- TODO error if module top is already set to something
-  modifyState $ set expanderModuleTop $ Just modBodyDest
-  readyDecls modBodyDest (view moduleContents src)
-  expandTasks
-  body <- getBody modBodyDest
-  let modName = view moduleSource src
-  return $ Expanded $ Module
-    { _moduleName = modName
-    , _moduleImports = noImports
-    , _moduleBody = body
-    , _moduleExports = noExports
+expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
+expandModule thisMod src =
+  local (set expanderModuleName thisMod) do
+    lang <- mustBeModName (view moduleLanguage src)
+    initializeLanguage lang
+    modBodyDest <- liftIO $ newModBodyPtr
+    modifyState $ set expanderModuleTop $ Just modBodyDest
+    decls <- addModuleScope (view moduleContents src)
+    readyDecls modBodyDest decls
+    expandTasks
+    body <- getBody modBodyDest
+    let modName = view moduleSource src
+    return $ Expanded $ Module
+      { _moduleName = modName
+      , _moduleImports = noImports
+      , _moduleBody = body
+      , _moduleExports = noExports
     }
   where
     getBody :: ModBodyPtr -> Expand [Decl Core]
@@ -161,7 +162,7 @@ loadModuleFile modName =
                 \case
                   Left err -> throwError $ InternalError $ show err -- TODO
                   Right stx -> return stx
-         m <- expandModule stx
+         m <- expandModule modName stx
          es <- view expanderModuleExports <$> getState
 
          modifyState $ over expanderWorld $
@@ -235,10 +236,6 @@ expandEval evalAction = do
 
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
-
-clearBindingTable :: Expand ()
-clearBindingTable =
-  modifyState $ set expanderBindingTable Map.empty
 
 addBinding :: Ident -> Binding -> Expand ()
 addBinding (Stx scs _ name) b = do
@@ -367,10 +364,9 @@ kernelExports = view expanderKernelExports <$> getState
 
 initializeKernel :: Expand ()
 initializeKernel = do
-  _ <- traverse (uncurry addExprPrimitive) exprPrims
-  _ <- traverse (uncurry addModulePrimitive) modPrims
-  _ <- traverse (uncurry addDeclPrimitive) declPrims
-  pure ()
+  traverse_ (uncurry addExprPrimitive) exprPrims
+  traverse_ (uncurry addModulePrimitive) modPrims
+  traverse_ (uncurry addDeclPrimitive) declPrims
 
   where
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -682,6 +678,11 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
+addModuleScope :: HasScopes a => a -> Expand a
+addModuleScope stx = do
+  mn <- view expanderModuleName <$> ask
+  sc <- moduleScope mn
+  return $ addScope' stx sc
 
 addRootScope :: HasScopes a => a -> Expand a
 addRootScope stx = do
