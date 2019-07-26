@@ -25,7 +25,6 @@ import ShortShow
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
-import Value
 import World
 
 main :: IO ()
@@ -144,31 +143,17 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
       [ testCase fn (testFile fn p)
       | (fn, p) <-
         [ ( "examples/small.sm"
-          , \mn w ->
-              view (worldModules . at mn) w &
-              \case
-                Nothing ->
-                  assertFailure "No module found"
-                Just (KernelModule _) ->
-                  assertFailure "Expected user module, got kernel"
-                Just (Expanded m) ->
-                  isEmpty (view moduleBody m)
+          , \m -> isEmpty (view moduleBody m)
           )
         , ( "examples/id-compare.sm"
-          , \mn w ->
-              view (worldModules . at mn) w &
+          , \m->
+              view moduleBody m &
+              filter (\case {(Example _) -> True; _ -> False}) &
               \case
-                Nothing -> assertFailure "No module found"
-                Just (KernelModule _) ->
-                  assertFailure "Expected user module, got kernel"
-                Just (Expanded m) ->
-                  view moduleBody m &
-                  filter (\case {(Example _) -> True; _ -> False}) &
-                  \case
-                    [Example e1, Example e2] -> do
-                      assertAlphaEq "first example" e1 (Core (CoreBool True))
-                      assertAlphaEq "second example" e2 (Core (CoreBool False))
-                    _ -> assertFailure "Expected two examples"
+                [Example e1, Example e2] -> do
+                  assertAlphaEq "first example" e1 (Core (CoreBool True))
+                  assertAlphaEq "second example" e2 (Core (CoreBool False))
+                _ -> assertFailure "Expected two examples"
           )
         ]
       ]
@@ -220,7 +205,7 @@ testExpansionFails input okp =
   where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 
-testFile :: FilePath -> (ModuleName -> World Value -> Assertion) -> Assertion
+testFile :: FilePath -> (Module [] (Decl Core) -> Assertion) -> Assertion
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
@@ -228,7 +213,16 @@ testFile f p = do
   execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
     \case
       Left err -> assertFailure (T.unpack (expansionErrText err))
-      Right w -> p mn w
+      Right w ->
+        view (worldModules . at mn) w &
+        \case
+          Nothing ->
+            assertFailure "No module found"
+          Just (KernelModule _) ->
+            assertFailure "Expected user module, got kernel"
+          Just (Expanded m) ->
+            p m
+
 
 
 assertAlphaEq :: (AlphaEq a, ShortShow a) => String -> a -> a -> Assertion
