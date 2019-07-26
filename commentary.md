@@ -110,12 +110,16 @@ A `PartialCore` expression is a tree with the same shape as a `Core` expression,
 
 TODO: explain how the sub-trees get computed.
 
+### The macro monad
+
+TODO: explain macro actions in more details.
 
 ### Stuck tasks
 
-TODO: explain how a task may get stuck and what gets them unstuck.
+Many tasks have dependencies that must be satisfied before the expander can carry them out. For instance, the scope in which a macro is bound cannot be expanded before the macro itself has been expanded and evaluated. The "job queue" approach to macro expansion means that the order of expansion is not necessarily predictable from the source code itself, so operators cannot be arranged to take care of these concerns on their own.
 
-TODO: explain macro actions in more details.
+In addition to the natural dependencies that the primitive macro operations impose on their tasks, users can impose additional dependencies. While we eventually plan to use this to allow macro expansion to block until a type variable has been solved by unification, we presently have a simpler system that captures the essence of the problem: the signal system. The expander maintains a set of signals that have been sent, and an action in the macro monad can add a new signal to this set. A further action can cause macro monad evaluation to block until a signal has been received; in this case, a continuation is captured and added to the task queue with an indication of the signal that is being waited for. If the signal has been sent, the captured continuation will be reinvoked in the next pass through the queue.
+
 
 ## Module System
 
