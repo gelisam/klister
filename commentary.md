@@ -86,10 +86,15 @@ A `PartialCore` expression is a tree with the same shape as a `Core` expression,
 TODO: explain how the sub-trees get computed.
 
 
+### Stuck tasks
+
+TODO: explain how a task may get stuck and what gets them unstuck.
+
+TODO: explain macro actions in more details.
 
 ## Module System
 
-The module system is based on that described by Matthew Flatt in "Composable and Compilable Macros: You Want it /When?/" (ICFP 2002). Source modules are written in a /language/ that is intended to provide all the initial bindings available in the file. The `kernel` language is primitive and contains all the built-in operators.
+The module system is based on that described by Matthew Flatt in "Composable and Compilable Macros: You Want it _When?_" (ICFP 2002). Source modules are written in a _language_ that is intended to provide all the initial bindings available in the file. The `kernel` language is primitive and contains all the built-in operators.
 
 There is a cache of the expanded and evaluated forms of each module in the system. At the start of expansion, this cache contains only `kernel`.
 
@@ -105,11 +110,11 @@ Loading an uncached module consists of the following steps:
  
  4. Add the expanded module to the cache.
 
-Visiting an uncached module relative to phase /p/ consists of the following steps:
+Visiting an uncached module relative to phase _p_ consists of the following steps:
 
  1. Load the module.
  
- 2. Shift the expanded module /p/ phases.
+ 2. Shift the expanded module _p_ phases.
  
  3. Evaluate the module's contents and insert definitions into the environment.
  
