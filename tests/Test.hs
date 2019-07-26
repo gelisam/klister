@@ -1,3 +1,4 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -146,7 +147,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
           , \m -> isEmpty (view moduleBody m)
           )
         , ( "examples/id-compare.sm"
-          , \m->
+          , \m ->
               view moduleBody m &
               filter (\case {(Example _) -> True; _ -> False}) &
               \case
@@ -155,6 +156,20 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                   assertAlphaEq "second example" e2 (Core (CoreBool False))
                 _ -> assertFailure "Expected two examples"
           )
+        , ( "examples/lang.sm"
+          , \m ->
+              view moduleBody m &
+              \case
+                [Define _fn fv fbody, Example e] -> do
+                  fspec <- lam \_x -> lam \ y -> lam \_z -> y
+                  assertAlphaEq "definition of f" fbody fspec
+                  case e of
+                    Core (CoreApp (Core (CoreApp (Core (CoreApp (Core (CoreVar fv')) _)) _)) _) ->
+                      assertAlphaEq "function position in example" fv' fv
+                    _ -> pure ()
+                _ -> assertFailure "Expected two examples"
+          )
+
         ]
       ]
 
