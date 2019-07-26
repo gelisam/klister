@@ -166,7 +166,24 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                   case e of
                     Core (CoreApp (Core (CoreApp (Core (CoreApp (Core (CoreVar fv')) _)) _)) _) ->
                       assertAlphaEq "function position in example" fv' fv
-                    _ -> pure ()
+                    _ -> assertFailure "example has wrong shape"
+                _ -> assertFailure "Expected two examples"
+          )
+        , ( "examples/import.sm"
+          , \m ->
+              view moduleBody m &
+              filter (\case {(Example _) -> True; _ -> False}) &
+              \case
+                [Example e1, Example e2] -> do
+                  case e1 of
+                    (Core (CoreApp (Core (CoreApp (Core (CoreVar _)) _)) _)) ->
+                      pure ()
+                    _ -> assertFailure "example 1 has wrong shape"
+                  case e2 of
+                    Core (CoreApp (Core (CoreApp (Core (CoreApp fun _)) _)) _) -> do
+                      fspec <- lam \_x -> lam \ y -> lam \_z -> y
+                      assertAlphaEq "function in second example" fun fspec
+                    _ -> assertFailure "example 2 has wrong shape"
                 _ -> assertFailure "Expected two examples"
           )
 
