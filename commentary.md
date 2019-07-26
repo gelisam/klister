@@ -122,6 +122,24 @@ The macro monad includes operations to compare the binding information of identi
  
  3. Expansion gets stuck, in which case the interpreter indicates the necessary conditions for it to resume and returns a continuation to be invoked when these conditions are satisfied. The stuck expansion and its conditions are re-added to the job queue.
 
+#### Macro monad effects
+
+ * `bound-identifier=? : Syntax -> Syntax -> Macro Bool` determines whether its arguments are identifiers such that each would bind the other at the current phase. In practice, this means that their scope sets are identical. If either argument is not an identifier, fails.
+ 
+ * `free-identifier=? : Syntax -> Syntax -> Macro Bool` determines whether its arguments are identifiers that refer to the same binding in the current context. If either argument is not an identifier, fails.
+ 
+ * `syntax-error : ∀α. Syntax -> Syntax * -> Macro α` fails, using its first argument as the reason for failure and the remaining arguments as source locations involved in the failure. This should probably be rewritten to take a list instead of being variable arity, once we have lists in the language.
+ 
+ * `send-signal : Signal -> Macro Unit` sends a signal.
+ 
+ * `wait-signal : Signal -> Macro Unit` blocks execution of the macro until a particular signal has been sent.
+ 
+ * `pure : ∀α. α -> Macro α` is the unit of the macro monad.
+ 
+ * `>>= : ∀α β. Macro α -> (α -> Macro β) -> Macro β` is the bind operator of the macro monad.
+ 
+ * 
+ 
 ### Stuck tasks
 
 Many tasks have dependencies that must be satisfied before the expander can carry them out. For instance, the scope in which a macro is bound cannot be expanded before the macro itself has been expanded and evaluated. The "job queue" approach to macro expansion means that the order of expansion is not necessarily predictable from the source code itself, so operators cannot be arranged to take care of these concerns on their own.
