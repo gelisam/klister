@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Main where
 
@@ -15,6 +16,7 @@ import Alpha
 import Core
 import Core.Builder
 import Expander
+import Module
 import ModuleName
 import Parser
 import PartialCore
@@ -23,12 +25,14 @@ import ShortShow
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
+import Value
+import World
 
 main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Expander tests" [ miniTests ]
+tests = testGroup "Expander tests" [ miniTests, moduleTests ]
 
 miniTests :: TestTree
 miniTests =
@@ -132,6 +136,48 @@ miniTests =
         ]
       ]
 
+moduleTests :: TestTree
+moduleTests = testGroup "Module tests" [ shouldWork ]
+  where
+    shouldWork =
+      testGroup "Expected to succeed"
+      [ testCase fn (testFile fn p)
+      | (fn, p) <-
+        [ ( "examples/small.sm"
+          , \mn w ->
+              view (worldModules . at mn) w &
+              \case
+                Nothing ->
+                  assertFailure "No module found"
+                Just (KernelModule _) ->
+                  assertFailure "Expected user module, got kernel"
+                Just (Expanded m) ->
+                  isEmpty (view moduleBody m)
+          )
+        , ( "examples/id-compare.sm"
+          , \mn w ->
+              view (worldModules . at mn) w &
+              \case
+                Nothing -> assertFailure "No module found"
+                Just (KernelModule _) ->
+                  assertFailure "Expected user module, got kernel"
+                Just (Expanded m) ->
+                  view moduleBody m &
+                  filter (\case {(Example _) -> True; _ -> False}) &
+                  \case
+                    [Example e1, Example e2] -> do
+                      assertAlphaEq "first example" e1 (Core (CoreBool True))
+                      assertAlphaEq "second example" e2 (Core (CoreBool False))
+                    _ -> assertFailure "Expected two examples"
+          )
+        ]
+      ]
+
+    isEmpty [] = return ()
+    isEmpty _ = assertFailure "Expected empty, got non-empty"
+
+
+
 testExpander :: Text -> IO Core -> Assertion
 testExpander input spec = do
   output <- spec
@@ -173,8 +219,17 @@ testExpansionFails input okp =
             Just _ -> assertFailure "Error expected, but expansion succeeded"
   where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
-----------------------------
--- Stolen from HUnit
+
+testFile :: FilePath -> (ModuleName -> World Value -> Assertion) -> Assertion
+testFile f p = do
+  mn <- moduleNameFromPath f
+  ctx <- mkInitContext mn
+  void $ execExpand initializeKernel ctx
+  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+    \case
+      Left err -> assertFailure (T.unpack (expansionErrText err))
+      Right w -> p mn w
+
 
 assertAlphaEq :: (AlphaEq a, ShortShow a) => String -> a -> a -> Assertion
 assertAlphaEq preface expected actual =
