@@ -10,7 +10,45 @@ At this stage, the identifiers at the leaves are simply `Text`. Other leaf value
 
 Each node in the syntax tree is annotated with its source location and with a "scope set" indicating which variables are in scope. At this point, we have only parsed the s-expression, we have not attributed meaning such as binding-sites vs use sites to the various identifiers, and so at this point all the scope sets are empty.
 
+Scope sets are used during expansion to determine which binding an identifier refers to. See the section on macro expansion for a quick description of their use, or "Binding as Sets of Scopes" (Flatt, POPL '16) for a complete description.
+
+
 TODO: Presumably, we use those scope sets later on. Give an example which explains why we need `Syntax` values to have scope sets.
+
+## Expanding
+
+Macro expansion is the process of converting user-written syntax into the core language. Unlike traditional Lisps, macro expansion does not necessarily proceed from the outside of the expression towards the inside, from left to right. Instead, macro expansion is controlled by a /task queue/ and a /split expression/. Split expressions are trees in the core language in which some subtrees are not yet known (please see the section that describes them for details). Some tasks in the queue have dependencies; these will be skipped and requeued until their dependencies are satisfied.
+
+The entry point to expanding expressions is
+
+    expandExpr :: Syntax -> Expand SplitCore
+
+It initializes the expander state with an empty split expression and a single task: to expand the input.
+
+To expand an expression, the first step is to determine which procedure can expand it (this procedure is called the /transformer/). Then, the syntax itself is passed to the transformer, which mutates the current expander state to make progress, arranging for any necessary further tasks to be enqueued.
+
+Transformers are determined as follows:
+
+ 1. If the expression is an identifer, it is resolved (see the relevant subsection). If the identifier resolves to a variable, the current core expression is filled in with a reference to the variable. If the identifer resolves to anything else, the corresponding transformer is invoked on the syntax being expanded.
+
+ 2. If the expression is a list or vector, there are two possibilities:
+
+   a. The expression's head is an identifier. In this case, the identifier is resolved. If it resolves to a variable, then `#%app` is inserted at the beginning of the list or vector, and it is re-expanded. If it resolves to any other transformer, then that transformer is invoked on the syntax being expanded.
+   
+   b. The expression's head is not an identifier. In this case, `#%app` is inserted at the beginning and the syntax is re-expanded.
+
+ 3. If the expression is a signal literal, then the current expression is replaced by the signal. This should perhaps be replaced by a `#%signal` builtin, similar to `#%app`.
+
+ 4. If the expression is anything else, then expansion fails.
+
+
+TODO: explain the the expansion process, and the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
+
+### Resolving identifiers
+
+
+
+### About #%app
 
 
 ## Evaluating
@@ -47,11 +85,6 @@ A `PartialCore` expression is a tree with the same shape as a `Core` expression,
 
 TODO: explain how the sub-trees get computed.
 
-## Expanding
-
-    expandExpr :: Syntax -> Expand SplitCore
-
-TODO: explain the the expansion process, and the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
 
 
 ## Module System
@@ -81,3 +114,4 @@ Visiting an uncached module relative to phase /p/ consists of the following step
  3. Evaluate the module's contents and insert definitions into the environment.
  
  4. Construct the set of exports, and return it. Add them to the cache.
+
