@@ -52,19 +52,18 @@ empty = ScopeSet Set.empty Map.empty
 
 scopes :: Phase -> ScopeSet -> Set Scope
 scopes p scs = view universalScopes scs `Set.union`
-               maybe (Set.empty) id (view (phaseScopes . at p) scs)
+               view (phaseScopes . at p . non Set.empty) scs
 
 size :: Phase -> ScopeSet -> Int
 size p = Set.size . scopes p
 
 insertAtPhase :: Phase -> Scope -> ScopeSet -> ScopeSet
-insertAtPhase p sc scs = over (phaseScopes . at p) ins scs
-  where
-    ins :: Maybe (Set Scope) -> Maybe (Set Scope)
-    ins = maybe (Just (Set.singleton sc)) (Just . Set.insert sc)
+insertAtPhase p sc = set (phaseScopes . at p . non Set.empty . at sc)
+                         (Just ())
 
 insertUniversally :: Scope -> ScopeSet -> ScopeSet
-insertUniversally sc scs = over universalScopes (Set.insert sc) scs
+insertUniversally sc = set (universalScopes . at sc)
+                           (Just ())
 
 member :: Phase -> Scope -> ScopeSet -> Bool
 member p sc scs = sc `Set.member` (scopes p scs)
@@ -77,14 +76,14 @@ isSubsetOf p scs1 scs2 =
   Set.isSubsetOf (scopes p scs1) (scopes p scs2)
 
 deleteAtPhase :: Phase -> Scope -> ScopeSet -> ScopeSet
-deleteAtPhase p sc scs = over (phaseScopes . at p) del scs
-  where
-    del = fmap (Set.delete sc)
+deleteAtPhase p sc = set (phaseScopes . at p . non Set.empty . at sc)
+                         Nothing
 
 deleteUniversally :: Scope -> ScopeSet -> ScopeSet
-deleteUniversally sc scs =
-  over phaseScopes (Map.map (Set.delete sc)) $
-  over universalScopes (Set.delete sc) scs
+deleteUniversally sc = set (phaseScopes . each . at sc)
+                           Nothing
+                     . set (universalScopes . at sc)
+                           Nothing
 
 instance AlphaEq ScopeSet where
   alphaCheck x y = guard (x == y)

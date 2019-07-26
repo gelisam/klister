@@ -186,8 +186,7 @@ visit modName =
               return (w, m, es)
      p <- currentPhase
      visitedp <- Set.member p .
-                 maybe Set.empty id .
-                 view (expanderWorld . worldVisited . at modName) <$> getState
+                 view (expanderWorld . worldVisited . at modName . non Set.empty) <$> getState
      if visitedp
        then return ()
        else
@@ -196,8 +195,8 @@ visit modName =
               let envs = view worldEnvironments world'
               (moreEnvs, _) <- expandEval $ evalMod envs p m'
               modifyState $
-                over (expanderWorld . worldVisited . at modName)
-                     (Just . maybe (Set.singleton p) (Set.insert p))
+                set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
+                    (Just ())
               modifyState $ set (expanderWorld . worldEnvironments) moreEnvs
      return es
 
