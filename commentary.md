@@ -54,8 +54,23 @@ The best candidate binding is the one whose scope set is the largest. This allow
 
 ### About #%app
 
+In traditional Lisp systems, function application is unnamed, and is indicated by providing an expression with a non-macro `car`. In Racket, on the other hand, function application is a named operator (`#%app`) that is implicitly inserted in positions that a traditional Lisp would unconditionally consider to be an application. Importantly, `#%app` is inserted with the same scope set as the list that contains its arguments. This allows languages to provide their own notion of application, and even to locally override it using a macro.
+
+In this language, the built-in `#%app` is a binary operator, taking only one function and argument. It can be overridden with a macro to create Curried application.
 
 ### Expanding binding forms
+
+When expanding a binding form such as `lambda`, a fresh scope is created to represent the fact of the binding. This scope serves two roles at once:
+
+ 1. Applied to the binding occurrence, the scope ensures that only those identifiers that have been provided with the scope can refer to the binding. This is applied at all phases, because scopes on binders serve to limit scope, so using all phases makes the binding occurrence as restrictive as possible.
+ 
+ 2. Applied to the expression within which the bound name is accessible, the scope provides access to the binding occurrence. The use-site addition of the scope is performed only at the phase in which the binding should be accessible, because scopes on potential use sites serve to provide access to previously-limited scopes.
+ 
+Understood this way, scopes can be seen as a generalization of de Bruijn indices, in which a set is augmented with a scope instead of shifting a binding. Scope sets, however, work for _multiple dimensions_ of binding, as introduced by macro expansion.
+
+### Scopes and Expansion
+
+TODO (but see Flatt, POPL '16)
 
 ## Evaluating
 
