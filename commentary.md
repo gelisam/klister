@@ -30,9 +30,9 @@ In a core expression, variables don't have names, they have been translated into
 
 TODO: how does this relate to scope sets?
 
-## Expanding
+### `SplitCore` and `PartialCore`
 
-    expandExpr :: Syntax -> Expand SplitCore
+Now is the time to talk about the complexity which happens between `Syntax` and `Core`. Part of that complexity is the fact that there are two more intermediate formats in-between: `Syntax` becomes `SplitCore`, then `PartialCore`, then `Core`.
 
     unsplit :: SplitCore -> PartialCore
     split   :: PartialCore -> IO SplitCore
@@ -40,4 +40,14 @@ TODO: how does this relate to scope sets?
     nonPartial     :: Core -> PartialCore
     runPartialCore :: PartialCore -> Maybe Core
 
-TODO: explain the the expansion process, the difference between the various `Core` types, and the difference between the various `Unique`s found during expansion.
+A `PartialCore` expression is a tree with the same shape as a `Core` expression, except that sub-trees may be missing. The reason those sub-trees are missing is that we haven't computed them from the `Syntax` yet. `SplitCore` is a more useful form of `PartialCore` in which the missing sub-trees are labelled with a `SplitCorePtr`, so that we may graft sub-trees back in once they are computed. Every node in a `SplitCore` expression is labelled by a unique `SplitCorePtr`, not just the missing sub-trees.
+
+    newtype SplitCorePtr = SplitCorePtr Unique
+
+TODO: explain how the sub-trees get computed.
+
+## Expanding
+
+    expandExpr :: Syntax -> Expand SplitCore
+
+TODO: explain the the expansion process, and the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
