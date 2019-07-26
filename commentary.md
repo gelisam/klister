@@ -17,7 +17,7 @@ TODO: Presumably, we use those scope sets later on. Give an example which explai
 
 ## Expanding
 
-Macro expansion is the process of converting user-written syntax into the core language. Unlike traditional Lisps, macro expansion does not necessarily proceed from the outside of the expression towards the inside, from left to right. Instead, macro expansion is controlled by a /task queue/ and a /split expression/. Split expressions are trees in the core language in which some subtrees are not yet known (please see the section that describes them for details). Some tasks in the queue have dependencies; these will be skipped and requeued until their dependencies are satisfied.
+Macro expansion is the process of converting user-written syntax into the core language. Unlike traditional Lisps, macro expansion does not necessarily proceed from the outside of the expression towards the inside, from left to right. Instead, macro expansion is controlled by a _task queue_ and a _split expression_. Split expressions are trees in the core language in which some subtrees are not yet known (please see the section that describes them for details). Some tasks in the queue have dependencies; these will be skipped and requeued until their dependencies are satisfied.
 
 The entry point to expanding expressions is
 
@@ -25,7 +25,7 @@ The entry point to expanding expressions is
 
 It initializes the expander state with an empty split expression and a single task: to expand the input.
 
-To expand an expression, the first step is to determine which procedure can expand it (this procedure is called the /transformer/). Then, the syntax itself is passed to the transformer, which mutates the current expander state to make progress, arranging for any necessary further tasks to be enqueued.
+To expand an expression, the first step is to determine which procedure can expand it (this procedure is called the _transformer_). Then, the syntax itself is passed to the transformer, which mutates the current expander state to make progress, arranging for any necessary further tasks to be enqueued.
 
 Transformers are determined as follows:
 
