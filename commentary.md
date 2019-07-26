@@ -51,8 +51,13 @@ TODO: explain how the sub-trees get computed.
 
     expandExpr :: Syntax -> Expand SplitCore
 
-TODO: explain the the expansion process, and the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
+Expansion is divided into a large number of small tasks. The input `Syntax` will eventually become the output's core expression, so we first create a `SplitCorePtr` and create our first task, to fill in that `SplitCorePtr` with the beginning of a tree. In the process, more tasks are created, e.g. to fill in the remaining sub-trees. `expandExpr` keeps executing tasks until no more tasks can be completed, and which point the entire core expression will hopefully be filled in. But that is not guaranteed, because some tasks can get stuck.
 
+TODO: explain the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
+
+### Stuck tasks
+
+TODO: explain how a task may get stuck and what gets them unstuck.
 
 ## Module System
 
