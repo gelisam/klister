@@ -52,6 +52,10 @@ To resolve an identifier _x_, the first step is to find all candidate bindings. 
 
 The best candidate binding is the one whose scope set is the largest. This allows inner bindings to shadow outer bindings.
 
+### Quotation
+
+Quoted syntax expands to itself. In other words, quotation leaves intact the scope sets that prior expansion has added. This means that quotations maintain lexical scoping with respect to their original position in the program.
+
 ### About #%app
 
 In traditional Lisp systems, function application is unnamed, and is indicated by providing an expression with a non-macro `car`. In Racket, on the other hand, function application is a named operator (`#%app`) that is implicitly inserted in positions that a traditional Lisp would unconditionally consider to be an application. Importantly, `#%app` is inserted with the same scope set as the list that contains its arguments. This allows languages to provide their own notion of application, and even to locally override it using a macro.
