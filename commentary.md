@@ -18,17 +18,17 @@ TODO: Presumably, we use those scope sets later on. Give an example which explai
 
 Eventually the `Syntax` gets simplified into a core language which we can evaluate. Most of the complexity happens between `Syntax` and `Core`, so we'll keep that part for last.
 
-`Core` expressions consist of function applications, pattern-matching, and constructors for the language's primitive types. Those primitive types include functions, booleans, signals, reified `Syntax` objects, and "macro actions".
+`Core` expressions consist of function applications, pattern-matching, and constructors for the language's primitive types. Those primitive types include functions, booleans, signals, reified `Syntax` objects, and "macro actions". A macro action is a monadic block performing zero or more side-effects. These side-effects do not occur during evaluation, but rather during expansion, so we'll cover macro actions in more details in the `Expanding` section.
 
 TODO: what happened to strings? `Syntax` supports booleans, strings, and signals, but of those, `Core` only supports booleans and signals. Maybe we're instead supposed to manipulate a reified `Syntax` object holding a string?
 
-### Macro actions
-
-TODO: explain what a macro action is.
-
 ### `Core` variables: `Var`
 
-TODO: explain how identifiers are represented in core expressions.
+    newtype Var = Var Unique
+
+In a core expression, variables don't have names, they have been translated into a form which avoids accidental capture.
+
+TODO: how does this relate to scope sets?
 
 ## Expanding
 
