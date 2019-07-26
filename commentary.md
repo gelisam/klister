@@ -46,10 +46,16 @@ TODO: explain the the expansion process, and the difference between the various 
 
 ### Resolving identifiers
 
+The most important operation in hygienic macro expansion is being able to reliably determine the referent of an identifier. Each identifier has a scope set, and the expander maintains a binding table that relates names as written by users to a scope set and a binding. The range of the binding table represents the bindings that could in theory be available for an identifier with the appropriate name.
 
+To resolve an identifier /x/, the first step is to find all candidate bindings. Candidate bindings are those that are named /x/ whose scope sets are subsets of /x/'s scopes. Once the candidate bindings are found, /best/ candidate is returned. If there is no unique best candidate, then expansion fails.
+
+The best candidate binding is the one whose scope set is the largest. This allows inner bindings to shadow outer bindings.
 
 ### About #%app
 
+
+### Expanding binding forms
 
 ## Evaluating
 
