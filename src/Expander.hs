@@ -68,7 +68,7 @@ import qualified ScopeSet
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  addReady dest stx
+  forkExpandSyntax dest stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
   return $ SplitCore { _splitCoreRoot = dest
@@ -94,7 +94,7 @@ expandModule thisMod src =
     modBodyDest <- liftIO $ newModBodyPtr
     modifyState $ set expanderModuleTop $ Just modBodyDest
     decls <- addModuleScope (view moduleContents src)
-    readyDecls modBodyDest decls
+    forkExpandDecls modBodyDest decls
     expandTasks
     body <- getBody modBodyDest
     let modName = view moduleSource src
@@ -322,7 +322,7 @@ initializeKernel = do
 
                 resolveImports imports
 
-                readyDecls bodyPtr body
+                forkExpandDecls bodyPtr body
 
                 buildExports exports
                 pure ()
@@ -342,7 +342,7 @@ initializeKernel = do
             bind b (EVarMacro var)
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Define x var exprDest)
-            addReady exprDest expr
+            forkExpandSyntax exprDest expr
         )
       ,("define-macros"
         , \ sc dest stx -> do
@@ -368,7 +368,7 @@ initializeKernel = do
             Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
-            addReady exprDest (addScope p expr sc)
+            forkExpandSyntax exprDest (addScope p expr sc)
         )
       , ("import" --TODO filename relative to source location of import modname
         , \sc dest stx -> do
@@ -535,7 +535,7 @@ initializeKernel = do
             macroDest <- inEarlierPhase $ do
               psc <- phaseRoot
               schedule (addScope (prior p) mdef psc)
-            afterMacro b macroDest dest (addScope p body sc)
+            forkAwaitingMacro b macroDest dest (addScope p body sc)
         )
       ]
 
@@ -590,7 +590,7 @@ initializeKernel = do
     schedule :: Syntax -> Expand SplitCorePtr
     schedule stx = do
       dest <- liftIO newSplitCorePtr
-      addReady dest stx
+      forkExpandSyntax dest stx
       return dest
 
     addToKernel name p b =
@@ -634,13 +634,13 @@ addRootScope stx = do
   return (addScope p stx rsc)
 
 
-readyDecls :: ModBodyPtr -> Syntax -> Expand ()
-readyDecls dest (Syntax (Stx _ _ (List []))) =
+forkExpandDecls :: ModBodyPtr -> Syntax -> Expand ()
+forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
   modifyState $
   \st -> st { _expanderCompletedModBody =
               _expanderCompletedModBody st <> Map.singleton dest Done
             }
-readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
+forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   sc <- freshScope
   restDest <- liftIO $ newModBodyPtr
   declDest <- liftIO $ newDeclPtr
@@ -650,13 +650,13 @@ readyDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   p <- currentPhase
   modifyState $
     over expanderTasks $
-      ((tid, MoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
+      ((tid, ExpandMoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
   tid' <- newTaskID
   d' <- addRootScope d
   modifyState $
-    over expanderTasks ((tid', ReadyDecl declDest sc (addScope p d' sc)) :)
+    over expanderTasks ((tid', ExpandDecl declDest sc (addScope p d' sc)) :)
 
-readyDecls _dest _other =
+forkExpandDecls _dest _other =
   error "TODO real error message - malformed module body"
 
 
@@ -687,7 +687,7 @@ expandTasks = do
 runTask :: (TaskID, ExpanderTask) -> Expand ()
 runTask (tid, task) =
   case task of
-    Ready dest p stx ->
+    ExpandSyntax dest p stx ->
       inPhase p (expandOneExpression dest stx)
     AwaitingSignal _dest _on _k ->
       error "Unimplemented: macro monad interpretation (unblocking)"
@@ -706,10 +706,10 @@ runTask (tid, task) =
             Just macroImpl -> do
               macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
               bind b $ EUserMacro ExprMacro macroImplVal
-              addReady dest stx
-    ReadyDecl dest sc stx ->
+              forkExpandSyntax dest stx
+    ExpandDecl dest sc stx ->
       expandOneDeclaration sc dest stx
-    MoreDecls dest sc stx waitingOn -> do
+    ExpandMoreDecls dest sc stx waitingOn -> do
       p <- currentPhase
       readyYet <- view (expanderCompletedDecls . at waitingOn) <$> getState
       case readyYet of
@@ -717,7 +717,7 @@ runTask (tid, task) =
           -- Save task for later - not ready yet
           modifyState $ over expanderTasks ((tid, task) :)
         Just _ -> do
-          readyDecls dest (addScope p stx sc)
+          forkExpandDecls dest (addScope p stx sc)
 
   where
     laterMacro tid' b dest deps mdest stx =
@@ -768,7 +768,7 @@ expandOneExpression dest stx
                 Right expanded ->
                   case expanded of
                     ValueSyntax expansionResult ->
-                      addReady dest (flipScope p expansionResult stepScope)
+                      forkExpandSyntax dest (flipScope p expansionResult stepScope)
                     other -> throwError $ ValueNotSyntax other
             other ->
               throwError $ ValueNotMacro other

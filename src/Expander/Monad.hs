@@ -44,11 +44,11 @@ execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 
 data ExpanderTask
-  = Ready SplitCorePtr Phase Syntax
+  = ExpandSyntax SplitCorePtr Phase Syntax
   | AwaitingSignal SplitCorePtr Signal Value -- the value is the continuation
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
-  | ReadyDecl DeclPtr Scope Syntax
-  | MoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+  | ExpandDecl DeclPtr Scope Syntax
+  | ExpandMoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
 
 data TaskAwaitMacro = TaskAwaitMacro
   { awaitMacroBinding :: Binding
@@ -62,11 +62,11 @@ instance Show TaskAwaitMacro where
     "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
 instance Show ExpanderTask where
-  show (Ready _dest p stx) = "Ready " ++ show p ++ " " ++ T.unpack (pretty stx)
+  show (ExpandSyntax _dest p stx) = "ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx)
   show (AwaitingSignal _dest on _k) = "AwaitingSignal (" ++ show on ++ ")"
   show (AwaitingMacro dest t) = "AwaitingMacro (" ++ show dest ++ " " ++ show t ++ ")"
-  show (ReadyDecl _dest _sc stx) = "ReadyDecl " ++ T.unpack (syntaxText stx)
-  show (MoreDecls _dest _sc stx _waiting) = "MoreDecls " ++ T.unpack (syntaxText stx)
+  show (ExpandDecl _dest _sc stx) = "ExpandDecl " ++ T.unpack (syntaxText stx)
+  show (ExpandMoreDecls _dest _sc stx _waiting) = "ExpandMoreDecls " ++ T.unpack (syntaxText stx)
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
@@ -293,14 +293,14 @@ linkedCore slot =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
-addReady :: SplitCorePtr -> Syntax -> Expand ()
-addReady dest stx = do
+forkExpandSyntax :: SplitCorePtr -> Syntax -> Expand ()
+forkExpandSyntax dest stx = do
   p <- currentPhase
   tid <- newTaskID
-  modifyState $ over expanderTasks ((tid, Ready dest p stx) :)
+  modifyState $ over expanderTasks ((tid, ExpandSyntax dest p stx) :)
 
-afterMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-afterMacro b mdest dest stx = do
+forkAwaitingMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+forkAwaitingMacro b mdest dest stx = do
   tid <- newTaskID
   modifyState $
     \st -> st { _expanderTasks =
