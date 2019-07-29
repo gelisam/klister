@@ -29,17 +29,17 @@ To expand an expression, the first step is to determine which procedure can expa
 
 Transformers are determined as follows:
 
- 1. If the expression is an identifer, it is resolved (see the relevant subsection). If the identifier resolves to a variable, the current core expression is filled in with a reference to the variable. If the identifer resolves to anything else, the corresponding transformer is invoked on the syntax being expanded.
+1.  If the expression is an identifer, it is resolved (see the relevant subsection). If the identifier resolves to a variable, the current core expression is filled in with a reference to the variable. If the identifer resolves to anything else, the corresponding transformer is invoked on the syntax being expanded.
 
- 2. If the expression is a list or vector, there are two possibilities:
+2.  If the expression is a list or vector, there are two possibilities:
 
-   a. The expression's head is an identifier. In this case, the identifier is resolved. If it resolves to a variable, then `#%app` is inserted at the beginning of the list or vector, and it is re-expanded. If it resolves to any other transformer, then that transformer is invoked on the syntax being expanded.
+    1. The expression's head is an identifier. In this case, the identifier is resolved. If it resolves to a variable, then `#%app` is inserted at the beginning of the list or vector, and it is re-expanded. If it resolves to any other transformer, then that transformer is invoked on the syntax being expanded.
    
-   b. The expression's head is not an identifier. In this case, `#%app` is inserted at the beginning and the syntax is re-expanded.
+    2. The expression's head is not an identifier. In this case, `#%app` is inserted at the beginning and the syntax is re-expanded.
 
- 3. If the expression is a signal literal, then the current expression is replaced by the signal. This should perhaps be replaced by a `#%signal` builtin, similar to `#%app`.
+3.  If the expression is a signal literal, then the current expression is replaced by the signal. This should perhaps be replaced by a `#%signal` builtin, similar to `#%app`.
 
- 4. If the expression is anything else, then expansion fails.
+4.  If the expression is anything else, then expansion fails.
 
 
 TODO: explain the the expansion process, and the difference between the various `Unique`s we haven't explained yet: `Binding`, `ModulePtr`, `DeclPtr`, `ModBodyPtr`, and `TaskID`.
