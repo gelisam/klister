@@ -105,27 +105,31 @@ miniTests =
       ]
     expectedFailure =
       testGroup "Expected to fail"
-      [ testCase (show input) (testExpansionFails input predicate)
-      | (input, predicate) <-
-        [ ( "x"
+      [ testCase name (testExpansionFails input predicate)
+      | (name, input, predicate) <-
+        [ ( "unbound variable and nothing else"
+          , "x"
           , \case
               Unknown (Stx _ _ "x") -> True
               _ -> False
           )
-        , ("[let-syntax \
-           \  [m [lambda [_] \
-           \       [pure [quote [lambda [x] x]]]]] \
-           \  anyRandomWord]"
-           , \case
-               Unknown (Stx _ _ "anyRandomWord") -> True
-               _ -> False
-           )
-        , ("[lambda [x] [let-syntax [m [lambda [_] x]] x]]"
+        , ( "unbound variable inside let-syntax"
+          , "[let-syntax \
+            \  [m [lambda [_] \
+            \       [pure [quote [lambda [x] x]]]]] \
+            \  anyRandomWord]"
+            , \case
+                Unknown (Stx _ _ "anyRandomWord") -> True
+                _ -> False
+            )
+        , ( "refer to a local variable from a future phase"
+          , "[lambda [x] [let-syntax [m [lambda [_] x]] x]]"
           , \case
               Unknown (Stx _ _ "x") -> True
               _ -> False
           )
-        , ("[let-syntax [m [lambda [x] [m x]]] m]"
+        , ( "a macro calls itself"
+          , "[let-syntax [m [lambda [x] [m x]]] m]"
           , \case
               Unknown (Stx _ loc "m") ->
                 -- Make sure it's the use site in the macro body that
