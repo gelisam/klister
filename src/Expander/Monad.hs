@@ -19,6 +19,7 @@ import Data.Unique
 import Numeric.Natural
 
 import Binding
+import Control.Lens.IORef
 import Core
 import Evaluator
 import Module
@@ -45,10 +46,11 @@ execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 data ExpanderTask
   = ExpandSyntax SplitCorePtr Phase Syntax
-  | AwaitingSignal SplitCorePtr Signal Value -- the value is the continuation
+  | AwaitingSignal SplitCorePtr Signal [Closure]
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
   | ExpandDecl DeclPtr Scope Syntax
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+  | ContinueMacroAction SplitCorePtr Value [Closure]
 
 data TaskAwaitMacro = TaskAwaitMacro
   { awaitMacroBinding :: Binding
@@ -299,6 +301,12 @@ forkExpandSyntax dest stx = do
   tid <- newTaskID
   modifyState $ over expanderTasks ((tid, ExpandSyntax dest p stx) :)
 
+forkAwaitingSignal :: SplitCorePtr -> Signal -> [Closure] -> Expand ()
+forkAwaitingSignal dest signal kont = do
+  tid <- newTaskID
+  let task = AwaitingSignal dest signal kont
+  (expanderState, expanderTasks) !%= (:) (tid, task)
+
 forkAwaitingMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 forkAwaitingMacro b mdest dest stx = do
   tid <- newTaskID
@@ -307,6 +315,12 @@ forkAwaitingMacro b mdest dest stx = do
                 (tid, AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)) :
                 view expanderTasks st
               }
+
+forkContinueMacroAction :: SplitCorePtr -> Value -> [Closure] -> Expand ()
+forkContinueMacroAction dest value kont = do
+  tid <- newTaskID
+  let task = ContinueMacroAction dest value kont
+  (expanderState, expanderTasks) !%= (:) (tid, task)
 
 -- | Compute the dependencies of a particular slot. The dependencies
 -- are the un-linked child slots. If there are no dependencies, then

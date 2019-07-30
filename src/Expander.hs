@@ -47,6 +47,7 @@ import Data.Unique
 import System.Directory
 
 import Binding
+import Control.Lens.IORef
 import Core
 import Env
 import Evaluator
@@ -689,8 +690,15 @@ runTask (tid, task) =
   case task of
     ExpandSyntax dest p stx ->
       inPhase p (expandOneExpression dest stx)
-    AwaitingSignal _dest _on _k ->
-      error "Unimplemented: macro monad interpretation (unblocking)"
+    AwaitingSignal dest signal kont -> do
+      signalWasSent <- expanderState !^. expanderReceivedSignals . at signal
+      case signalWasSent of
+        Nothing -> do
+          -- no progress: re-enqueue with the same TaskID
+          (expanderState, expanderTasks) !%= (:) (tid, task)
+        Just () -> do
+          let result = ValueSignal signal  -- TODO: return unit instead
+          forkContinueMacroAction dest result kont
     AwaitingMacro dest (TaskAwaitMacro b deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
@@ -718,6 +726,14 @@ runTask (tid, task) =
           modifyState $ over expanderTasks ((tid, task) :)
         Just _ -> do
           forkExpandDecls dest (addScope p stx sc)
+    ContinueMacroAction dest value [] -> do
+      case value of
+        ValueSyntax syntax -> do
+          forkExpandSyntax dest syntax
+        other -> expandEval $ evalErrorType "syntax" other
+    ContinueMacroAction dest value (closure:kont) -> do
+      result <- expandEval $ apply closure value
+      forkContinueMacroAction dest result kont
 
   where
     laterMacro tid' b dest deps mdest stx =
@@ -764,7 +780,8 @@ expandOneExpression dest stx
             ValueMacroAction act -> do
               res <- interpretMacroAction act
               case res of
-                Left (_sig, _kont) -> error "Unimplemented - blocking on signals"
+                Left (sig, kont) -> do
+                  forkAwaitingSignal dest sig kont
                 Right expanded ->
                   case expanded of
                     ValueSyntax expansionResult ->

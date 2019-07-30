@@ -17,12 +17,14 @@ import Alpha
 import Core
 import Core.Builder
 import Expander
+import Expander.Monad
 import Module
 import ModuleName
 import Parser
 import PartialCore
 import ScopeSet
 import ShortShow
+import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
@@ -135,6 +137,16 @@ miniTests =
                 -- Make sure it's the use site in the macro body that
                 -- throws the error
                 view (srcLocStart . srcPosCol) loc == 29
+              _ -> False
+          )
+        , ( "wait for a signal which is never coming"
+          , "[let-syntax \n\
+            \  [signaling-id [lambda [_] \n\
+            \                  [>>= [wait-signal 0] [lambda [_] \n\
+            \                  [pure [quote [lambda [x] x]]]]]]] \n\
+            \    [signaling-id]]"
+          , \case
+              NoProgress [AwaitingSignal _ (Signal 0) _] -> True
               _ -> False
           )
         ]
