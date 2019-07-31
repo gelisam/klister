@@ -295,32 +295,29 @@ linkedCore slot =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
+
+forkExpanderTask :: ExpanderTask -> Expand ()
+forkExpanderTask task = do
+  tid <- newTaskID
+  (expanderState, expanderTasks) !%= (:) (tid, task)
+
 forkExpandSyntax :: SplitCorePtr -> Syntax -> Expand ()
 forkExpandSyntax dest stx = do
   p <- currentPhase
-  tid <- newTaskID
-  modifyState $ over expanderTasks ((tid, ExpandSyntax dest p stx) :)
+  forkExpanderTask $ ExpandSyntax dest p stx
 
 forkAwaitingSignal :: SplitCorePtr -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont = do
-  tid <- newTaskID
-  let task = AwaitingSignal dest signal kont
-  (expanderState, expanderTasks) !%= (:) (tid, task)
+  forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 forkAwaitingMacro b mdest dest stx = do
-  tid <- newTaskID
-  modifyState $
-    \st -> st { _expanderTasks =
-                (tid, AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)) :
-                view expanderTasks st
-              }
+  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)
 
 forkContinueMacroAction :: SplitCorePtr -> Value -> [Closure] -> Expand ()
 forkContinueMacroAction dest value kont = do
-  tid <- newTaskID
-  let task = ContinueMacroAction dest value kont
-  (expanderState, expanderTasks) !%= (:) (tid, task)
+  forkExpanderTask $ ContinueMacroAction dest value kont
+
 
 -- | Compute the dependencies of a particular slot. The dependencies
 -- are the un-linked child slots. If there are no dependencies, then

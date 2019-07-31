@@ -647,15 +647,10 @@ forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   declDest <- liftIO $ newDeclPtr
   modifyState $ over expanderCompletedModBody $
     (<> Map.singleton dest (Decl declDest restDest))
-  tid <- newTaskID
   p <- currentPhase
-  modifyState $
-    over expanderTasks $
-      ((tid, ExpandMoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest) :)
-  tid' <- newTaskID
+  forkExpanderTask $ ExpandMoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest
   d' <- addRootScope d
-  modifyState $
-    over expanderTasks ((tid', ExpandDecl declDest sc (addScope p d' sc)) :)
+  forkExpanderTask $ ExpandDecl declDest sc (addScope p d' sc)
 
 forkExpandDecls _dest _other =
   error "TODO real error message - malformed module body"
