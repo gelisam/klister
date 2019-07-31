@@ -721,6 +721,12 @@ runTask (tid, task) =
           modifyState $ over expanderTasks ((tid, task) :)
         Just _ -> do
           forkExpandDecls dest (addScope p stx sc)
+    InterpretMacroAction dest act outerKont -> do
+      interpretMacroAction act >>= \case
+        Left (signal, innerKont) -> do
+          forkAwaitingSignal dest signal (innerKont ++ outerKont)
+        Right value -> do
+          forkContinueMacroAction dest value outerKont
     ContinueMacroAction dest value [] -> do
       case value of
         ValueSyntax syntax -> do
@@ -728,7 +734,10 @@ runTask (tid, task) =
         other -> expandEval $ evalErrorType "syntax" other
     ContinueMacroAction dest value (closure:kont) -> do
       result <- expandEval $ apply closure value
-      forkContinueMacroAction dest result kont
+      case result of
+        ValueMacroAction macroAction -> do
+          forkInterpretMacroAction dest macroAction kont
+        other -> expandEval $ evalErrorType "macro action" other
 
   where
     laterMacro tid' b dest deps mdest stx =

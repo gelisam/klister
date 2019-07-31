@@ -50,6 +50,7 @@ data ExpanderTask
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
   | ExpandDecl DeclPtr Scope Syntax
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+  | InterpretMacroAction SplitCorePtr MacroAction [Closure]
   | ContinueMacroAction SplitCorePtr Value [Closure]
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -313,6 +314,10 @@ forkAwaitingSignal dest signal kont = do
 forkAwaitingMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 forkAwaitingMacro b mdest dest stx = do
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)
+
+forkInterpretMacroAction :: SplitCorePtr -> MacroAction -> [Closure] -> Expand ()
+forkInterpretMacroAction dest act kont = do
+  forkExpanderTask $ InterpretMacroAction dest act kont
 
 forkContinueMacroAction :: SplitCorePtr -> Value -> [Closure] -> Expand ()
 forkContinueMacroAction dest value kont = do
