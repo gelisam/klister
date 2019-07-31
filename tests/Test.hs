@@ -100,8 +100,24 @@ miniTests =
             \  [signaling-id [lambda [_] \n\
             \                  [>>= [send-signal 0] [lambda [_] \n\
             \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [signaling-id]]"
+            \    [let-syntax \n\
+            \      [blocked-id [lambda [_] \n\
+            \                    [>>= [wait-signal 0] [lambda [_] \n\
+            \                    [pure [quote [lambda [x] x]]]]]]] \n\
+            \        [signaling-id]]]"
           , lam $ \x -> x
+          )
+        , ( "send and receive the same signal"
+          , "[let-syntax \n\
+            \  [signaling-id [lambda [_] \n\
+            \                  [>>= [send-signal 0] [lambda [_] \n\
+            \                  [pure [quote [lambda [x] x]]]]]]] \n\
+            \    [let-syntax \n\
+            \      [blocked-id [lambda [_] \n\
+            \                    [>>= [wait-signal 0] [lambda [_] \n\
+            \                    [pure [quote [lambda [x] x]]]]]]] \n\
+            \        [[signaling-id] [blocked-id]]]]"
+          , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
         ]
       ]
@@ -142,11 +158,29 @@ miniTests =
         , ( "wait for a signal which is never coming"
           , "[let-syntax \n\
             \  [signaling-id [lambda [_] \n\
-            \                  [>>= [wait-signal 0] [lambda [_] \n\
+            \                  [>>= [send-signal 0] [lambda [_] \n\
             \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [signaling-id]]"
+            \    [let-syntax \n\
+            \      [blocked-id [lambda [_] \n\
+            \                    [>>= [wait-signal 0] [lambda [_] \n\
+            \                    [pure [quote [lambda [x] x]]]]]]] \n\
+            \        [blocked-id]]]"
           , \case
               NoProgress [AwaitingSignal _ (Signal 0) _] -> True
+              _ -> False
+          )
+        , ( "send and receive different signals"
+          , "[let-syntax \n\
+            \  [signaling-id [lambda [_] \n\
+            \                  [>>= [send-signal 0] [lambda [_] \n\
+            \                  [pure [quote [lambda [x] x]]]]]]] \n\
+            \    [let-syntax \n\
+            \      [blocked-id [lambda [_] \n\
+            \                    [>>= [wait-signal 1] [lambda [_] \n\
+            \                    [pure [quote [lambda [x] x]]]]]]] \n\
+            \        [[signaling-id] [blocked-id]]]]"
+          , \case
+              NoProgress [AwaitingSignal _ (Signal 1) _] -> True
               _ -> False
           )
         ]

@@ -872,7 +872,7 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
 interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
-  -- TODO: send the signal
+  (expanderState, expanderReceivedSignals . at signal) !.= Just ()
   pure $ Right $ ValueSignal signal  -- TODO: return unit instead
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
