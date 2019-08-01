@@ -300,7 +300,7 @@ freshVar = Var <$> liftIO newUnique
 forkExpanderTask :: ExpanderTask -> Expand ()
 forkExpanderTask task = do
   tid <- newTaskID
-  (expanderState, expanderTasks) !%= (:) (tid, task)
+  overIORef expanderState expanderTasks ((tid, task) :)
 
 forkExpandSyntax :: SplitCorePtr -> Syntax -> Expand ()
 forkExpandSyntax dest stx = do

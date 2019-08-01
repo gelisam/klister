@@ -686,11 +686,11 @@ runTask (tid, task) =
     ExpandSyntax dest p stx ->
       inPhase p (expandOneExpression dest stx)
     AwaitingSignal dest signal kont -> do
-      signalWasSent <- expanderState !^. expanderReceivedSignals . at signal
+      signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
         Nothing -> do
           -- no progress: re-enqueue with the same TaskID
-          (expanderState, expanderTasks) !%= (:) (tid, task)
+          overIORef expanderState expanderTasks ((tid, task) :)
         Just () -> do
           let result = ValueSignal signal  -- TODO: return unit instead
           forkContinueMacroAction dest result kont
@@ -856,7 +856,8 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
       phase <- view expanderPhase
       s <- getState
       let env = fromMaybe Env.empty
-                          (s ^. expanderWorld . worldEnvironments . at phase)
+              . view (expanderWorld . worldEnvironments . at phase)
+              $ s
       evalResult <- liftIO
                   $ runExceptT
                   $ flip runReaderT env
@@ -872,7 +873,7 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
 interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
-  (expanderState, expanderReceivedSignals . at signal) !.= Just ()
+  setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
   pure $ Right $ ValueSignal signal  -- TODO: return unit instead
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])

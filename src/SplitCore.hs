@@ -5,7 +5,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module SplitCore where
 
-import Control.Lens hiding (List, children)
+import Control.Lens hiding (children)
 import Control.Monad.Except
 import Control.Monad.Writer
 

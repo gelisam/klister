@@ -39,7 +39,7 @@ runAlpha = flip evalStateT initialAlphaState
 nextInt :: Alpha Int
 nextInt = Alpha $ do
   n <- use alphaStateNext
-  alphaStateNext += 1
+  modifying alphaStateNext (+1)
   pure n
 
 notAlphaEquivalent :: Alpha a
@@ -60,8 +60,8 @@ instance AlphaEq Unique where
     guard (maybeM == maybeN)
     when (maybeM == Nothing) $ do
       n <- unAlpha nextInt
-      alphaStateEnv1 . at x .= Just n
-      alphaStateEnv2 . at y .= Just n
+      assign (alphaStateEnv1 . at x) (Just n)
+      assign (alphaStateEnv2 . at y) (Just n)
 
 instance (AlphaEq a, AlphaEq b) => AlphaEq (a, b) where
   alphaCheck (x1, y1)
