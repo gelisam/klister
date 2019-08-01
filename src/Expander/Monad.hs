@@ -65,19 +65,19 @@ instance Show TaskAwaitMacro where
     "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
 instance Show ExpanderTask where
-  show (ExpandSyntax _dest p stx) = "ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx)
-  show (AwaitingSignal _dest on _k) = "AwaitingSignal (" ++ show on ++ ")"
-  show (AwaitingMacro dest t) = "AwaitingMacro (" ++ show dest ++ " " ++ show t ++ ")"
-  show (ExpandDecl _dest _sc stx) = "ExpandDecl " ++ T.unpack (syntaxText stx)
-  show (ExpandMoreDecls _dest _sc stx _waiting) = "ExpandMoreDecls " ++ T.unpack (syntaxText stx)
-  show (InterpretMacroAction _dest act kont) = "InterpretMacroAction " ++ show act ++ " " ++ show kont
-  show (ContinueMacroAction _dest value kont) = "ContinueMacroAction " ++ show value ++ " " ++ show kont
+  show (ExpandSyntax _dest p stx) = "(ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx) ++ ")"
+  show (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
+  show (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ show t ++ ")"
+  show (ExpandDecl _dest _sc stx) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ ")"
+  show (ExpandMoreDecls _dest _sc stx _waiting) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ ")"
+  show (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
+  show (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
 
 instance Show TaskID where
-  show (TaskID u) = "TaskID " ++ show (hashUnique u)
+  show (TaskID u) = "(TaskID " ++ show (hashUnique u) ++ ")"
 
 newTaskID :: Expand TaskID
 newTaskID = liftIO $ TaskID <$> newUnique

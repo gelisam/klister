@@ -27,7 +27,7 @@ newtype Var = Var Unique
   deriving (AlphaEq, Eq, Ord)
 
 instance Show Var where
-  show (Var i) = show (hashUnique i)
+  show (Var i) = "(Var " ++ show (hashUnique i) ++ ")"
 
 data Pattern
   = PatternIdentifier Ident Var
