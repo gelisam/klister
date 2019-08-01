@@ -211,7 +211,7 @@ getEValue b = do
     Nothing -> throwError (InternalError ("No such binding: " ++ show b))
 
 
-getTasks :: Expand [(TaskID, ExpanderTask)]
+getTasks :: Expand [(TaskID, ExpanderLocal, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
 clearTasks :: Expand ()
@@ -675,22 +675,21 @@ expandTasks = do
       forM_ more runTask
       newTasks <- getTasks
       if taskIDs tasks  == taskIDs newTasks
-        then throwError (NoProgress (map snd newTasks))
+        then throwError (NoProgress (map (view _3) newTasks))
         else expandTasks
   where
-    taskIDs = Set.fromList . map fst
+    taskIDs = Set.fromList . map (view _1)
 
-runTask :: (TaskID, ExpanderTask) -> Expand ()
-runTask (tid, task) =
+runTask :: (TaskID, ExpanderLocal, ExpanderTask) -> Expand ()
+runTask (tid, localState, task) = withLocalState localState $ do
   case task of
-    ExpandSyntax dest p stx ->
-      inPhase p (expandOneExpression dest stx)
+    ExpandSyntax dest stx ->
+      expandOneExpression dest stx
     AwaitingSignal dest signal kont -> do
       signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
         Nothing -> do
-          -- no progress: re-enqueue with the same TaskID
-          overIORef expanderState expanderTasks ((tid, task) :)
+          stillStuck tid task
         Just () -> do
           let result = ValueSignal signal  -- TODO: return unit instead
           forkContinueMacroAction dest result kont
@@ -717,8 +716,7 @@ runTask (tid, task) =
       readyYet <- view (expanderCompletedDecls . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
-          -- Save task for later - not ready yet
-          modifyState $ over expanderTasks ((tid, task) :)
+          stillStuck tid task
         Just _ -> do
           forkExpandDecls dest (addScope p stx sc)
     InterpretMacroAction dest act outerKont -> do
@@ -740,10 +738,11 @@ runTask (tid, task) =
         other -> expandEval $ evalErrorType "macro action" other
 
   where
-    laterMacro tid' b dest deps mdest stx =
+    laterMacro tid' b dest deps mdest stx = do
+      localState <- view expanderLocal
       modifyState $
         over expanderTasks $
-          ((tid', AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
+          ((tid', localState, AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
 
 
 

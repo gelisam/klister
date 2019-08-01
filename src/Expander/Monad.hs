@@ -46,7 +46,7 @@ execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 
 data ExpanderTask
-  = ExpandSyntax SplitCorePtr Phase Syntax
+  = ExpandSyntax SplitCorePtr Syntax
   | AwaitingSignal SplitCorePtr Signal [Closure]
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
   | ExpandDecl DeclPtr Scope Syntax
@@ -68,7 +68,7 @@ instance ShortShow TaskAwaitMacro where
     "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
 instance ShortShow ExpanderTask where
-  shortShow (ExpandSyntax _dest p stx) = "(ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx) ++ ")"
+  shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ show t ++ ")"
   shortShow (ExpandDecl _dest _sc stx) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ ")"
@@ -186,7 +186,7 @@ data ExpanderState = ExpanderState
   , _expanderNextScope :: !Scope
   , _expanderBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
-  , _expanderTasks :: [(TaskID, ExpanderTask)]
+  , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
@@ -239,6 +239,9 @@ freshScope = do
   modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
   return sc
 
+
+withLocalState :: ExpanderLocal -> Expand a -> Expand a
+withLocalState localState = Expand . local (set expanderLocal localState) . runExpand
 
 currentPhase :: Expand Phase
 currentPhase = Expand $ view (expanderLocal . expanderPhase) <$> ask
@@ -309,15 +312,20 @@ freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
 
+stillStuck :: TaskID -> ExpanderTask -> Expand ()
+stillStuck tid task = do
+  localState <- view expanderLocal
+  overIORef expanderState expanderTasks ((tid, localState, task) :)
+
 forkExpanderTask :: ExpanderTask -> Expand ()
 forkExpanderTask task = do
   tid <- newTaskID
-  overIORef expanderState expanderTasks ((tid, task) :)
+  localState <- view expanderLocal
+  overIORef expanderState expanderTasks ((tid, localState, task) :)
 
 forkExpandSyntax :: SplitCorePtr -> Syntax -> Expand ()
 forkExpandSyntax dest stx = do
-  p <- currentPhase
-  forkExpanderTask $ ExpandSyntax dest p stx
+  forkExpanderTask $ ExpandSyntax dest stx
 
 forkAwaitingSignal :: SplitCorePtr -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont = do
