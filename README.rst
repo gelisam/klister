@@ -1,4 +1,4 @@
-Stuck Macros
+Klister
 ------------
 
 This repository contains a partial implementation of a macro expander
@@ -7,8 +7,8 @@ on information that will be the result of later macro expansion or
 type checking, it can pause its execution until that information has
 become available.
 
-For a description of one way in which this might be useful, please see
-this `talk`_.
+For a description of one way in which stuck macros might be useful,
+please see this `talk`_.
 
 .. _talk: https://www.youtube.com/watch?v=nUvKoG_V_U0
 
@@ -48,3 +48,12 @@ signals, at which point the blocked macros get un-stuck. This is
 reminiscent of the ``blockOnMeta`` operation in Agda's reflection
 system. Eventually, we plan to replace this with the ability to block
 on the solution to a metavariable.
+
+FAQ
+===
+
+Why "Klister"?
+--------------
+
+"Klister" is Danish for "glue", and is also used to form words describing
+_sticky_ things. And our macros get _stuck_.
