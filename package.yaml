@@ -1,6 +1,6 @@
-name:           stuck-macros
+name:           klister
 version:        0.1
-github:         gelisam/stuck-macros
+github:         gelisam/klister
 author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 ghc-options: -Wall
@@ -18,14 +18,14 @@ dependencies:
 library:
   source-dirs: src
 executables:
-  stuck-macros-repl:
+  klister-repl:
     main:        Main.hs
-    source-dirs: stuck-macros
+    source-dirs: repl
     dependencies:
       - optparse-applicative
-      - stuck-macros
+      - klister
 tests:
-  stuck-macro-tests:
+  klister-tests:
     main:
       tests/Test.hs
     dependencies:
