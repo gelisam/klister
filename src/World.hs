@@ -7,7 +7,6 @@ import Control.Lens
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
-import Data.Text (Text)
 
 import Env
 import Module

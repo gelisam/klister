@@ -70,6 +70,8 @@ instance Show ExpanderTask where
   show (AwaitingMacro dest t) = "AwaitingMacro (" ++ show dest ++ " " ++ show t ++ ")"
   show (ExpandDecl _dest _sc stx) = "ExpandDecl " ++ T.unpack (syntaxText stx)
   show (ExpandMoreDecls _dest _sc stx _waiting) = "ExpandMoreDecls " ++ T.unpack (syntaxText stx)
+  show (InterpretMacroAction _dest act kont) = "InterpretMacroAction " ++ show act ++ " " ++ show kont
+  show (ContinueMacroAction _dest value kont) = "ContinueMacroAction " ++ show value ++ " " ++ show kont
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
