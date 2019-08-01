@@ -767,13 +767,7 @@ expandOneExpression dest stx
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
         EIncompleteMacro mdest -> do
-          tid <- newTaskID
-          let todo = TaskAwaitMacro { awaitMacroBinding = b
-                                    , awaitMacroDependsOn = [mdest]
-                                    , awaitMacroLocation = mdest
-                                    , awaitMacroSyntax = stx
-                                    }
-          modifyState $ over expanderTasks $ ((tid, AwaitingMacro dest todo) :)
+          forkAwaitingMacro b mdest dest stx
         EUserMacro ExprMacro (ValueClosure macroImpl) -> do
           stepScope <- freshScope
           p <- currentPhase
