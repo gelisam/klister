@@ -161,17 +161,23 @@ data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
 
 data ExpanderContext = ExpanderContext
-  { _expanderState :: IORef ExpanderState
+  { _expanderLocal :: !ExpanderLocal
+  , _expanderState :: IORef ExpanderState
+  }
+
+data ExpanderLocal = ExpanderLocal
+  { _expanderModuleName :: !ModuleName
   , _expanderPhase :: !Phase
-  , _expanderModuleName :: !ModuleName
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
 mkInitContext mn = do
   st <- newIORef initExpanderState
   return $ ExpanderContext { _expanderState = st
-                           , _expanderModuleName = mn
-                           , _expanderPhase = runtime
+                           , _expanderLocal = ExpanderLocal
+                             { _expanderModuleName = mn
+                             , _expanderPhase = runtime
+                             }
                            }
 
 data ExpanderState = ExpanderState
@@ -212,6 +218,7 @@ initExpanderState = ExpanderState
   }
 
 makeLenses ''ExpanderContext
+makeLenses ''ExpanderLocal
 makeLenses ''ExpanderState
 
 expanderContext :: Expand ExpanderContext
@@ -234,14 +241,14 @@ freshScope = do
 
 
 currentPhase :: Expand Phase
-currentPhase = Expand $ view expanderPhase <$> ask
+currentPhase = Expand $ view (expanderLocal . expanderPhase) <$> ask
 
 inPhase :: Phase -> Expand a -> Expand a
-inPhase p act = Expand $ local (over expanderPhase (const p)) $ runExpand act
+inPhase p act = Expand $ local (over (expanderLocal . expanderPhase) (const p)) $ runExpand act
 
 inEarlierPhase :: Expand a -> Expand a
 inEarlierPhase act =
-  Expand $ local (over expanderPhase prior) $ runExpand act
+  Expand $ local (over (expanderLocal . expanderPhase) prior) $ runExpand act
 
 moduleScope :: ModuleName -> Expand Scope
 moduleScope mn = do

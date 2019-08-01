@@ -89,7 +89,7 @@ initializeLanguage (Stx scs loc lang) = do
 
 expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
 expandModule thisMod src =
-  local (set expanderModuleName thisMod) do
+  local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
     modBodyDest <- liftIO $ newModBodyPtr
@@ -624,7 +624,7 @@ initializeKernel = do
 
 addModuleScope :: HasScopes a => a -> Expand a
 addModuleScope stx = do
-  mn <- view expanderModuleName <$> ask
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
   sc <- moduleScope mn
   return $ addScope' stx sc
 
@@ -853,7 +853,7 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
     Left (signal, closures) -> do
       pure $ Left (signal, closures ++ [closure])
     Right boundResult -> do
-      phase <- view expanderPhase
+      phase <- view (expanderLocal . expanderPhase)
       s <- getState
       let env = fromMaybe Env.empty
               . view (expanderWorld . worldEnvironments . at phase)
