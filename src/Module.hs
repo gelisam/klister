@@ -45,6 +45,9 @@ import Syntax
 newtype ModulePtr = ModulePtr Unique
   deriving (Eq, Ord)
 
+instance Show ModulePtr where
+  show (ModulePtr u) = "(ModulePtr " ++ show (hashUnique u) ++ ")"
+
 newModulePtr :: IO ModulePtr
 newModulePtr = ModulePtr <$> newUnique
 
@@ -123,6 +126,9 @@ instance (Functor f, Phased a) => Phased (Module f a) where
 newtype DeclPtr = DeclPtr Unique
   deriving (Eq, Ord)
 
+instance Show DeclPtr where
+  show (DeclPtr u) = "(DeclPtr " ++ show (hashUnique u) ++ ")"
+
 newDeclPtr :: IO DeclPtr
 newDeclPtr = DeclPtr <$> newUnique
 
@@ -140,6 +146,9 @@ instance Phased a => Phased (Decl a) where
 
 newtype ModBodyPtr = ModBodyPtr Unique
   deriving (Eq, Ord)
+
+instance Show ModBodyPtr where
+  show (ModBodyPtr u) = "(ModBodyPtr " ++ show (hashUnique u) ++ ")"
 
 newModBodyPtr :: IO ModBodyPtr
 newModBodyPtr = ModBodyPtr <$> newUnique

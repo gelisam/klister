@@ -31,6 +31,7 @@ import Signals
 import SplitCore
 import Scope
 import ScopeSet (ScopeSet)
+import ShortShow
 import Syntax
 import Value
 import World
@@ -52,6 +53,7 @@ data ExpanderTask
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
   | InterpretMacroAction SplitCorePtr MacroAction [Closure]
   | ContinueMacroAction SplitCorePtr Value [Closure]
+  deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
   { awaitMacroBinding :: Binding
@@ -59,19 +61,20 @@ data TaskAwaitMacro = TaskAwaitMacro
   , awaitMacroLocation :: SplitCorePtr -- the destination into which the macro will be expanded.
   , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
   }
+  deriving (Show)
 
-instance Show TaskAwaitMacro where
-  show (TaskAwaitMacro _ deps _ stx) =
+instance ShortShow TaskAwaitMacro where
+  shortShow (TaskAwaitMacro _ deps _ stx) =
     "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
-instance Show ExpanderTask where
-  show (ExpandSyntax _dest p stx) = "(ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx) ++ ")"
-  show (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
-  show (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ show t ++ ")"
-  show (ExpandDecl _dest _sc stx) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ ")"
-  show (ExpandMoreDecls _dest _sc stx _waiting) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ ")"
-  show (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
-  show (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
+instance ShortShow ExpanderTask where
+  shortShow (ExpandSyntax _dest p stx) = "(ExpandSyntax " ++ show p ++ " " ++ T.unpack (pretty stx) ++ ")"
+  shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
+  shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ show t ++ ")"
+  shortShow (ExpandDecl _dest _sc stx) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (ExpandMoreDecls _dest _sc stx _waiting) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
+  shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
