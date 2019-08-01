@@ -96,22 +96,24 @@ evalMod startingEnvs basePhase m =
           Nothing -> Map.insert p (Env.singleton n x v) envs
 
 
-    evalDecl :: Decl Core -> RWST Phase [(Env Value, Core, Value)] (Map Phase (Env Value)) Eval ()
-    evalDecl (Define x n e) = do
-      env <- currentEnv
-      v <- lift $ withEnv env (eval e)
-      extendCurrentEnv n x v
-    evalDecl (Example e) = do
-      env <- currentEnv
-      v <- lift $ withEnv env (eval e)
-      tell [(env, e, v)]
-    evalDecl (DefineMacros _macros) = do
-      pure () -- Macros only live in the transformer environment
-              -- TODO revisit as part of adding exports, where an expansion
-              -- environment is created
-    evalDecl (Meta decl) = local prior (evalDecl decl)
-    evalDecl (Import _mn _x) = pure ()
-    evalDecl (Export _x) = pure ()
+    evalDecl :: CompleteDecl -> RWST Phase [(Env Value, Core, Value)] (Map Phase (Env Value)) Eval ()
+    evalDecl (CompleteDecl d) = evalDecl' d
+      where
+      evalDecl' (Define x n e) = do
+        env <- currentEnv
+        v <- lift $ withEnv env (eval e)
+        extendCurrentEnv n x v
+      evalDecl' (Example e) = do
+        env <- currentEnv
+        v <- lift $ withEnv env (eval e)
+        tell [(env, e, v)]
+      evalDecl' (DefineMacros _macros) = do
+        pure () -- Macros only live in the transformer environment
+                -- TODO revisit as part of adding exports, where an expansion
+                -- environment is created
+      evalDecl' (Meta decl) = local prior (evalDecl decl)
+      evalDecl' (Import _mn _x) = pure ()
+      evalDecl' (Export _x) = pure ()
 
 
 apply :: Closure -> Value -> Eval Value

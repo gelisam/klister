@@ -106,7 +106,7 @@ expandModule thisMod src =
       , _moduleExports = noExports
     }
   where
-    getBody :: ModBodyPtr -> Expand [Decl Core]
+    getBody :: ModBodyPtr -> Expand [CompleteDecl]
     getBody ptr =
       (view (expanderCompletedModBody . at ptr) <$> getState) >>=
       \case
@@ -120,28 +120,28 @@ expandModule thisMod src =
         Nothing -> throwError $ InternalError "Missing decl after expansion"
         Just decl -> flatten decl
 
-    flatten :: Decl SplitCorePtr -> Expand (Decl Core)
+    flatten :: Decl DeclPtr SplitCorePtr -> Expand (CompleteDecl)
     flatten (Define x v e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ Define x v e'
+        Just e' -> pure $ CompleteDecl $ Define x v e'
     flatten (DefineMacros macros) =
-      DefineMacros <$>
+      CompleteDecl . DefineMacros <$>
       for macros \(x, e) ->
         linkedCore e >>=
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, e')
     flatten (Meta d) =
-      Meta <$> flatten d
+      CompleteDecl . Meta <$> getDecl d
     flatten (Example e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ Example e'
-    flatten (Import m x) = return $ Import m x
-    flatten (Export x) = return $ Export x
+        Just e' -> pure $ CompleteDecl $ Example e'
+    flatten (Import m x) = return $ CompleteDecl $ Import m x
+    flatten (Export x) = return $ CompleteDecl $ Export x
 
 
 
@@ -739,10 +739,10 @@ runTask (tid, localState, task) = withLocalState localState $ do
 
   where
     laterMacro tid' b dest deps mdest stx = do
-      localState <- view expanderLocal
+      localConfig <- view expanderLocal
       modifyState $
         over expanderTasks $
-          ((tid', localState, AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
+          ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
 
 
 

@@ -8,6 +8,8 @@ module Module (
   , moduleExports
   , moduleBody
   , CompleteModule(..)
+  , CompleteDecl(..)
+  , completeDecl
   , Decl(..)
   , Imports
   , noImports
@@ -109,7 +111,14 @@ data Module f a = Module
   deriving (Functor, Show)
 makeLenses ''Module
 
-data CompleteModule = Expanded !(Module [] (Decl Core)) | KernelModule Phase
+newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl CompleteDecl Core }
+  deriving Show
+
+
+instance Phased CompleteDecl where
+  shift i (CompleteDecl d) = CompleteDecl (shift i d)
+
+data CompleteModule = Expanded !(Module [] CompleteDecl) | KernelModule Phase
   deriving Show
 
 instance Phased CompleteModule where
@@ -132,17 +141,25 @@ instance Show DeclPtr where
 newDeclPtr :: IO DeclPtr
 newDeclPtr = DeclPtr <$> newUnique
 
-data Decl a
-  = Define Ident Var a
-  | DefineMacros [(Ident, a)]
-  | Meta (Decl a)
-  | Example a
+data Decl decl expr
+  = Define Ident Var expr
+  | DefineMacros [(Ident, expr)]
+  | Meta decl
+  | Example expr
   | Import ModuleName Ident
   | Export Ident
   deriving (Functor, Show)
 
-instance Phased a => Phased (Decl a) where
-  shift i = fmap (shift i)
+instance Bifunctor Decl where
+  bimap _f g (Define x v e) = Define x v (g e)
+  bimap _f g (DefineMacros ms) = DefineMacros [(x, g e) | (x, e) <- ms]
+  bimap f _g (Meta d) = Meta (f d)
+  bimap _f g (Example e) = Example (g e)
+  bimap _f _g (Import mn x) = Import mn x
+  bimap _f _g (Export x) = Export x
+
+instance (Phased decl, Phased expr) => Phased (Decl decl expr) where
+  shift i = bimap (shift i) (shift i)
 
 newtype ModBodyPtr = ModBodyPtr Unique
   deriving (Eq, Ord)
@@ -161,5 +178,4 @@ data SplitModuleBody a = SplitModuleBody
   , _splitModuleDescendents :: Map ModBodyPtr (ModuleBodyF a ModBodyPtr)
   }
 
-
-
+makeLenses ''CompleteDecl

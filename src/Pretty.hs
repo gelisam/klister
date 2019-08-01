@@ -170,7 +170,10 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedVec core) where
     vec (hsep $ map (pp env) (view scopedVecElements xs)) <>
     angles (pp env (view scopedVecScope xs))
 
-instance Pretty VarInfo a => PrettyBinder VarInfo (Decl a) where
+instance PrettyBinder VarInfo CompleteDecl where
+  ppBind env (CompleteDecl d) = ppBind env d
+
+instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Decl a b) where
   ppBind env (Define n@(Stx _ _ x) v e) =
     let env' = Env.singleton v n ()
     in (hang 4 $ group $

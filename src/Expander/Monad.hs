@@ -189,7 +189,7 @@ data ExpanderState = ExpanderState
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl DeclPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
@@ -294,7 +294,7 @@ linkExpr dest layer =
               _expanderCompletedCore st <> Map.singleton dest layer
             }
 
-linkDecl :: DeclPtr -> Decl SplitCorePtr -> Expand ()
+linkDecl :: DeclPtr -> Decl DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 

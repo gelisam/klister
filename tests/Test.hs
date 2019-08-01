@@ -198,7 +198,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
           )
         , ( "examples/id-compare.sm"
           , \m ->
-              view moduleBody m &
+              view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
               \case
                 [Example e1, Example e2] -> do
@@ -208,7 +208,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
           )
         , ( "examples/lang.sm"
           , \m ->
-              view moduleBody m &
+              view moduleBody m & map (view completeDecl) &
               \case
                 [Define _fn fv fbody, Example e] -> do
                   fspec <- lam \_x -> lam \ y -> lam \_z -> y
@@ -221,7 +221,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
           )
         , ( "examples/import.sm"
           , \m ->
-              view moduleBody m &
+              view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
               \case
                 [Example e1, Example e2] -> do
@@ -287,7 +287,7 @@ testExpansionFails input okp =
   where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 
-testFile :: FilePath -> (Module [] (Decl Core) -> Assertion) -> Assertion
+testFile :: FilePath -> (Module [] CompleteDecl -> Assertion) -> Assertion
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
