@@ -31,6 +31,6 @@ tests:
     dependencies:
       - call-stack
       - deepseq
-      - stuck-macros
+      - klister
       - tasty
       - tasty-hunit
