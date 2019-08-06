@@ -172,32 +172,33 @@ loadModuleFile modName =
 
 
 visit :: ModuleName -> Expand Exports
-visit modName =
-  do (world', m, es) <-
-       do world <- view expanderWorld <$> getState
-          case view (worldModules . at modName) world of
-            Just m -> do
-              let es = maybe noExports id (view (worldExports . at modName) world)
-              return (world, m, es)
-            Nothing -> do
-              (m, es) <- loadModuleFile modName
-              w <- view expanderWorld <$> getState
-              return (w, m, es)
-     p <- currentPhase
-     visitedp <- Set.member p .
-                 view (expanderWorld . worldVisited . at modName . non Set.empty) <$> getState
-     if visitedp
-       then return ()
-       else
-           do let i = phaseNum p
-              let m' = shift i m
-              let envs = view worldEnvironments world'
-              (moreEnvs, _) <- expandEval $ evalMod envs p m'
-              modifyState $
-                set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
-                    (Just ())
-              modifyState $ set (expanderWorld . worldEnvironments) moreEnvs
-     return es
+visit modName = do
+  (world', m, es) <-
+    do world <- view expanderWorld <$> getState
+       case view (worldModules . at modName) world of
+         Just m -> do
+           let es = maybe noExports id (view (worldExports . at modName) world)
+           return (world, m, es)
+         Nothing -> do
+           (m, es) <- loadModuleFile modName
+           w <- view expanderWorld <$> getState
+           return (w, m, es)
+  p <- currentPhase
+  let i = phaseNum p
+  visitedp <- Set.member p .
+              view (expanderWorld . worldVisited . at modName . non Set.empty) <$>
+              getState
+  if visitedp
+    then return ()
+    else
+        do let m' = shift i m
+           let envs = view worldEnvironments world'
+           (moreEnvs, _) <- expandEval $ evalMod envs p m'
+           modifyState $
+             set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
+                 (Just ())
+           modifyState $ over (expanderWorld . worldEnvironments) (<> moreEnvs)
+  return (shift i es)
 
 
 freshBinding :: Expand Binding
@@ -229,7 +230,9 @@ expandEval evalAction = do
   env <- currentEnv
   out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
   case out of
-    Left err -> throwError $ MacroEvaluationError err
+    Left err -> do
+      p <- currentPhase
+      throwError $ MacroEvaluationError p err
     Right val -> return val
 
 bindingTable :: Expand BindingTable
@@ -330,10 +333,10 @@ initializeKernel = do
         )
       ]
 
-    declPrims :: [(Text, Scope -> DeclPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
       [ ("define"
-        , \ sc dest stx -> do
+        , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustBeVec stx
             x <- flip (addScope p) sc <$> mustBeIdent varStx
@@ -344,9 +347,10 @@ initializeKernel = do
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Define x var exprDest)
             forkExpandSyntax exprDest expr
+            nowValidAt pdest p
         )
       ,("define-macros"
-        , \ sc dest stx -> do
+        , \ sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustBeVec stx
             Stx _ _ macroDefs <- mustBeList macroList
             p <- currentPhase
@@ -361,18 +365,19 @@ initializeKernel = do
               bind b $ EIncompleteMacro macroDest
               return (theName, macroDest)
             linkDecl dest $ DefineMacros macros
-
+            nowValidAt pdest p
         )
       , ("example"
-        , \ sc dest stx -> do
+        , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
             forkExpandSyntax exprDest (addScope p expr sc)
+            nowValidAt pdest p
         )
       , ("import" --TODO filename relative to source location of import modname
-        , \sc dest stx -> do
+        , \sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
             Stx _ _ modName <- mustBeModName mn
@@ -381,22 +386,36 @@ initializeKernel = do
             b <- case getExport p x modExports of
                    Nothing -> throwError $ InternalError $
                               "Module " ++ show modName ++
-                              " does not export " ++ show x
+                              " does not export " ++ show x ++
+                              " amongst " ++ show modExports
                    Just b -> return b
             addBinding imported b
-
             linkDecl dest (Import modName imported)
+            nowValidAt pdest p
         )
       , ("export"
-        , \_sc dest stx -> do
+        , \_sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, ident) <- mustBeVec stx
             exported@(Stx _ _ x) <- mustBeIdent ident
             p <- currentPhase
             b <- resolve exported
             modifyState $ over expanderModuleExports $ addExport p x b
             linkDecl dest (Export exported)
+            nowValidAt pdest p
+        )
+      , ("meta"
+        , \sc dest pdest stx -> do
+            Stx _ _ (_ :: Syntax, subDecl) <- mustBeVec stx
+            subDest <- liftIO newDeclPtr
+            linkDecl dest (Meta subDest)
+            inEarlierPhase $ forkExpandOneDecl subDest sc pdest subDecl
         )
       ]
+      where
+        nowValidAt :: DeclValidityPtr -> Phase -> Expand ()
+        nowValidAt ptr p =
+          modifyState $ over expanderDeclPhases $ Map.insert ptr p
+
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
@@ -604,7 +623,7 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
-    addDeclPrimitive :: Text -> (Scope -> DeclPtr -> Syntax -> Expand ()) -> Expand ()
+    addDeclPrimitive :: Text -> (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ()) -> Expand ()
     addDeclPrimitive name impl = do
       let val = EPrimDeclMacro impl
       b <- freshBinding
@@ -635,6 +654,10 @@ addRootScope stx = do
   return (addScope p stx rsc)
 
 
+forkExpandOneDecl :: DeclPtr -> Scope -> DeclValidityPtr -> Syntax -> Expand ()
+forkExpandOneDecl dest sc phaseDest stx = do
+  forkExpanderTask $ ExpandDecl dest sc stx phaseDest
+
 forkExpandDecls :: ModBodyPtr -> Syntax -> Expand ()
 forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
   modifyState $
@@ -642,16 +665,19 @@ forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
               _expanderCompletedModBody st <> Map.singleton dest Done
             }
 forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
+  -- Create a scope for this new declaration
   sc <- freshScope
   restDest <- liftIO $ newModBodyPtr
   declDest <- liftIO $ newDeclPtr
+  declPhase <- newDeclValidityPtr
   modifyState $ over expanderCompletedModBody $
     (<> Map.singleton dest (Decl declDest restDest))
   p <- currentPhase
-  forkExpanderTask $ ExpandMoreDecls restDest sc (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds)))) declDest
-  d' <- addRootScope d
-  forkExpanderTask $ ExpandDecl declDest sc (addScope p d' sc)
-
+  forkExpanderTask $
+    ExpandMoreDecls restDest sc
+      (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds))))
+      declPhase
+  forkExpandOneDecl declDest sc declPhase =<< addRootScope d
 forkExpandDecls _dest _other =
   error "TODO real error message - malformed module body"
 
@@ -709,15 +735,14 @@ runTask (tid, localState, task) = withLocalState localState $ do
               macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
               bind b $ EUserMacro ExprMacro macroImplVal
               forkExpandSyntax dest stx
-    ExpandDecl dest sc stx ->
-      expandOneDeclaration sc dest stx
+    ExpandDecl dest sc stx ph ->
+      expandOneDeclaration sc dest stx ph
     ExpandMoreDecls dest sc stx waitingOn -> do
-      p <- currentPhase
-      readyYet <- view (expanderCompletedDecls . at waitingOn) <$> getState
+      readyYet <- view (expanderDeclPhases . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
           stillStuck tid task
-        Just _ -> do
+        Just p -> do
           forkExpandDecls dest (addScope p stx sc)
     InterpretMacroAction dest act outerKont -> do
       interpretMacroAction act >>= \case
@@ -805,8 +830,8 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> Expand ()
-expandOneDeclaration sc dest stx
+expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
+expandOneDeclaration sc dest stx ph
   | Just ident <- identifierHeaded stx = do
       b <- resolve ident
       v <- getEValue b
@@ -816,7 +841,7 @@ expandOneDeclaration sc dest stx
         EPrimModuleMacro _ ->
           throwError $ InternalError "Current context won't accept modules"
         EPrimDeclMacro impl ->
-          impl sc dest stx
+          impl sc dest ph stx
         EVarMacro _ ->
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->
@@ -858,7 +883,8 @@ interpretMacroAction (MacroActionBind macroAction closure) = do
                   $ apply closure boundResult
       case evalResult of
         Left evalError -> do
-          throwError $ MacroEvaluationError evalError
+          p <- currentPhase
+          throwError $ MacroEvaluationError p evalError
         Right value ->
           case value of
             ValueMacroAction act -> interpretMacroAction act

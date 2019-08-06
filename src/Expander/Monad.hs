@@ -44,13 +44,23 @@ newtype Expand a = Expand
 execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
+newtype DeclValidityPtr = DeclValidityPtr Unique
+  deriving (Eq, Ord)
+
+instance Show DeclValidityPtr where
+  show (DeclValidityPtr u) = "(DeclValidityPtr " ++ show (hashUnique u) ++ ")"
+
+newDeclValidityPtr :: Expand DeclValidityPtr
+newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
 
 data ExpanderTask
   = ExpandSyntax SplitCorePtr Syntax
   | AwaitingSignal SplitCorePtr Signal [Closure]
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
-  | ExpandDecl DeclPtr Scope Syntax
-  | ExpandMoreDecls ModBodyPtr Scope Syntax DeclPtr -- Depends on the binding of the name(s) from the decl
+  | ExpandDecl DeclPtr Scope Syntax DeclValidityPtr
+    -- ^ Where to put it, the scope, the decl, where to put the phase
+  | ExpandMoreDecls ModBodyPtr Scope Syntax DeclValidityPtr
+    -- Depends on the binding of the name(s) from the decl and the phase
   | InterpretMacroAction SplitCorePtr MacroAction [Closure]
   | ContinueMacroAction SplitCorePtr Value [Closure]
   deriving (Show)
@@ -70,9 +80,9 @@ instance ShortShow TaskAwaitMacro where
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
-  shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ show t ++ ")"
-  shortShow (ExpandDecl _dest _sc stx) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ ")"
-  shortShow (ExpandMoreDecls _dest _sc stx _waiting) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
+  shortShow (ExpandDecl _dest _sc stx ptr) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
+  shortShow (ExpandMoreDecls _dest _sc stx ptr) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
 
@@ -100,7 +110,7 @@ data ExpansionErr
   | NotVec Syntax
   | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
-  | MacroEvaluationError EvalError
+  | MacroEvaluationError Phase EvalError
   | ValueNotMacro Value
   | ValueNotSyntax Value
   | InternalError String
@@ -111,9 +121,10 @@ expansionErrText (Ambiguous p x candidates) =
   "Ambiguous identifier in phase " <> T.pack (show p) <>
   " " <> T.pack (show x) <>
   T.concat ["\n\t" <> T.pack (show c) | c <- candidates]
-expansionErrText (Unknown x) = "Unknown: " <> T.pack (show x)
+expansionErrText (Unknown x) = "Unknown: " <> T.pack (show (pretty x))
 expansionErrText (NoProgress tasks) =
-  "No progress was possible: " <> T.pack (show tasks)
+  "No progress was possible:\n" <>
+  T.concat (map (\x -> T.pack ("\t" ++ shortShow x ++ "\n")) tasks)
 expansionErrText (NotIdentifier stx) =
   "Not an identifier: " <> syntaxText stx
 expansionErrText (NotEmpty stx) = "Expected (), but got " <> syntaxText stx
@@ -134,8 +145,9 @@ expansionErrText (UnknownPattern stx) =
   "Unknown pattern " <> syntaxText stx
 expansionErrText (MacroRaisedSyntaxError err) =
   "Syntax error from macro: " <> T.pack (show err)
-expansionErrText (MacroEvaluationError err) =
-  "Error during macro evaluation: \n\t" <> evalErrorText err
+expansionErrText (MacroEvaluationError p err) =
+  "Error during macro evaluation at phase " <> T.pack (show (phaseNum p)) <>
+  ": \n\t" <> evalErrorText err
 expansionErrText (ValueNotMacro val) =
   "Not a macro monad value: " <> valueText val
 expansionErrText (ValueNotSyntax val) =
@@ -152,7 +164,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 data EValue
   = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (Scope -> DeclPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
   | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go
@@ -196,6 +208,7 @@ data ExpanderState = ExpanderState
   , _expanderPhaseRoots :: !(Map Phase Scope)
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
+  , _expanderDeclPhases :: !(Map DeclValidityPtr Phase)
   }
 
 initExpanderState :: ExpanderState
@@ -215,6 +228,7 @@ initExpanderState = ExpanderState
   , _expanderPhaseRoots = Map.empty
   , _expanderModuleRoots = Map.empty
   , _expanderKernelExports = noExports
+  , _expanderDeclPhases = Map.empty
   }
 
 makeLenses ''ExpanderContext
