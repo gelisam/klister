@@ -1,8 +1,8 @@
 #lang kernel
 
-[import "n-ary-app.sm" #%app]
-[import "n-ary-app.sm" const]
-[import "n-ary-app.sm" lambda]
+[import "n-ary-app.kl" #%app]
+[import "n-ary-app.kl" const]
+[import "n-ary-app.kl" lambda]
 
 [example (const [quote one] [quote two])]
 [example ([lambda (x y z) y] [quote en] [quote to] [quote tre])]

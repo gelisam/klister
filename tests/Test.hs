@@ -194,10 +194,10 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
       testGroup "Expected to succeed"
       [ testCase fn (testFile fn p)
       | (fn, p) <-
-        [ ( "examples/small.sm"
+        [ ( "examples/small.kl"
           , \m -> isEmpty (view moduleBody m)
           )
-        , ( "examples/id-compare.sm"
+        , ( "examples/id-compare.kl"
           , \m ->
               view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
@@ -207,7 +207,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                   assertAlphaEq "second example" e2 (Core (CoreBool False))
                 _ -> assertFailure "Expected two examples"
           )
-        , ( "examples/lang.sm"
+        , ( "examples/lang.kl"
           , \m ->
               view moduleBody m & map (view completeDecl) &
               \case
@@ -220,7 +220,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                     _ -> assertFailure "example has wrong shape"
                 _ -> assertFailure "Expected two examples"
           )
-        , ( "examples/import.sm"
+        , ( "examples/import.kl"
           , \m ->
               view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
@@ -237,7 +237,7 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                     _ -> assertFailure "example 2 has wrong shape"
                 _ -> assertFailure "Expected two examples"
           )
-        , ( "examples/phase1.sm"
+        , ( "examples/phase1.kl"
           , \m ->
               view moduleBody m & map (view completeDecl) &
               \case
