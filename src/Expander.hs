@@ -222,7 +222,9 @@ clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
 currentEnv :: Expand (Env Value)
 currentEnv = do
   phase <- currentPhase
-  maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
+  globalEnv <- maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
+  localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
+  return (globalEnv <> localEnv)
 
 
 expandEval :: Eval a -> Expand a
@@ -343,8 +345,8 @@ initializeKernel = do
             b <- freshBinding
             addBinding x b
             var <- freshVar
-            bind b (EVarMacro var)
             exprDest <- liftIO $ newSplitCorePtr
+            bind b (EIncompleteDefn var x exprDest)
             linkDecl dest (Define x var exprDest)
             forkExpandSyntax exprDest expr
             nowValidAt pdest p
@@ -735,6 +737,24 @@ runTask (tid, localState, task) = withLocalState localState $ do
               macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
               bind b $ EUserMacro ExprMacro macroImplVal
               forkExpandSyntax dest stx
+    AwaitingDefn x n b defn dest stx ->
+      Env.lookupVal x <$> currentEnv >>=
+      \case
+        Nothing ->
+          linkedCore defn >>=
+          \case
+            Nothing -> stillStuck tid task
+            Just e -> do
+              p <- currentPhase
+              v <- expandEval (eval e)
+              let env = Env.singleton x n v
+              modifyState $ over (expanderCurrentEnvs . at p) $
+                Just . maybe env (<> env)
+              bind b $ EVarMacro x
+              forkExpandSyntax dest stx
+        Just _v -> do
+          bind b $ EVarMacro x
+          forkExpandSyntax dest stx
     ExpandDecl dest sc stx ph ->
       expandOneDeclaration sc dest stx ph
     ExpandMoreDecls dest sc stx waitingOn -> do
@@ -761,7 +781,17 @@ runTask (tid, localState, task) = withLocalState localState $ do
         ValueMacroAction macroAction -> do
           forkInterpretMacroAction dest macroAction kont
         other -> expandEval $ evalErrorType "macro action" other
-
+    EvalDefnAction x n p expr ->
+      linkedCore expr >>=
+      \case
+        Nothing -> stillStuck tid task
+        Just definiens ->
+          inPhase p $ do
+            val <- expandEval (eval definiens)
+            modifyState $ over (expanderCurrentEnvs . at p) $
+              \case
+                Nothing -> Just $ Env.singleton x n val
+                Just env -> Just $ env <> Env.singleton x n val
   where
     laterMacro tid' b dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -792,6 +822,8 @@ expandOneExpression dest stx
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
         EIncompleteMacro mdest -> do
           forkAwaitingMacro b mdest dest stx
+        EIncompleteDefn x n d ->
+          forkAwaitingDefn x n b d dest stx
         EUserMacro ExprMacro (ValueClosure macroImpl) -> do
           stepScope <- freshScope
           p <- currentPhase
@@ -843,6 +875,8 @@ expandOneDeclaration sc dest stx ph
         EPrimDeclMacro impl ->
           impl sc dest ph stx
         EVarMacro _ ->
+          throwError $ InternalError "Current context won't accept expressions"
+        EIncompleteDefn _ _ _ ->
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->
           error "Unimplemented: user-defined macros - decl context"

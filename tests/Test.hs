@@ -2,6 +2,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns #-}
 module Main where
 
 import Control.Lens
@@ -236,7 +237,17 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
                     _ -> assertFailure "example 2 has wrong shape"
                 _ -> assertFailure "Expected two examples"
           )
-
+        , ( "examples/phase1.sm"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              \case
+                [Meta (view completeDecl -> Import _ _),
+                 Meta (view completeDecl -> Define _ _ _),
+                 DefineMacros [(_, _)],
+                 Example ex] ->
+                  assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
+                _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
+          )
         ]
       ]
 

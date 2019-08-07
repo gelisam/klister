@@ -21,6 +21,7 @@ import Numeric.Natural
 import Binding
 import Control.Lens.IORef
 import Core
+import Env
 import Evaluator
 import Module
 import ModuleName
@@ -57,12 +58,15 @@ data ExpanderTask
   = ExpandSyntax SplitCorePtr Syntax
   | AwaitingSignal SplitCorePtr Signal [Closure]
   | AwaitingMacro SplitCorePtr TaskAwaitMacro
+  | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
+    -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | ExpandDecl DeclPtr Scope Syntax DeclValidityPtr
     -- ^ Where to put it, the scope, the decl, where to put the phase
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclValidityPtr
     -- Depends on the binding of the name(s) from the decl and the phase
   | InterpretMacroAction SplitCorePtr MacroAction [Closure]
   | ContinueMacroAction SplitCorePtr Value [Closure]
+  | EvalDefnAction Var Ident Phase SplitCorePtr
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -80,11 +84,14 @@ instance ShortShow TaskAwaitMacro where
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
+  shortShow (AwaitingDefn _x n _b _defn _dest stx) =
+    "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (ExpandDecl _dest _sc stx ptr) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (ExpandMoreDecls _dest _sc stx ptr) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
+  shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
@@ -168,6 +175,7 @@ data EValue
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
   | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go
+  | EIncompleteDefn Var Ident SplitCorePtr -- ^ Definitions that are not yet ready to go
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
@@ -209,6 +217,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
   , _expanderDeclPhases :: !(Map DeclValidityPtr Phase)
+  , _expanderCurrentEnvs :: !(Map Phase (Env Value))
   }
 
 initExpanderState :: ExpanderState
@@ -229,6 +238,7 @@ initExpanderState = ExpanderState
   , _expanderModuleRoots = Map.empty
   , _expanderKernelExports = noExports
   , _expanderDeclPhases = Map.empty
+  , _expanderCurrentEnvs = Map.empty
   }
 
 makeLenses ''ExpanderContext
@@ -345,9 +355,18 @@ forkAwaitingSignal :: SplitCorePtr -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont = do
   forkExpanderTask $ AwaitingSignal dest signal kont
 
-forkAwaitingMacro :: Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+forkAwaitingMacro ::
+  Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
 forkAwaitingMacro b mdest dest stx = do
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)
+
+forkAwaitingDefn ::
+  Var -> Ident -> Binding -> SplitCorePtr ->
+  SplitCorePtr -> Syntax ->
+  Expand ()
+forkAwaitingDefn x n b defn dest stx =
+  forkExpanderTask $ AwaitingDefn x n b defn dest stx
+
 
 forkInterpretMacroAction :: SplitCorePtr -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
