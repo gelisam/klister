@@ -188,7 +188,7 @@ miniTests =
       ]
 
 moduleTests :: TestTree
-moduleTests = testGroup "Module tests" [ shouldWork ]
+moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
   where
     shouldWork =
       testGroup "Expected to succeed"
@@ -253,6 +253,18 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
           )
         ]
       ]
+    shouldn'tWork =
+      testGroup "Expected to fail"
+      [ testCase fn (testFileError fn p)
+      | (fn, p) <-
+        [ ( "examples/non-examples/import-phase.kl"
+            , \case
+                Unknown (Stx _ _ "define") -> True
+                _ -> False
+            )
+        ]
+      ]
+
 
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
@@ -322,6 +334,19 @@ testFile f p = do
             assertFailure "Expected user module, got kernel"
           Just (Expanded m) ->
             p m
+
+testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
+testFileError f p = do
+  mn <- moduleNameFromPath f
+  ctx <- mkInitContext mn
+  void $ execExpand initializeKernel ctx
+  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+    \case
+      Left err | p err -> return ()
+               | otherwise ->
+                 assertFailure $ "Expected a different error than " ++
+                                 T.unpack (expansionErrText err)
+      Right _ -> assertFailure "Unexpected success expanding file"
 
 
 

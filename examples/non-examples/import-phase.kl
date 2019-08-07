@@ -1,0 +1,13 @@
+#lang kernel
+
+-- This should fail because the only thing imported at phase 1 is "import".
+
+[meta
+  [define m-impl
+    [lambda [s]
+      (syntax-case s
+        [[vec [_ e]] [pure e]])]]]
+
+[define-macros ([m m-impl])]
+
+[example [m 1]]
