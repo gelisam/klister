@@ -1,5 +1,14 @@
 #lang kernel
 
+[meta [import kernel cons-list-syntax]]
+[meta [import kernel lambda]]
+[meta [import kernel pure]]
+[meta [import kernel quote]]
+[meta [import kernel syntax-case]]
+[meta [import kernel vec-syntax]]
+
+
+
 [define-macros
   ([my-app
     [lambda [stx]

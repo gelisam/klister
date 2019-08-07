@@ -1,5 +1,10 @@
 #lang kernel
+
+[meta [import kernel define]]
 [meta [import kernel lambda]]
+[meta [import kernel pure]]
+[meta [import kernel syntax-case]]
+
 
 [meta
   [define m-impl

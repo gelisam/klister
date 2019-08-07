@@ -242,6 +242,9 @@ moduleTests = testGroup "Module tests" [ shouldWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Meta (view completeDecl -> Import _ _),
+                 Meta (view completeDecl -> Import _ _),
+                 Meta (view completeDecl -> Import _ _),
+                 Meta (view completeDecl -> Import _ _),
                  Meta (view completeDecl -> Define _ _ _),
                  DefineMacros [(_, _)],
                  Example ex] ->
@@ -266,6 +269,8 @@ testExpander input spec = do
       c <- flip execExpand ctx $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
+             inEarlierPhase $
+               initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              addRootScope expr >>= addModuleScope >>= expandExpr
       case c of
         Left err -> assertFailure . T.unpack . expansionErrText $ err
@@ -284,6 +289,8 @@ testExpansionFails input okp =
       c <- flip execExpand ctx $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
+             inEarlierPhase $
+               initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              expandExpr =<< addModuleScope =<< addRootScope expr
 
       case c of

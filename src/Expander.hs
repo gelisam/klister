@@ -83,7 +83,7 @@ initializeLanguage (Stx scs loc lang) = do
   where
     addModuleBinding p n b =
       inPhase p $ do
-        ident <- addModuleScope =<< addRootScope (Stx scs loc n)
+        ident <- addModuleScope =<< addRootScope' (Stx scs loc n)
         addBinding ident b
 
 
@@ -410,7 +410,8 @@ initializeKernel = do
             Stx _ _ (_ :: Syntax, subDecl) <- mustBeVec stx
             subDest <- liftIO newDeclPtr
             linkDecl dest (Meta subDest)
-            inEarlierPhase $ forkExpandOneDecl subDest sc pdest subDecl
+            inEarlierPhase $
+              forkExpandOneDecl subDest sc pdest =<< addRootScope subDecl
         )
       ]
       where
@@ -649,11 +650,18 @@ addModuleScope stx = do
   sc <- moduleScope mn
   return $ addScope' stx sc
 
+-- | Add the current phase's root scope at the current phase
 addRootScope :: HasScopes a => a -> Expand a
 addRootScope stx = do
   p <- currentPhase
   rsc <- phaseRoot
   return (addScope p stx rsc)
+
+-- | Add the current phase's root scope at all phases (for binding occurrences)
+addRootScope' :: HasScopes a => a -> Expand a
+addRootScope' stx = do
+  rsc <- phaseRoot
+  return (addScope' stx rsc)
 
 
 forkExpandOneDecl :: DeclPtr -> Scope -> DeclValidityPtr -> Syntax -> Expand ()
