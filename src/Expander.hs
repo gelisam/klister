@@ -51,6 +51,7 @@ import Control.Lens.IORef
 import Core
 import Env
 import Evaluator
+import Expander.DeclScope
 import Expander.Syntax
 import Expander.Monad
 import Module
@@ -105,43 +106,6 @@ expandModule thisMod src =
       , _moduleBody = body
       , _moduleExports = noExports
     }
-  where
-    getBody :: ModBodyPtr -> Expand [CompleteDecl]
-    getBody ptr =
-      (view (expanderCompletedModBody . at ptr) <$> getState) >>=
-      \case
-        Nothing -> throwError $ InternalError "Incomplete module after expansion"
-        Just Done -> pure []
-        Just (Decl decl next) ->
-          (:) <$> getDecl decl <*> getBody next
-    getDecl ptr =
-      (view (expanderCompletedDecls . at ptr) <$> getState) >>=
-      \case
-        Nothing -> throwError $ InternalError "Missing decl after expansion"
-        Just decl -> flatten decl
-
-    flatten :: Decl DeclPtr SplitCorePtr -> Expand (CompleteDecl)
-    flatten (Define x v e) =
-      linkedCore e >>=
-      \case
-        Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ CompleteDecl $ Define x v e'
-    flatten (DefineMacros macros) =
-      CompleteDecl . DefineMacros <$>
-      for macros \(x, e) ->
-        linkedCore e >>=
-        \case
-          Nothing -> throwError $ InternalError "Missing expr after expansion"
-          Just e' -> pure $ (x, e')
-    flatten (Meta d) =
-      CompleteDecl . Meta <$> getDecl d
-    flatten (Example e) =
-      linkedCore e >>=
-      \case
-        Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ CompleteDecl $ Example e'
-    flatten (Import m x) = return $ CompleteDecl $ Import m x
-    flatten (Export x) = return $ CompleteDecl $ Export x
 
 
 
@@ -216,7 +180,7 @@ getTasks :: Expand [(TaskID, ExpanderLocal, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
 clearTasks :: Expand ()
-clearTasks = modifyState $ \st -> st { _expanderTasks = [] }
+clearTasks = modifyState $ set expanderTasks []
 
 
 currentEnv :: Expand (Env Value)
@@ -245,11 +209,7 @@ addBinding (Stx scs _ name) b = do
   -- Note: assumes invariant that a name-scopeset pair is never mapped
   -- to two bindings. That would indicate a bug in the expander but
   -- this code doesn't catch that.
-  modifyState $
-    \st -> st { _expanderBindingTable =
-                Map.insertWith (<>) name [(scs, b)] $
-                view expanderBindingTable st
-              }
+  modifyState $ over expanderBindingTable (Map.insertWith (<>) name [(scs, b)])
 
 bind :: Binding -> EValue -> Expand ()
 bind b v =
@@ -670,10 +630,7 @@ forkExpandOneDecl dest sc phaseDest stx = do
 
 forkExpandDecls :: ModBodyPtr -> Syntax -> Expand ()
 forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
-  modifyState $
-  \st -> st { _expanderCompletedModBody =
-              _expanderCompletedModBody st <> Map.singleton dest Done
-            }
+  modifyState $ over expanderCompletedModBody (<> Map.singleton dest Done)
 forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   -- Create a scope for this new declaration
   sc <- freshScope
@@ -717,7 +674,7 @@ expandTasks = do
     taskIDs = Set.fromList . map (view _1)
 
 runTask :: (TaskID, ExpanderLocal, ExpanderTask) -> Expand ()
-runTask (tid, localState, task) = withLocalState localState $ do
+runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
       expandOneExpression dest stx

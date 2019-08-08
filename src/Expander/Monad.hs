@@ -1,38 +1,103 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Expander.Monad where
+module Expander.Monad
+  ( module Expander.Error
+  , module Expander.DeclScope
+  -- * The expander monad
+  , Expand(..)
+  , currentPhase
+  , dependencies
+  , execExpand
+  , freshScope
+  , freshVar
+  , getBody
+  , getDecl
+  , getState
+  , inEarlierPhase
+  , inPhase
+  , linkedCore
+  , linkDecl
+  , linkExpr
+  , modifyState
+  , moduleScope
+  , newDeclValidityPtr
+  , phaseRoot
+  , withLocal
+  -- ** Context
+  , ExpanderContext
+  , mkInitContext
+  -- ** Tasks
+  , module Expander.Task
+  , forkAwaitingDefn
+  , forkAwaitingMacro
+  , forkAwaitingSignal
+  , forkContinueMacroAction
+  , forkExpandSyntax
+  , forkExpanderTask
+  , forkInterpretMacroAction
+  , stillStuck
+  -- * Implementation parts
+  , BindingTable
+  , SyntacticCategory(..)
+  , ExpansionEnv(..)
+  , EValue(..)
+  -- * Expander reader effects
+  , ExpanderLocal
+  , expanderLocal
+  -- ** Lenses
+  , expanderPhase
+  -- * Expander state
+  , ExpanderState
+  , expanderState
+  -- ** Lenses
+  , expanderBindingTable
+  , expanderCompletedCore
+  , expanderCompletedModBody
+  , expanderCurrentEnvs
+  , expanderDeclPhases
+  , expanderExpansionEnv
+  , expanderKernelExports
+  , expanderModuleExports
+  , expanderModuleImports
+  , expanderModuleName
+  , expanderModuleTop
+  , expanderReceivedSignals
+  , expanderTasks
+  , expanderWorld
+  -- * Tasks
+  , TaskID
+  , newTaskID
+  ) where
 
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
-
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text (Text)
-import qualified Data.Text as T
+import Data.Traversable
 import Data.Unique
-
-import Numeric.Natural
 
 import Binding
 import Control.Lens.IORef
 import Core
 import Env
-import Evaluator
+import Expander.DeclScope
+import Expander.Error
+import Expander.Task
 import Module
 import ModuleName
 import PartialCore
 import Phase
-import Pretty
 import Signals
 import SplitCore
 import Scope
 import ScopeSet (ScopeSet)
-import ShortShow
 import Syntax
 import Value
 import World
@@ -45,53 +110,6 @@ newtype Expand a = Expand
 execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
-newtype DeclValidityPtr = DeclValidityPtr Unique
-  deriving (Eq, Ord)
-
-instance Show DeclValidityPtr where
-  show (DeclValidityPtr u) = "(DeclValidityPtr " ++ show (hashUnique u) ++ ")"
-
-newDeclValidityPtr :: Expand DeclValidityPtr
-newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
-
-data ExpanderTask
-  = ExpandSyntax SplitCorePtr Syntax
-  | AwaitingSignal SplitCorePtr Signal [Closure]
-  | AwaitingMacro SplitCorePtr TaskAwaitMacro
-  | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
-    -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
-  | ExpandDecl DeclPtr Scope Syntax DeclValidityPtr
-    -- ^ Where to put it, the scope, the decl, where to put the phase
-  | ExpandMoreDecls ModBodyPtr Scope Syntax DeclValidityPtr
-    -- Depends on the binding of the name(s) from the decl and the phase
-  | InterpretMacroAction SplitCorePtr MacroAction [Closure]
-  | ContinueMacroAction SplitCorePtr Value [Closure]
-  | EvalDefnAction Var Ident Phase SplitCorePtr
-  deriving (Show)
-
-data TaskAwaitMacro = TaskAwaitMacro
-  { awaitMacroBinding :: Binding
-  , awaitMacroDependsOn :: [SplitCorePtr] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
-  , awaitMacroLocation :: SplitCorePtr -- the destination into which the macro will be expanded.
-  , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
-  }
-  deriving (Show)
-
-instance ShortShow TaskAwaitMacro where
-  shortShow (TaskAwaitMacro _ deps _ stx) =
-    "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
-
-instance ShortShow ExpanderTask where
-  shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
-  shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
-  shortShow (AwaitingDefn _x n _b _defn _dest stx) =
-    "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
-  shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
-  shortShow (ExpandDecl _dest _sc stx ptr) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
-  shortShow (ExpandMoreDecls _dest _sc stx ptr) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
-  shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
-  shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
-  shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
@@ -102,66 +120,8 @@ instance Show TaskID where
 newTaskID :: Expand TaskID
 newTaskID = liftIO $ TaskID <$> newUnique
 
-
-data ExpansionErr
-  = Ambiguous Phase Ident [ScopeSet]
-  | Unknown (Stx Text)
-  | NoProgress [ExpanderTask]
-  | NotIdentifier Syntax
-  | NotEmpty Syntax
-  | NotCons Syntax
-  | NotList Syntax
-  | NotString Syntax
-  | NotModName Syntax
-  | NotRightLength Natural Syntax
-  | NotVec Syntax
-  | UnknownPattern Syntax
-  | MacroRaisedSyntaxError (SyntaxError Syntax)
-  | MacroEvaluationError Phase EvalError
-  | ValueNotMacro Value
-  | ValueNotSyntax Value
-  | InternalError String
-  deriving (Show)
-
-expansionErrText :: ExpansionErr -> Text
-expansionErrText (Ambiguous p x candidates) =
-  "Ambiguous identifier in phase " <> T.pack (show p) <>
-  " " <> T.pack (show x) <>
-  T.concat ["\n\t" <> T.pack (show c) | c <- candidates]
-expansionErrText (Unknown x) = "Unknown: " <> T.pack (show (pretty x))
-expansionErrText (NoProgress tasks) =
-  "No progress was possible:\n" <>
-  T.concat (map (\x -> T.pack ("\t" ++ shortShow x ++ "\n")) tasks)
-expansionErrText (NotIdentifier stx) =
-  "Not an identifier: " <> syntaxText stx
-expansionErrText (NotEmpty stx) = "Expected (), but got " <> syntaxText stx
-expansionErrText (NotCons stx) =
-  "Expected non-empty parens, but got " <> syntaxText stx
-expansionErrText (NotList stx) =
-  "Expected parens, but got " <> syntaxText stx
-expansionErrText (NotString stx) =
-  "Expected string literal, but got " <> syntaxText stx
-expansionErrText (NotModName stx) =
-  "Expected module name (string or `kernel'), but got " <> syntaxText stx
-expansionErrText (NotRightLength len stx) =
-  "Expected " <> T.pack (show len) <>
-  " entries between square brackets, but got " <> syntaxText stx
-expansionErrText (NotVec stx) =
-  "Expected square-bracketed vec but got " <> syntaxText stx
-expansionErrText (UnknownPattern stx) =
-  "Unknown pattern " <> syntaxText stx
-expansionErrText (MacroRaisedSyntaxError err) =
-  "Syntax error from macro: " <> T.pack (show err)
-expansionErrText (MacroEvaluationError p err) =
-  "Error during macro evaluation at phase " <> T.pack (show (phaseNum p)) <>
-  ": \n\t" <> evalErrorText err
-expansionErrText (ValueNotMacro val) =
-  "Not a macro monad value: " <> valueText val
-expansionErrText (ValueNotSyntax val) =
-  "Not a syntax object: " <> valueText val
-expansionErrText (InternalError str) =
-  "Internal error during expansion! This is a bug in the implementation." <> T.pack str
-
+newDeclValidityPtr :: Expand DeclValidityPtr
+newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
 
 type BindingTable = Map Text [(ScopeSet, Binding)]
 
@@ -264,8 +224,8 @@ freshScope = do
   return sc
 
 
-withLocalState :: ExpanderLocal -> Expand a -> Expand a
-withLocalState localState = Expand . local (set expanderLocal localState) . runExpand
+withLocal :: ExpanderLocal -> Expand a -> Expand a
+withLocal localData = Expand . local (set expanderLocal localData) . runExpand
 
 currentPhase :: Expand Phase
 currentPhase = Expand $ view (expanderLocal . expanderPhase) <$> ask
@@ -387,3 +347,42 @@ dependencies slot =
   \case
     Nothing -> pure [slot]
     Just c -> foldMap id <$> traverse dependencies c
+
+getBody :: ModBodyPtr -> Expand [CompleteDecl]
+getBody ptr =
+  (view (expanderCompletedModBody . at ptr) <$> getState) >>=
+  \case
+    Nothing -> throwError $ InternalError "Incomplete module after expansion"
+    Just Done -> pure []
+    Just (Decl decl next) ->
+      (:) <$> getDecl decl <*> getBody next
+
+getDecl :: DeclPtr -> Expand CompleteDecl
+getDecl ptr =
+  (view (expanderCompletedDecls . at ptr) <$> getState) >>=
+  \case
+    Nothing -> throwError $ InternalError "Missing decl after expansion"
+    Just decl -> flattenDecl decl
+  where
+    flattenDecl :: Decl DeclPtr SplitCorePtr -> Expand (CompleteDecl)
+    flattenDecl (Define x v e) =
+      linkedCore e >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Just e' -> pure $ CompleteDecl $ Define x v e'
+    flattenDecl (DefineMacros macros) =
+      CompleteDecl . DefineMacros <$>
+      for macros \(x, e) ->
+        linkedCore e >>=
+        \case
+          Nothing -> throwError $ InternalError "Missing expr after expansion"
+          Just e' -> pure $ (x, e')
+    flattenDecl (Meta d) =
+      CompleteDecl . Meta <$> getDecl d
+    flattenDecl (Example e) =
+      linkedCore e >>=
+      \case
+        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Just e' -> pure $ CompleteDecl $ Example e'
+    flattenDecl (Import m x) = return $ CompleteDecl $ Import m x
+    flattenDecl (Export x) = return $ CompleteDecl $ Export x

@@ -9,6 +9,7 @@ import Control.Monad.Except
 import Data.Text (Text)
 import qualified Data.Text as T
 
+import Expander.Error
 import Expander.Monad
 import ModuleName
 import Syntax
