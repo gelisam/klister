@@ -1,17 +1,17 @@
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 module Expander.Error where
 
 import Numeric.Natural
 import Data.Text (Text)
-import qualified Data.Text as T
 
 import Core
 import Evaluator
 import Expander.Task
 import Phase
 import Pretty
+
 import ScopeSet
-import ShortShow
 import Syntax
 import Value
 
@@ -35,41 +35,43 @@ data ExpansionErr
   | InternalError String
   deriving (Show)
 
-expansionErrText :: ExpansionErr -> Text
-expansionErrText (Ambiguous p x candidates) =
-  "Ambiguous identifier in phase " <> T.pack (show p) <>
-  " " <> T.pack (show x) <>
-  T.concat ["\n\t" <> T.pack (show c) | c <- candidates]
-expansionErrText (Unknown x) = "Unknown: " <> T.pack (show (pretty x))
-expansionErrText (NoProgress tasks) =
-  "No progress was possible:\n" <>
-  T.concat (map (\x -> T.pack ("\t" ++ shortShow x ++ "\n")) tasks)
-expansionErrText (NotIdentifier stx) =
-  "Not an identifier: " <> syntaxText stx
-expansionErrText (NotEmpty stx) = "Expected (), but got " <> syntaxText stx
-expansionErrText (NotCons stx) =
-  "Expected non-empty parens, but got " <> syntaxText stx
-expansionErrText (NotList stx) =
-  "Expected parens, but got " <> syntaxText stx
-expansionErrText (NotString stx) =
-  "Expected string literal, but got " <> syntaxText stx
-expansionErrText (NotModName stx) =
-  "Expected module name (string or `kernel'), but got " <> syntaxText stx
-expansionErrText (NotRightLength len stx) =
-  "Expected " <> T.pack (show len) <>
-  " entries between square brackets, but got " <> syntaxText stx
-expansionErrText (NotVec stx) =
-  "Expected square-bracketed vec but got " <> syntaxText stx
-expansionErrText (UnknownPattern stx) =
-  "Unknown pattern " <> syntaxText stx
-expansionErrText (MacroRaisedSyntaxError err) =
-  "Syntax error from macro: " <> T.pack (show err)
-expansionErrText (MacroEvaluationError p err) =
-  "Error during macro evaluation at phase " <> T.pack (show (phaseNum p)) <>
-  ": \n\t" <> evalErrorText err
-expansionErrText (ValueNotMacro val) =
-  "Not a macro monad value: " <> valueText val
-expansionErrText (ValueNotSyntax val) =
-  "Not a syntax object: " <> valueText val
-expansionErrText (InternalError str) =
-  "Internal error during expansion! This is a bug in the implementation." <> T.pack str
+instance Pretty VarInfo ExpansionErr where
+  pp env (Ambiguous p x candidates) =
+    hang 4 $
+      text "Ambiguous identifier in phase" <+> pp env p <+>
+      pp env x <> line <>
+      vsep [viaShow c | c <- candidates]
+  pp env (Unknown x) = text "Unknown:" <+> pp env x
+  pp env (NoProgress tasks) =
+    hang 4 $
+      text "No progress was possible:" <> line <>
+      vsep (map (pp env) tasks)
+  pp env (NotIdentifier stx) =
+    text "Not an identifier:" <+> pp env stx
+  pp env (NotEmpty stx) = text "Expected (), but got" <+> pp env stx
+  pp env (NotCons stx) =
+    text "Expected non-empty parens, but got" <+> pp env stx
+  pp env (NotList stx) =
+    text "Expected parens, but got" <+> pp env stx
+  pp env (NotString stx) =
+    text "Expected string literal, but got" <+> pp env stx
+  pp env (NotModName stx) =
+    text "Expected module name (string or `kernel'), but got" <+> pp env stx
+  pp env (NotRightLength len stx) =
+    text "Expected" <+> viaShow len <+>
+    text "entries between square brackets, but got" <+> pp env stx
+  pp env (NotVec stx) =
+    text "Expected square-bracketed vec but got" <+> pp env stx
+  pp env (UnknownPattern stx) =
+    text "Unknown pattern" <+> pp env stx
+  pp _env (MacroRaisedSyntaxError err) =
+    hang 4 $ group $ text "Syntax error from macro:" <> line <> viaShow err
+  pp env (MacroEvaluationError p err) =
+    hang 4 $ group $ text "Error during macro evaluation at phase" <+> pp env p <>
+    text ":" <> line <> text (evalErrorText err)
+  pp env (ValueNotMacro val) =
+    text "Not a macro monad value:" <+> pp env val
+  pp env (ValueNotSyntax val) =
+    hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
+  pp _env (InternalError str) =
+    text "Internal error during expansion! This is a bug in the implementation." <> string str

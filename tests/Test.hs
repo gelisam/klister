@@ -23,6 +23,7 @@ import Module
 import ModuleName
 import Parser
 import PartialCore
+import Pretty
 import ScopeSet
 import ShortShow
 import Signals
@@ -285,7 +286,7 @@ testExpander input spec = do
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              addRootScope expr >>= addModuleScope >>= expandExpr
       case c of
-        Left err -> assertFailure . T.unpack . expansionErrText $ err
+        Left err -> assertFailure . T.unpack . pretty $ err
         Right expanded ->
           case runPartialCore $ unsplit expanded of
             Nothing -> assertFailure "Incomplete expansion"
@@ -324,7 +325,7 @@ testFile f p = do
   void $ execExpand initializeKernel ctx
   execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
     \case
-      Left err -> assertFailure (T.unpack (expansionErrText err))
+      Left err -> assertFailure (T.unpack (pretty err))
       Right w ->
         view (worldModules . at mn) w &
         \case
@@ -345,7 +346,7 @@ testFileError f p = do
       Left err | p err -> return ()
                | otherwise ->
                  assertFailure $ "Expected a different error than " ++
-                                 T.unpack (expansionErrText err)
+                                 T.unpack (pretty err)
       Right _ -> assertFailure "Unexpected success expanding file"
 
 

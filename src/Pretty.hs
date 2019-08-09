@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pretty (Pretty(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
+module Pretty (Pretty(..), string, text, viaShow, (<+>), (<>), hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
@@ -21,6 +21,8 @@ import Env
 import Module
 import ModuleName
 import Phase
+import Scope
+import ScopeSet
 import Syntax
 import Syntax.SrcLoc
 import Value
@@ -311,3 +313,18 @@ instance Pretty VarInfo a => Pretty VarInfo (Env a) where
 instance Pretty VarInfo CompleteModule where
   pp env (Expanded em) = pp env em
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
+
+instance Pretty VarInfo Scope where
+  pp _env = viaShow
+
+instance Pretty VarInfo ScopeSet where
+  pp env scs =
+    let (allPhases, phases) = contents scs
+    in text "⟨" <> align (group (ppSet allPhases <> text "," <> line <> ppMap (ppSet <$> phases) <> "⟩"))
+
+    where
+      commaSep = group . concatWith (\x y -> x <> text "," <> line <> y)
+      ppSet s =
+        text "{" <> commaSep (map (pp env) (Set.toList s)) <> text "}"
+      ppMap m =
+        group (vsep [group (viaShow k <+> text "↦" <> line <> v) | (k, v) <- Map.toList m])

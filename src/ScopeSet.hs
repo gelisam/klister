@@ -10,6 +10,7 @@ module ScopeSet (
   , size
   , member
   , isSubsetOf
+  , contents
   -- * Updates
   , insertAtPhase
   , insertUniversally
@@ -84,6 +85,9 @@ deleteUniversally sc = set (phaseScopes . each . at sc)
                            Nothing
                      . set (universalScopes . at sc)
                            Nothing
+
+contents :: ScopeSet -> (Set Scope, Map Phase (Set Scope))
+contents scs = (view universalScopes scs, view phaseScopes scs)
 
 instance AlphaEq ScopeSet where
   alphaCheck x y = guard (x == y)

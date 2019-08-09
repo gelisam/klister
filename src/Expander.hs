@@ -19,7 +19,6 @@ module Expander (
   -- * Expander monad
   , Expand
   , execExpand
-  , expansionErrText
   , mkInitContext
   , initializeKernel
   , initializeLanguage

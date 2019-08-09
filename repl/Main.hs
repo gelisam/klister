@@ -55,7 +55,7 @@ mainWithOptions opts =
       void $ execExpand initializeKernel ctx
       execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
         \case
-          Left err -> T.putStrLn (expansionErrText err)
+          Left err -> prettyPrintLn err
           Right w -> repl ctx w
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
@@ -85,7 +85,7 @@ repl ctx startWorld = do
               c <- execExpand (expandExpr ok) ctx
               case c of
                 Left err -> putStr "Expander error: " *>
-                            T.putStrLn (expansionErrText err)
+                            prettyPrintLn err
                 Right (unsplit -> out) -> do
                   putStrLn "Expander Output:"
                   print out
