@@ -635,8 +635,6 @@ initializeKernel = do
       -- FIXME primitive scope:
       bind b val
       addToKernel name runtime b
-      when (name == "import" || name == "export") $ -- TODO replace with a Racket-style for-meta operator
-        addToKernel name (prior runtime) b
 
 
     addExprPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
