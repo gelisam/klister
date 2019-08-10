@@ -176,7 +176,7 @@ data ExpanderState = ExpanderState
   , _expanderPhaseRoots :: !(Map Phase Scope)
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
-  , _expanderDeclPhases :: !(Map DeclValidityPtr Phase)
+  , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Value))
   }
 
@@ -384,5 +384,5 @@ getDecl ptr =
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
         Just e' -> pure $ CompleteDecl $ Example e'
-    flattenDecl (Import m x) = return $ CompleteDecl $ Import m x
+    flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x

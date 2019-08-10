@@ -1,13 +1,6 @@
 #lang kernel
 
-[meta [import kernel >>=]]
-[meta [import kernel free-identifier=?]]
-[meta [import kernel if]]
-[meta [import kernel lambda]]
-[meta [import kernel pure]]
-[meta [import kernel quote]]
-[meta [import kernel syntax-case]]
-[meta [import kernel syntax-error]]
+[import [shift kernel 1]]
 
 [define-macros
   ([thing [lambda [stx] (syntax-error [quote not-allowed-here] stx)]])]

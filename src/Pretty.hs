@@ -192,11 +192,27 @@ instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Dec
   ppBind env (Meta d) =
     let (doc, env') = ppBind env d
     in (hang 4 $ text "meta" <> line <> doc, env')
-  ppBind env (Import mn x) =
-    (hang 4 $ text "import" <+> viaShow mn <+> pp env x, mempty)
+  ppBind env (Import spec) =
+    (hang 4 $ text "import" <+> pp env spec, mempty)
   ppBind env (Export x) =
     (hang 4 $ text "export" <+> pp env x, mempty)
   ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
+
+instance Pretty VarInfo ImportSpec where
+  pp env (ImportModule mn) = pp env mn
+  pp env (ImportOnly spec ids) = group $ vsep [ text "only"
+                                              , pp env spec
+                                              , parens (group (vsep (map (pp env) ids)))
+                                              ]
+  pp env (ShiftImports spec i) = pp env spec <+> "⇑" <+> viaShow i
+  pp env (RenameImports spec rens) = group $ vsep [ text "rename"
+                                                  , pp env spec
+                                                  , group (vsep [pp env x <+> pp env y | (x, y) <- rens])
+                                                  ]
+  pp env (PrefixImports spec pref) = group $ vsep [ text "prefix"
+                                                  , pp env spec
+                                                  , viaShow pref
+                                                  ]
 
 instance Pretty VarInfo ModuleName where
   pp _ n = viaShow (moduleNameText n)

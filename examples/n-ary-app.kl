@@ -1,11 +1,6 @@
 #lang kernel
 
-[meta [import kernel cons-list-syntax]]
-[meta [import kernel lambda]]
-[meta [import kernel pure]]
-[meta [import kernel quote]]
-[meta [import kernel syntax-case]]
-[meta [import kernel vec-syntax]]
+[import [shift (only kernel cons-list-syntax lambda pure quote syntax-case vec-syntax) 1]]
 
 
 
@@ -60,6 +55,7 @@
 
 [example (const [quote a] [quote b])]
 
+[meta [export import]]
 [export #%module]
 [export #%app]
 [export const]

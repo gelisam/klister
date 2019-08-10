@@ -41,6 +41,7 @@ import qualified Data.Map as Map
 import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
 import System.Directory
@@ -48,7 +49,8 @@ import System.Directory
 import Binding
 import Control.Lens.IORef
 import Core
-import Env
+import Env (Env)
+import qualified Env
 import Evaluator
 import Expander.DeclScope
 import Expander.Syntax
@@ -133,6 +135,22 @@ loadModuleFile modName =
 
          return (m, es)
 
+getImports :: ImportSpec -> Expand Exports
+getImports (ImportModule (Stx _ _ mn)) = visit mn
+getImports (ImportOnly spec idents) =
+  filterExports (\_ x -> x `elem` (map (view stxValue) idents)) <$> getImports spec
+getImports (ShiftImports spec i) = do
+  p <- currentPhase
+  inPhase (shift i p) $ getImports spec
+getImports (RenameImports spec (map (bimap (view stxValue) (view stxValue)) -> rens)) =
+  mapExportNames rename <$> getImports spec
+  where
+    rename x =
+      case lookup x rens of
+        Nothing -> x
+        Just y -> y
+getImports (PrefixImports spec pref) =
+  mapExportNames (pref <>) <$> getImports spec
 
 visit :: ModuleName -> Expand Exports
 visit modName = do
@@ -308,7 +326,7 @@ initializeKernel = do
             bind b (EIncompleteDefn var x exprDest)
             linkDecl dest (Define x var exprDest)
             forkExpandSyntax exprDest expr
-            nowValidAt pdest p
+            nowValidAt pdest (SpecificPhase p)
         )
       ,("define-macros"
         , \ sc dest pdest stx -> do
@@ -326,7 +344,7 @@ initializeKernel = do
               bind b $ EIncompleteMacro macroDest
               return (theName, macroDest)
             linkDecl dest $ DefineMacros macros
-            nowValidAt pdest p
+            nowValidAt pdest (SpecificPhase p)
         )
       , ("example"
         , \ sc dest pdest stx -> do
@@ -335,24 +353,19 @@ initializeKernel = do
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
             forkExpandSyntax exprDest (addScope p expr sc)
-            nowValidAt pdest p
+            nowValidAt pdest (SpecificPhase p)
         )
-      , ("import" --TODO filename relative to source location of import modname
+      , ("import"
+         -- TODO Make import spec language extensible and use bindings rather than literals
         , \sc dest pdest stx -> do
-            p <- currentPhase
-            Stx _ _ (_ :: Syntax, mn, ident) <- mustBeVec stx
-            Stx _ _ modName <- mustBeModName mn
-            imported@(Stx _ _ x) <- flip (addScope p) sc <$> mustBeIdent ident
-            modExports <- visit modName
-            b <- case getExport p x modExports of
-                   Nothing -> throwError $ InternalError $
-                              "Module " ++ show modName ++
-                              " does not export " ++ show x ++
-                              " amongst " ++ show modExports
-                   Just b -> return b
-            addBinding imported b
-            linkDecl dest (Import modName imported)
-            nowValidAt pdest p
+            Stx scs loc (_ :: Syntax, toImport) <- mustBeVec stx
+            spec <- importSpec toImport
+            modExports <- getImports spec
+            flip forExports_ modExports $ \p x b -> inPhase p do
+              imported <- addRootScope' $ addScope' (Stx scs loc x) sc
+              addBinding imported b
+            linkDecl dest (Import spec)
+            nowValidAt pdest AllPhases
         )
       , ("export"
         , \_sc dest pdest stx -> do
@@ -362,7 +375,7 @@ initializeKernel = do
             b <- resolve exported
             modifyState $ over expanderModuleExports $ addExport p x b
             linkDecl dest (Export exported)
-            nowValidAt pdest p
+            nowValidAt pdest (SpecificPhase p)
         )
       , ("meta"
         , \sc dest pdest stx -> do
@@ -374,9 +387,39 @@ initializeKernel = do
         )
       ]
       where
-        nowValidAt :: DeclValidityPtr -> Phase -> Expand ()
+        nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
         nowValidAt ptr p =
           modifyState $ over expanderDeclPhases $ Map.insert ptr p
+
+        importSpec :: Syntax -> Expand ImportSpec
+        importSpec (Syntax (Stx scs srcloc (String s))) =
+          ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
+        importSpec (Syntax (Stx scs srcloc (Id "kernel"))) =
+          return $ ImportModule (Stx scs srcloc (KernelName kernelName))
+        importSpec stx@(Syntax (Stx _ _ (List elts)))
+          | (Syntax (Stx _ _ (Id "only")) : spec : names) <- elts = do
+              subSpec <- importSpec spec
+              ImportOnly subSpec <$> traverse mustBeIdent names
+          | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
+              subSpec <- importSpec spec
+              RenameImports subSpec <$> traverse getRename renamings
+          | otherwise = throwError $ NotImportSpec stx
+          where
+            getRename s = do
+              Stx _ _ (old', new') <- mustBeVec s
+              old <- mustBeIdent old'
+              new <- mustBeIdent new'
+              return (old, new)
+        importSpec stx@(Syntax (Stx _ _ (Vec elts)))
+          | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Sig (Signal i)))] <- elts = do
+              subSpec <- importSpec spec
+              return $ ShiftImports subSpec (fromIntegral i)
+          | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
+            subSpec <- importSpec spec
+            Stx _ _ p <- mustBeIdent prefix
+            return $ PrefixImports subSpec p
+          | otherwise = throwError $ NotImportSpec stx
+        importSpec other = throwError $ NotImportSpec other
 
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
@@ -592,7 +635,7 @@ initializeKernel = do
       -- FIXME primitive scope:
       bind b val
       addToKernel name runtime b
-      when (name == "import") $
+      when (name == "import" || name == "export") $ -- TODO replace with a Racket-style for-meta operator
         addToKernel name (prior runtime) b
 
 
@@ -726,8 +769,10 @@ runTask (tid, localData, task) = withLocal localData $ do
       case readyYet of
         Nothing ->
           stillStuck tid task
-        Just p -> do
+        Just (SpecificPhase p) ->
           forkExpandDecls dest (addScope p stx sc)
+        Just AllPhases ->
+          forkExpandDecls dest (addScope' stx sc)
     InterpretMacroAction dest act outerKont -> do
       interpretMacroAction act >>= \case
         Left (signal, innerKont) -> do

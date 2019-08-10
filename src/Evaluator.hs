@@ -112,7 +112,7 @@ evalMod startingEnvs basePhase m =
                 -- TODO revisit as part of adding exports, where an expansion
                 -- environment is created
       evalDecl' (Meta decl) = local prior (evalDecl decl)
-      evalDecl' (Import _mn _x) = pure ()
+      evalDecl' (Import _spec) = pure ()
       evalDecl' (Export _x) = pure ()
 
 

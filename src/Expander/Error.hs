@@ -27,6 +27,7 @@ data ExpansionErr
   | NotModName Syntax
   | NotRightLength Natural Syntax
   | NotVec Syntax
+  | NotImportSpec Syntax
   | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError Phase EvalError
@@ -62,6 +63,8 @@ instance Pretty VarInfo ExpansionErr where
     text "entries between square brackets, but got" <+> pp env stx
   pp env (NotVec stx) =
     text "Expected square-bracketed vec but got" <+> pp env stx
+  pp env (NotImportSpec stx) =
+    text "Expected import spec but got" <+> pp env stx
   pp env (UnknownPattern stx) =
     text "Unknown pattern" <+> pp env stx
   pp _env (MacroRaisedSyntaxError err) =

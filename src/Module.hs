@@ -13,9 +13,12 @@ module Module (
   , Decl(..)
   , Imports
   , noImports
+  , ImportSpec(..)
   , Exports
   , getExport
   , addExport
+  , mapExportNames
+  , filterExports
   , noExports
   , forExports
   , forExports_
@@ -37,6 +40,7 @@ import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
 import Data.Unique
+import Numeric.Natural
 
 import Binding
 import Core
@@ -52,6 +56,14 @@ instance Show ModulePtr where
 
 newModulePtr :: IO ModulePtr
 newModulePtr = ModulePtr <$> newUnique
+
+data ImportSpec
+  = ImportModule (Stx ModuleName)
+  | ImportOnly ImportSpec [Ident]
+  | ShiftImports ImportSpec Natural
+  | RenameImports ImportSpec [(Ident, Ident)]
+  | PrefixImports ImportSpec Text
+  deriving Show
 
 newtype Imports = Imports (Map ModuleName (Map Phase (Set Text)))
   deriving Show
@@ -102,6 +114,17 @@ addExport p x b (Exports es) = Exports $ over (at p) (Just . ins) es
 noExports :: Exports
 noExports = Exports Map.empty
 
+mapExportNames :: (Text -> Text) -> Exports -> Exports
+mapExportNames f (Exports es) = Exports $ Map.map (Map.mapKeys f) es
+
+filterExports :: (Phase -> Text -> Bool) -> Exports -> Exports
+filterExports ok (Exports es) =
+  Exports $ Map.mapMaybeWithKey helper es
+  where
+    helper p bs =
+      let out = Map.filterWithKey (\t _ -> ok p t) bs
+      in if Map.null out then Nothing else Just out
+
 data Module f a = Module
   { _moduleName :: ModuleName
   , _moduleImports :: !Imports
@@ -146,7 +169,7 @@ data Decl decl expr
   | DefineMacros [(Ident, expr)]
   | Meta decl
   | Example expr
-  | Import ModuleName Ident
+  | Import ImportSpec
   | Export Ident
   deriving (Functor, Show)
 
@@ -155,7 +178,7 @@ instance Bifunctor Decl where
   bimap _f g (DefineMacros ms) = DefineMacros [(x, g e) | (x, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
   bimap _f g (Example e) = Example (g e)
-  bimap _f _g (Import mn x) = Import mn x
+  bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export x) = Export x
 
 instance (Phased decl, Phased expr) => Phased (Decl decl expr) where

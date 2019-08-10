@@ -242,10 +242,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Meta (view completeDecl -> Import _ _),
-                 Meta (view completeDecl -> Import _ _),
-                 Meta (view completeDecl -> Import _ _),
-                 Meta (view completeDecl -> Import _ _),
+                [Import _,
                  Meta (view completeDecl -> Define _ _ _),
                  DefineMacros [(_, _)],
                  Example ex] ->
