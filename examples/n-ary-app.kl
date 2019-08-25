@@ -65,3 +65,4 @@
 [export define-macros]
 [export quote]
 [export meta]
+[export import]
