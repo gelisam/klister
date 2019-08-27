@@ -15,7 +15,9 @@ import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
 import Data.Text (Text)
 import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
+import Data.Unique
 
+import Binding
 import Core
 import Env
 import Module
@@ -327,8 +329,24 @@ instance Pretty VarInfo a => Pretty VarInfo (Env a) where
          ]
 
 instance Pretty VarInfo CompleteModule where
-  pp env (Expanded em) = pp env em
+  pp env (Expanded em bs) = pp env em <> line <> pp env bs
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
+
+instance Pretty VarInfo Binding where
+  pp _env (Binding b) = text "b" <> viaShow (hashUnique b)
+
+instance Pretty VarInfo BindingTable where
+  pp env bs =
+    group $ hang 2 $ vsep $
+    punc (text ",") [ group $ hang 2 $
+                      pp env n <+> text "↦" <> line <>
+                      text "{" <> group (vsep [pp env scs <+> text "↦" <+> pp env b | (scs, b) <- xs]) <> text "}"
+                    | (n, xs) <- Map.toList $ view bindings bs
+                    ]
+
+    where punc _ [] = []
+          punc _ [d] = [d]
+          punc doc (d1:d2:ds) = (d1 <> doc) : punc doc (d2:ds)
 
 instance Pretty VarInfo Scope where
   pp _env = viaShow

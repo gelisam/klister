@@ -101,12 +101,12 @@ expandModule thisMod src =
     expandTasks
     body <- getBody modBodyDest
     let modName = view moduleSource src
-    return $ Expanded $ Module
-      { _moduleName = modName
-      , _moduleImports = noImports
-      , _moduleBody = body
-      , _moduleExports = noExports
-    }
+    let theModule = Module { _moduleName = modName
+                           , _moduleImports = noImports
+                           , _moduleBody = body
+                           , _moduleExports = noExports
+                           }
+    return $ Expanded theModule mempty -- TODO the bindings go here!
 
 
 
@@ -223,10 +223,8 @@ bindingTable = view expanderBindingTable <$> getState
 
 addBinding :: Ident -> Binding -> Expand ()
 addBinding (Stx scs _ name) b = do
-  -- Note: assumes invariant that a name-scopeset pair is never mapped
-  -- to two bindings. That would indicate a bug in the expander but
-  -- this code doesn't catch that.
-  modifyState $ over expanderBindingTable (Map.insertWith (<>) name [(scs, b)])
+  modifyState $ over (expanderBindingTable . at name) $
+    (Just . ((scs, b) :) . fromMaybe [])
 
 bind :: Binding -> EValue -> Expand ()
 bind b v =
@@ -238,9 +236,9 @@ bind b v =
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
-  bindings <- bindingTable
+  allBindings <- bindingTable
   p <- currentPhase
-  let namesMatch = fromMaybe [] (Map.lookup x bindings)
+  let namesMatch = fromMaybe [] (view (at x) allBindings)
   let scopesMatch =
         [ (scopes, b)
         | (scopes, b) <- namesMatch

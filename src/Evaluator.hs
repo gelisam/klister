@@ -70,7 +70,7 @@ evalMod ::
 evalMod startingEnvs basePhase m =
   case m of
     KernelModule _p-> return (Map.empty, []) -- TODO builtins go here, suitably shifted
-    Expanded em ->
+    Expanded em _ ->
       execRWST (traverse evalDecl (view moduleBody em)) basePhase startingEnvs
 
   where

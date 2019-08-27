@@ -40,7 +40,6 @@ module Expander.Monad
   , forkInterpretMacroAction
   , stillStuck
   -- * Implementation parts
-  , BindingTable
   , SyntacticCategory(..)
   , ExpansionEnv(..)
   , EValue(..)
@@ -123,7 +122,7 @@ newTaskID = liftIO $ TaskID <$> newUnique
 newDeclValidityPtr :: Expand DeclValidityPtr
 newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
 
-type BindingTable = Map Text [(ScopeSet, Binding)]
+
 
 newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
   deriving (Semigroup, Monoid)
@@ -185,7 +184,7 @@ initExpanderState = ExpanderState
   { _expanderReceivedSignals = Set.empty
   , _expanderWorld = initialWorld
   , _expanderNextScope = Scope 0
-  , _expanderBindingTable = Map.empty
+  , _expanderBindingTable = mempty
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
   , _expanderCompletedCore = Map.empty

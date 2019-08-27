@@ -30,6 +30,7 @@ module Module (
   , SplitModuleBody(..)
   , DeclPtr
   , newDeclPtr
+  , BindingTable
   ) where
 
 import Control.Lens
@@ -46,6 +47,7 @@ import Binding
 import Core
 import ModuleName
 import Phase
+import ScopeSet
 import Syntax
 
 newtype ModulePtr = ModulePtr Unique
@@ -96,8 +98,11 @@ instance Monoid Exports where
 
 forExports :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f [a]
 forExports act (Exports todo) =
-  let contents = [(p, n, b) | (p, m) <- Map.toList todo, (n, b) <- Map.toList m]
-  in traverse (\(x,y,z) -> act x y z) contents
+  traverse (\(x,y,z) -> act x y z)
+    [ (p, n, b)
+    | (p, m) <- Map.toList todo
+    , (n, b) <- Map.toList m
+    ]
 
 forExports_ :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f ()
 forExports_ act es = forExports act es $> ()
@@ -134,18 +139,18 @@ data Module f a = Module
   deriving (Functor, Show)
 makeLenses ''Module
 
+
 newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl CompleteDecl Core }
   deriving Show
-
 
 instance Phased CompleteDecl where
   shift i (CompleteDecl d) = CompleteDecl (shift i d)
 
-data CompleteModule = Expanded !(Module [] CompleteDecl) | KernelModule Phase
+data CompleteModule = Expanded !(Module [] CompleteDecl) BindingTable | KernelModule Phase
   deriving Show
 
 instance Phased CompleteModule where
-  shift i (Expanded m) = Expanded (shift i m)
+  shift i (Expanded m bs) = Expanded (shift i m) (shift i bs)
   shift i (KernelModule p) = KernelModule (shift i p)
 
 instance (Functor f, Phased a) => Phased (Module f a) where

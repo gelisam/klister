@@ -330,7 +330,7 @@ testFile f p = do
             assertFailure "No module found"
           Just (KernelModule _) ->
             assertFailure "Expected user module, got kernel"
-          Just (Expanded m) ->
+          Just (Expanded m _) ->
             p m
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
