@@ -56,4 +56,4 @@ Why "Klister"?
 --------------
 
 "Klister" is Danish for "adhesive", and is also used to form words
-describing _sticky_ things. And our macros get _stuck_.
+describing *sticky* things. And our macros get *stuck*.
