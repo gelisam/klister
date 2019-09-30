@@ -78,7 +78,6 @@ import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
-import Data.Text (Text)
 import Data.Traversable
 import Data.Unique
 
@@ -96,7 +95,6 @@ import Phase
 import Signals
 import SplitCore
 import Scope
-import ScopeSet (ScopeSet)
 import Syntax
 import Value
 import World

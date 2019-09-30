@@ -47,7 +47,6 @@ import Binding
 import Core
 import ModuleName
 import Phase
-import ScopeSet
 import Syntax
 
 newtype ModulePtr = ModulePtr Unique
