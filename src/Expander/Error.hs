@@ -77,4 +77,4 @@ instance Pretty VarInfo ExpansionErr where
   pp env (ValueNotSyntax val) =
     hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
   pp _env (InternalError str) =
-    text "Internal error during expansion! This is a bug in the implementation." <> string str
+    text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
