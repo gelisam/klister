@@ -31,7 +31,15 @@ import Syntax
 import Value
 import World
 
-data Options = Options { sourceModule :: Maybe FilePath }
+data Options = Options { optCommand :: CLICommand }
+data RunOptions = RunOptions { runOptFile :: FilePath
+                             , runOptWorld :: Bool
+                             }
+data ReplOptions = ReplOptions { replOptFile :: Maybe FilePath }
+
+data CLICommand
+  = Run RunOptions
+  | Repl ReplOptions
 
 main :: IO ()
 main = do
@@ -39,24 +47,45 @@ main = do
   (mainWithOptions =<< execParser opts) `catch`
     \(e :: SomeException) -> print e >> exitFailure
   where
+    fileArg = argument str (metavar "FILE")
+    runOptions = Run <$>
+      (RunOptions
+       <$> fileArg
+       <*> switch
+         ( long "world"
+         <> short 'w'
+         <> help "Print the whole world" )
+         )
+    replOptions = Repl . ReplOptions <$> optional fileArg
+    parser = Options <$>
+      subparser
+        ( (command "run" (info runOptions (progDesc "Run a file")))
+        <> (command "repl" (info replOptions (progDesc "Use the REPL")))
+        )
     opts = info parser mempty
-    parser = Options <$> optional (argument str (metavar "FILE"))
 
 mainWithOptions :: Options -> IO ()
 mainWithOptions opts =
-  case sourceModule opts of
-    Nothing -> do
+  case optCommand opts of
+    Repl (ReplOptions Nothing) -> do
       ctx <- mkInitContext (KernelName kernelName)
       void $ execExpand initializeKernel ctx
       repl ctx initialWorld
-    Just file -> do
-      mn <- moduleNameFromPath file
-      ctx <- mkInitContext mn
-      void $ execExpand initializeKernel ctx
-      execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
-        \case
-          Left err -> prettyPrintLn err
-          Right w -> repl ctx w
+    Repl (ReplOptions (Just file)) -> do
+      (ctx, theWorld) <- expandFile file
+      repl ctx theWorld
+    Run (RunOptions file showWorld) -> do
+      (_, theWorld) <- expandFile file
+      when showWorld $
+        prettyPrint theWorld
+  where expandFile file = do
+          mn <- moduleNameFromPath file
+          ctx <- mkInitContext mn
+          void $ execExpand initializeKernel ctx
+          execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+            \case
+              Left err -> prettyPrintLn err *> fail ""
+              Right result -> pure (ctx, result)
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =
