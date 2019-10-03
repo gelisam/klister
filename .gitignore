@@ -2,3 +2,5 @@
 *.cabal
 *~
 *#
+dist/
+dist-newstyle/

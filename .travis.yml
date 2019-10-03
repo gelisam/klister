@@ -1,0 +1,33 @@
+language: generic
+
+# explicitly request container-based infrastructure
+sudo: false
+
+matrix:
+  include:
+    - env: CABALVER=3.0 GHCVER=8.8.1
+      addons: {apt: {packages: [cabal-install-3.0,ghc-8.8.1],sources: [hvr-ghc]}}
+    - env: CABALVER=2.4 GHCVER=8.6.5
+      addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.5],sources: [hvr-ghc]}}
+
+before_install:
+ - export PATH=/opt/ghc/$GHCVER/bin:/opt/cabal/$CABALVER/bin:$PATH
+ - curl -sSL https://github.com/sol/hpack/raw/master/get-hpack.sh | bash
+ - hpack
+
+install:
+ - cabal --version
+ - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
+ - travis_retry cabal update
+ - |
+   if [[ $CABALVER != "3.0" ]]; then
+     cabal install --only-dependencies --enable-tests
+   else
+     cabal install --only-dependencies
+   fi
+
+script:
+ - cabal configure --enable-tests --enable-benchmarks -v2
+ - cabal build
+ - cabal test
+ - cabal sdist   # tests that a source-distribution can be generated
