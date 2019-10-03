@@ -77,7 +77,7 @@ instance Pretty VarInfo ExpansionErr where
     text "Not a macro monad value:" <+> pp env val
   pp env (ValueNotSyntax val) =
     hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
-  pp _env (InternalError str) =
-    text "Internal error during expansion! This is a bug in the implementation." <> string str
   pp _env (NoSuchFile filename) =
     text "User error; no such file: " <> string filename
+  pp _env (InternalError str) =
+    text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
