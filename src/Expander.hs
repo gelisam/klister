@@ -120,8 +120,7 @@ loadModuleFile modName =
          return (KernelModule p, es)
     Left file ->
       do existsp <- liftIO $ doesFileExist file
-         when (not existsp) $
-           throwError $ InternalError $ "No such file: " ++ show (moduleNameToPath modName)
+         when (not existsp) $ throwError $ NoSuchFile $ show file
          stx <- liftIO (readModule file) >>=
                 \case
                   Left err -> throwError $ InternalError $ show err -- TODO
