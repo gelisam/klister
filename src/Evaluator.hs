@@ -63,10 +63,17 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter [] = id
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
+-- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
+data EvalResult =
+  EvalResult { resultEnv :: Env Value
+             , resultExpr :: Core
+             , resultValue :: Value
+             }
+  deriving (Eq, Show)
 
 evalMod ::
   Map Phase (Env Value) -> Phase -> CompleteModule ->
-  Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
+  Eval (Map Phase (Env Value), [EvalResult])
 evalMod startingEnvs basePhase m =
   case m of
     KernelModule _p-> return (Map.empty, []) -- TODO builtins go here, suitably shifted
@@ -96,17 +103,20 @@ evalMod startingEnvs basePhase m =
           Nothing -> Map.insert p (Env.singleton n x v) envs
 
 
-    evalDecl :: CompleteDecl -> RWST Phase [(Env Value, Core, Value)] (Map Phase (Env Value)) Eval ()
+    evalDecl :: CompleteDecl -> RWST Phase [EvalResult] (Map Phase (Env Value)) Eval ()
     evalDecl (CompleteDecl d) = evalDecl' d
       where
       evalDecl' (Define x n e) = do
         env <- currentEnv
         v <- lift $ withEnv env (eval e)
         extendCurrentEnv n x v
-      evalDecl' (Example e) = do
+      evalDecl' (Example expr) = do
         env <- currentEnv
-        v <- lift $ withEnv env (eval e)
-        tell [(env, e, v)]
+        value <- lift $ withEnv env (eval expr)
+        tell $ [EvalResult { resultEnv = env
+                           , resultExpr = expr
+                           , resultValue = value
+                           }]
       evalDecl' (DefineMacros _macros) = do
         pure () -- Macros only live in the transformer environment
                 -- TODO revisit as part of adding exports, where an expansion

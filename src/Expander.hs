@@ -168,16 +168,18 @@ visit modName = do
   visitedp <- Set.member p .
               view (expanderWorld . worldVisited . at modName . non Set.empty) <$>
               getState
-  if visitedp
-    then return ()
-    else
-        do let m' = shift i m
-           let envs = view worldEnvironments world'
-           (moreEnvs, _) <- expandEval $ evalMod envs p m'
-           modifyState $
-             set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
-                 (Just ())
-           modifyState $ over (expanderWorld . worldEnvironments) (<> moreEnvs)
+
+  unless visitedp $ do
+    let m' = shift i m
+    let envs = view worldEnvironments world'
+    (moreEnvs, evalResults) <- expandEval $ evalMod envs p m'
+    modifyState $
+      set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
+          (Just ())
+    modifyState $ over (expanderWorld . worldEnvironments) (<> moreEnvs)
+    modifyState $
+      set (expanderWorld . worldEvaluated . at modName)
+          (Just evalResults)
 
   return (shift i es)
 
