@@ -7,6 +7,7 @@ module Main where
 
 import Control.Lens
 import Control.Monad
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -23,8 +24,10 @@ import Module
 import ModuleName
 import Parser
 import PartialCore
+import Phase (prior, runtime, Phased(..))
 import Pretty
-import ScopeSet
+import Scope
+import qualified ScopeSet
 import ShortShow
 import Signals
 import SplitCore
@@ -36,7 +39,32 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Expander tests" [ miniTests, moduleTests ]
+tests = testGroup "Expander tests" [ operationTests, miniTests, moduleTests ]
+
+operationTests :: TestTree
+operationTests =
+  testGroup "Core operations"
+  [ testCase "Shifting core expressions" $
+    let sc = Scope 42
+        ph = runtime
+        scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
+        fakeLoc = SrcLoc "fake" (SrcPos 0 0) (SrcPos 1 1)
+        stx = Syntax (Stx scs fakeLoc (Id "hey"))
+        expr = Core (CoreIf (Core (CoreBool True))
+                            (Core (CoreSyntax stx))
+                            (Core (CoreBool False)))
+    in case shift 1 expr of
+         Core (CoreIf (Core (CoreBool True))
+                      (Core (CoreSyntax stx'))
+                      (Core (CoreBool False))) ->
+           case stx' of
+             Syntax (Stx scs' fakeLoc' (Id "hey")) ->
+               if scs' == ScopeSet.insertAtPhase (prior runtime) sc ScopeSet.empty
+                 then pure ()
+                 else assertFailure $ "Shifting gave wrong scopes" ++ show scs'
+             Syntax _ -> assertFailure "Wrong shape in shifted syntax"
+         _ -> assertFailure "Shifting didn't preserve structure!"
+  ]
 
 miniTests :: TestTree
 miniTests =
