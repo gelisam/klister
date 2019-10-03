@@ -34,6 +34,7 @@ data ExpansionErr
   | ValueNotMacro Value
   | ValueNotSyntax Value
   | InternalError String
+  | NoSuchFile String
   deriving (Show)
 
 instance Pretty VarInfo ExpansionErr where
@@ -78,3 +79,5 @@ instance Pretty VarInfo ExpansionErr where
     hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
   pp _env (InternalError str) =
     text "Internal error during expansion! This is a bug in the implementation." <> string str
+  pp _env (NoSuchFile filename) =
+    text "User error; no such file: " <> string filename
