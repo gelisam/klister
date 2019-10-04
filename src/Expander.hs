@@ -51,7 +51,6 @@ import Binding
 import Binding.Info
 import Control.Lens.IORef
 import Core
-import Env (Env)
 import qualified Env
 import Evaluator
 import Expander.DeclScope
@@ -209,7 +208,7 @@ getTasks = view expanderTasks <$> getState
 clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
 
-currentTransformerEnv :: Expand (Env MacroVar Value)
+currentTransformerEnv :: Expand TEnv
 currentTransformerEnv = do
   phase <- currentPhase
   globalEnv <- view (expanderWorld . worldTransformerEnvironments . at phase . non Env.empty) <$>
@@ -218,7 +217,7 @@ currentTransformerEnv = do
               getState
   return (globalEnv <> localEnv)
 
-currentEnv :: Expand (Env Var Value)
+currentEnv :: Expand VEnv
 currentEnv = do
   phase <- currentPhase
   globalEnv <- maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState

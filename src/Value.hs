@@ -11,7 +11,8 @@ import Env
 import Signals
 import Syntax
 
-
+type VEnv = Env Var Value
+type TEnv = Env MacroVar Value
 
 data MacroAction
   = MacroActionPure Value
@@ -46,7 +47,7 @@ describeVal (ValueSignal _) = "signal"
 describeVal (ValueBool _) = "boolean"
 
 data Closure = Closure
-  { _closureEnv   :: Env Var Value
+  { _closureEnv   :: VEnv
   , _closureIdent :: Ident
   , _closureVar   :: Var
   , _closureBody  :: Core

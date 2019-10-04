@@ -49,10 +49,10 @@ evalErrorText (EvalErrorCase val) =
   "Didn't match any pattern: " <> valueText val
 
 newtype Eval a = Eval
-   { runEval :: ReaderT (Env Var Value) (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader (Env Var Value), MonadError EvalError)
+   { runEval :: ReaderT VEnv (ExceptT EvalError IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader VEnv, MonadError EvalError)
 
-withEnv :: Env Var Value -> Eval a -> Eval a
+withEnv :: VEnv -> Eval a -> Eval a
 withEnv = local . const
 
 withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
@@ -66,7 +66,7 @@ withManyExtendedEnv exts act = local (inserter exts) act
 
 -- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
 data EvalResult =
-  EvalResult { resultEnv :: Env Var Value
+  EvalResult { resultEnv :: VEnv
              , resultExpr :: Core
              , resultValue :: Value
              }
@@ -77,12 +77,12 @@ data EvalResult =
 -- environments and transformer environments for each phase and the
 -- closure and value for each example in the module.
 evalMod ::
-  Map Phase (Env Var Value)      {- ^ The environments for each phase -} ->
-  Map Phase (Env MacroVar Value) {- ^ The transformer environments for each phase -} ->
-  Phase                          {- ^ The current phase -} ->
-  CompleteModule                 {- ^ The source code of a fully-expanded module -} ->
-  Eval ( Map Phase (Env Var Value)
-       , Map Phase (Env MacroVar Value)
+  Map Phase VEnv {- ^ The environments for each phase -} ->
+  Map Phase TEnv {- ^ The transformer environments for each phase -} ->
+  Phase          {- ^ The current phase -} ->
+  CompleteModule {- ^ The source code of a fully-expanded module -} ->
+  Eval ( Map Phase VEnv
+       , Map Phase TEnv
        , [EvalResult]
        )
 evalMod startingEnvs startingTransformers basePhase m =
@@ -99,7 +99,7 @@ evalMod startingEnvs startingTransformers basePhase m =
   where
     currentEnv ::
       Monoid w =>
-      RWST Phase w (Map Phase (Env Var Value), other) Eval (Env Var Value)
+      RWST Phase w (Map Phase VEnv, other) Eval VEnv
     currentEnv = do
       p <- ask
       envs <- fst <$> get
@@ -110,7 +110,7 @@ evalMod startingEnvs startingTransformers basePhase m =
     extendCurrentEnv ::
       Monoid w =>
       Var -> Ident -> Value ->
-      RWST Phase w (Map Phase (Env Var Value), other) Eval ()
+      RWST Phase w (Map Phase VEnv, other) Eval ()
     extendCurrentEnv n x v = do
       p <- ask
       modify $ over _1 $ \envs ->
@@ -121,7 +121,7 @@ evalMod startingEnvs startingTransformers basePhase m =
     extendCurrentTransformerEnv ::
       Monoid w =>
       MacroVar -> Ident -> Value ->
-      RWST Phase w (other, Map Phase (Env MacroVar Value)) Eval ()
+      RWST Phase w (other, Map Phase TEnv) Eval ()
     extendCurrentTransformerEnv n x v = do
       p <- ask
       modify $ over _2 $ \envs ->
@@ -134,7 +134,7 @@ evalMod startingEnvs startingTransformers basePhase m =
       CompleteDecl ->
       RWST Phase
            [EvalResult]
-           (Map Phase (Env Var Value), Map Phase (Env MacroVar Value))
+           (Map Phase VEnv, Map Phase TEnv)
            Eval
            ()
     evalDecl (CompleteDecl d) = evalDecl' d
