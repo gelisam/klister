@@ -8,20 +8,21 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Set (Set)
 
+import Core (Var)
 import Env
 import Module
 import ModuleName
 import Phase
 
 data World a = World
-  { _worldEnvironments :: !(Map Phase (Env a))
+  { _worldEnvironments :: !(Map Phase (Env Var a))
   , _worldModules :: !(Map ModuleName CompleteModule)
   , _worldVisited :: !(Map ModuleName (Set Phase))
   , _worldExports :: !(Map ModuleName Exports)
   }
 makeLenses ''World
 
-phaseEnv :: Phase -> World a -> Env a
+phaseEnv :: Phase -> World a -> Env Var a
 phaseEnv p = maybe Env.empty id . view (worldEnvironments . at p)
 
 initialWorld :: World a

@@ -54,20 +54,21 @@ prettyPrint x = putDoc (pp Env.empty x)
 prettyPrintLn :: Pretty ann a => a -> IO ()
 prettyPrintLn x = putDoc (pp Env.empty x) >> putStrLn ""
 
-prettyEnv :: Pretty ann a => Env v -> a -> Text
+prettyEnv :: Pretty ann a => Env Var v -> a -> Text
 prettyEnv env x =
   renderStrict (layoutPretty defaultLayoutOptions (pp (fmap (const ()) env) x))
 
-prettyPrintEnv :: Pretty ann a => Env v -> a -> IO ()
+prettyPrintEnv :: Pretty ann a => Env Var v -> a -> IO ()
 prettyPrintEnv env x =
   putDoc (pp (fmap (const ()) env) x)
 
 
 class Pretty ann a | a -> ann where
-  pp :: Env () -> a -> Doc ann
+  pp :: Env Var () -> a -> Doc ann
 
 data VarInfo
   = BindingSite Var
+  | MacroBindingSite MacroVar
   | UseSite Var
 
 instance Pretty VarInfo Core where
@@ -133,7 +134,7 @@ instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
                (map (pp env) (view syntaxErrorLocations err))
 
 class PrettyBinder ann a | a -> ann where
-  ppBind :: Env () -> a -> (Doc ann, Env ())
+  ppBind :: Env Var () -> a -> (Doc ann, Env Var ())
 
 instance PrettyBinder VarInfo Pattern where
   ppBind _env (PatternIdentifier ident@(Stx _ _ x) v) =
@@ -187,8 +188,8 @@ instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Dec
   ppBind env (DefineMacros macros) =
     (hang 4 $ text "define-macros" <> line <>
      vsep [hang 2 $ group $
-           text x <+> text "↦" <> line <> pp env e -- TODO phase-specific binding environments in pprinter
-          | (Stx _ _ x, e) <- macros
+           annotate (MacroBindingSite v) (text x) <+> text "↦" <> line <> pp env e -- TODO phase-specific binding environments in pprinter
+          | (Stx _ _ x, v, e) <- macros
           ],
      mempty)
   ppBind env (Meta d) =
@@ -227,7 +228,7 @@ instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (M
 
     where
       terpri d1 d2 = d1 <> line <> d2
-      go :: a -> State (Env ()) (Doc VarInfo)
+      go :: a -> State (Env Var ()) (Doc VarInfo)
       go d =
         do thisEnv <- get
            let (doc, newEnv) = ppBind thisEnv d
@@ -322,7 +323,7 @@ instance Pretty VarInfo a => Pretty VarInfo (World a) where
 instance Pretty VarInfo Text where
   pp _ = text
 
-instance Pretty VarInfo a => Pretty VarInfo (Env a) where
+instance Pretty VarInfo a => Pretty VarInfo (Env Var a) where
   pp env rho =
     vsep [ hang 4 $ viaShow x <+> pp env n <> line <> pp env v
          | (x, n, v) <- Env.toList rho

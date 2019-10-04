@@ -46,7 +46,7 @@ describeVal (ValueSignal _) = "signal"
 describeVal (ValueBool _) = "boolean"
 
 data Closure = Closure
-  { _closureEnv   :: Env Value
+  { _closureEnv   :: Env Var Value
   , _closureIdent :: Ident
   , _closureVar   :: Var
   , _closureBody  :: Core

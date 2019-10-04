@@ -29,6 +29,12 @@ newtype Var = Var Unique
 instance Show Var where
   show (Var i) = "(Var " ++ show (hashUnique i) ++ ")"
 
+newtype MacroVar = MacroVar Unique
+  deriving (AlphaEq, Eq, Ord)
+
+instance Show MacroVar where
+  show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
+
 data Pattern
   = PatternIdentifier Ident Var
   | PatternEmpty

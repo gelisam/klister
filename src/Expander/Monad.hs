@@ -13,6 +13,7 @@ module Expander.Monad
   , execExpand
   , freshScope
   , freshVar
+  , freshMacroVar
   , getBody
   , getDecl
   , getState
@@ -131,7 +132,7 @@ data EValue
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
-  | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go
+  | EIncompleteMacro MacroVar SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn Var Ident SplitCorePtr -- ^ Definitions that are not yet ready to go
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
@@ -174,7 +175,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
-  , _expanderCurrentEnvs :: !(Map Phase (Env Value))
+  , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   }
 
 initExpanderState :: ExpanderState
@@ -292,6 +293,8 @@ linkedCore slot =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
+freshMacroVar :: Expand MacroVar
+freshMacroVar = MacroVar <$> liftIO newUnique
 
 stillStuck :: TaskID -> ExpanderTask -> Expand ()
 stillStuck tid task = do
@@ -369,11 +372,11 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Define x v e'
     flattenDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
-      for macros \(x, e) ->
+      for macros \(x, v, e) ->
         linkedCore e >>=
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
-          Just e' -> pure $ (x, e')
+          Just e' -> pure $ (x, v, e')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
     flattenDecl (Example e) =

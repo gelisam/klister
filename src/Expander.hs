@@ -201,7 +201,7 @@ clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
 
 
-currentEnv :: Expand (Env Value)
+currentEnv :: Expand (Env Var Value)
 currentEnv = do
   phase <- currentPhase
   globalEnv <- maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
@@ -342,8 +342,9 @@ initializeKernel = do
               macroDest <- inEarlierPhase $ do
                 psc <- phaseRoot
                 schedule (addScope p (addScope (prior p) mdef psc) sc)
-              bind b $ EIncompleteMacro macroDest
-              return (theName, macroDest)
+              v <- freshMacroVar
+              bind b $ EIncompleteMacro v macroDest
+              return (theName, v, macroDest)
             linkDecl dest $ DefineMacros macros
             nowValidAt pdest (SpecificPhase p)
         )
@@ -828,7 +829,7 @@ expandOneExpression dest stx
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
-        EIncompleteMacro mdest -> do
+        EIncompleteMacro _v mdest -> do
           forkAwaitingMacro b mdest dest stx
         EIncompleteDefn x n d ->
           forkAwaitingDefn x n b d dest stx
@@ -888,7 +889,7 @@ expandOneDeclaration sc dest stx ph
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->
           error "Unimplemented: user-defined macros - decl context"
-        EIncompleteMacro _ ->
+        EIncompleteMacro _ _ ->
           error "Unimplemented: user-defined macros - decl context - incomplete"
   | otherwise =
     throwError $ InternalError "All declarations should be identifier-headed"

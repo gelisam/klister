@@ -48,10 +48,10 @@ evalErrorText (EvalErrorCase val) =
   "Didn't match any pattern: " <> valueText val
 
 newtype Eval a = Eval
-   { runEval :: ReaderT (Env Value) (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader (Env Value), MonadError EvalError)
+   { runEval :: ReaderT (Env Var Value) (ExceptT EvalError IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader (Env Var Value), MonadError EvalError)
 
-withEnv :: Env Value -> Eval a -> Eval a
+withEnv :: Env Var Value -> Eval a -> Eval a
 withEnv = local . const
 
 withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
@@ -67,10 +67,12 @@ withManyExtendedEnv exts act = local (inserter exts) act
 -- environments for each phase and the closure and value for each
 -- example in the module.
 evalMod ::
-  Map Phase (Env Value) {- ^ The environments for each phase -} ->
+  Map Phase (Env Var Value) {- ^ The environments for each phase -} ->
   Phase                 {- ^ The current phase -} ->
   CompleteModule        {- ^ The source code of a fully-expanded module -} ->
-  Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
+  Eval ( Map Phase (Env Var Value)
+       , [(Env Var Value, Core, Value)]
+       )
 evalMod startingEnvs basePhase m =
   case m of
     KernelModule _p -> return (Map.empty, []) -- TODO builtins go here, suitably shifted
@@ -80,7 +82,7 @@ evalMod startingEnvs basePhase m =
   where
     currentEnv ::
       Monoid w =>
-      RWST Phase w (Map Phase (Env Value)) Eval (Env Value)
+      RWST Phase w (Map Phase (Env Var Value)) Eval (Env Var Value)
     currentEnv = do
       p <- ask
       envs <- get
@@ -91,7 +93,7 @@ evalMod startingEnvs basePhase m =
     extendCurrentEnv ::
       Monoid w =>
       Var -> Ident -> Value ->
-      RWST Phase w (Map Phase (Env Value)) Eval ()
+      RWST Phase w (Map Phase (Env Var Value)) Eval ()
     extendCurrentEnv n x v = do
       p <- ask
       modify $ \envs ->
@@ -100,7 +102,9 @@ evalMod startingEnvs basePhase m =
           Nothing -> Map.insert p (Env.singleton n x v) envs
 
 
-    evalDecl :: CompleteDecl -> RWST Phase [(Env Value, Core, Value)] (Map Phase (Env Value)) Eval ()
+    evalDecl ::
+      CompleteDecl ->
+      RWST Phase [(Env Var Value, Core, Value)] (Map Phase (Env Var Value)) Eval ()
     evalDecl (CompleteDecl d) = evalDecl' d
       where
       evalDecl' (Define x n e) = do

@@ -170,7 +170,7 @@ newDeclPtr = DeclPtr <$> newUnique
 
 data Decl decl expr
   = Define Ident Var expr
-  | DefineMacros [(Ident, expr)]
+  | DefineMacros [(Ident, MacroVar, expr)]
   | Meta decl
   | Example expr
   | Import ImportSpec
@@ -179,7 +179,7 @@ data Decl decl expr
 
 instance Bifunctor Decl where
   bimap _f g (Define x v e) = Define x v (g e)
-  bimap _f g (DefineMacros ms) = DefineMacros [(x, g e) | (x, e) <- ms]
+  bimap _f g (DefineMacros ms) = DefineMacros [(x, v, g e) | (x, v, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
   bimap _f g (Example e) = Example (g e)
   bimap _f _g (Import spec) = Import spec
