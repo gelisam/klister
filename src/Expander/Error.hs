@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Expander.Error where
 
+import Control.Lens
 import Numeric.Natural
 import Data.Text (Text)
 
@@ -69,8 +70,18 @@ instance Pretty VarInfo ExpansionErr where
     text "Expected import spec but got" <+> pp env stx
   pp env (UnknownPattern stx) =
     text "Unknown pattern" <+> pp env stx
-  pp _env (MacroRaisedSyntaxError err) =
-    hang 4 $ group $ text "Syntax error from macro:" <> line <> viaShow err
+  pp env (MacroRaisedSyntaxError err) =
+    let locs = view syntaxErrorLocations err
+        msg = text "Syntax error from macro:" <> line <>
+              pp env (view syntaxErrorMessage err)
+    in hang 4 $ group $
+       case locs of
+         [] -> msg
+         (Syntax l : ls) ->
+           pp env (view stxSrcLoc l) <> text ":" <> line <> msg <>
+           case ls of
+             [] -> mempty
+             more -> text "Additional locations:" <> line <> vsep [pp env loc | Syntax (Stx _ loc _) <- more]
   pp env (MacroEvaluationError p err) =
     hang 4 $ group $ text "Error during macro evaluation at phase" <+> pp env p <>
     text ":" <> line <> text (evalErrorText err)
