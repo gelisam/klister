@@ -9,7 +9,9 @@ import Control.Monad (forever)
 import Control.Monad.Except
 import Control.Monad.Reader
 
+import Data.Foldable (for_)
 import Data.IORef
+import qualified Data.Map as Map
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
 
@@ -74,14 +76,24 @@ mainWithOptions opts =
       void $ execExpand initializeKernel ctx
       repl ctx initialWorld
     Repl (ReplOptions (Just file)) -> do
-      (ctx, theWorld, _bindings) <- expandFile file
+      (_mn, ctx, theWorld, _bindings) <- expandFile file
       repl ctx theWorld
     Run (RunOptions file showWorld dumpBindings) -> do
-      (_, theWorld, theBindings) <- expandFile file
+      (mn, _ctx, theWorld, theBindings) <- expandFile file
       when showWorld $
         prettyPrint theWorld
       when dumpBindings $ do
         prettyPrint theBindings
+      case Map.lookup mn (view worldEvaluated theWorld) of
+        Nothing -> fail "Internal error: module not evaluated"
+        Just results -> do
+          -- Show just the results of evaluation in the module the user
+          -- asked to run
+          for_ results $ \(EvalResult _ coreExpr val) -> do
+            putStr "Example: "
+            prettyPrint coreExpr
+            putStr " ↦ "
+            prettyPrintLn val
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
@@ -90,7 +102,8 @@ mainWithOptions opts =
           case st of
             Left err -> prettyPrintLn err *> fail ""
             Right result ->
-              pure (ctx, view expanderWorld result, view expanderBindingTable result)
+              pure (mn, ctx, view expanderWorld result, view expanderBindingTable result)
+
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =
