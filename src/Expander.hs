@@ -160,7 +160,7 @@ visit modName = do
            let es = maybe noExports id (view (worldExports . at modName) world)
            return (world, m, es)
          Nothing -> do
-           (m, es) <- loadModuleFile modName
+           (m, es) <- inPhase runtime $ loadModuleFile modName
            w <- view expanderWorld <$> getState
            return (w, m, es)
   p <- currentPhase
@@ -178,6 +178,7 @@ visit modName = do
              set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
                  (Just ())
            modifyState $ over (expanderWorld . worldEnvironments) (<> moreEnvs)
+
   return (shift i es)
 
 
@@ -237,7 +238,7 @@ allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
   allBindings <- bindingTable
   p <- currentPhase
-  let namesMatch = fromMaybe [] (view (at x) allBindings)
+  let namesMatch = view (at x . non []) allBindings
   let scopesMatch =
         [ (scopes, b)
         | (scopes, b) <- namesMatch

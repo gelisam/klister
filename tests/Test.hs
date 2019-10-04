@@ -7,7 +7,6 @@ module Main where
 
 import Control.Lens
 import Control.Monad
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -46,9 +45,7 @@ operationTests =
   testGroup "Core operations"
   [ testCase "Shifting core expressions" $
     let sc = Scope 42
-        ph = runtime
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
-        fakeLoc = SrcLoc "fake" (SrcPos 0 0) (SrcPos 1 1)
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
         expr = Core (CoreIf (Core (CoreBool True))
                             (Core (CoreSyntax stx))
@@ -58,7 +55,7 @@ operationTests =
                       (Core (CoreSyntax stx'))
                       (Core (CoreBool False))) ->
            case stx' of
-             Syntax (Stx scs' fakeLoc' (Id "hey")) ->
+             Syntax (Stx scs' _ (Id "hey")) ->
                if scs' == ScopeSet.insertAtPhase (prior runtime) sc ScopeSet.empty
                  then pure ()
                  else assertFailure $ "Shifting gave wrong scopes" ++ show scs'
@@ -276,6 +273,14 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                  Example ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
                 _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
+          )
+        , ( "examples/imports-shifted-macro.kl"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              \case
+                [Import _, Import _, DefineMacros [(_, _)], Example ex] ->
+                  assertAlphaEq "Example is #f" ex (Core (CoreBool False))
+                _ -> assertFailure "Expected import, import, macro, example"
           )
         ]
       ]

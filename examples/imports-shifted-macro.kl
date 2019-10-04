@@ -1,0 +1,8 @@
+#lang kernel
+
+[import [shift "exports-macro.kl" 1]]
+[import [shift (only kernel lambda pure) 1]]
+
+[define-macros ([m [lambda [stx] [pure [id-m [pure [quote fun]]]]]])]
+
+[example (m #true)]

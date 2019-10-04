@@ -1,0 +1,12 @@
+#lang kernel
+
+[import [shift (only kernel lambda pure quote) 1]]
+
+
+[define-macros
+  ([id-m [lambda [stx]
+           [pure [quote [quote #f]]]]])]
+           
+
+
+[export id-m]
