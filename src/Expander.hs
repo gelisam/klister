@@ -863,14 +863,14 @@ expandOneExpression dest stx
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
-        EIncompleteMacro tn x mdest -> do
-          forkAwaitingMacro b tn x mdest dest stx
+        EIncompleteMacro transformerName sourceIdent mdest -> do
+          forkAwaitingMacro b transformerName sourceIdent mdest dest stx
         EIncompleteDefn x n d ->
           forkAwaitingDefn x n b d dest stx
-        EUserMacro ExprMacro tn -> do
+        EUserMacro ExprMacro transformerName -> do
           stepScope <- freshScope
           p <- currentPhase
-          implV <- Env.lookupVal tn <$> currentTransformerEnv
+          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
             Just (ValueClosure macroImpl) -> do
               macroVal <- inEarlierPhase $ expandEval $
