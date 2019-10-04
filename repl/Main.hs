@@ -76,15 +76,15 @@ mainWithOptions opts =
       void $ execExpand initializeKernel ctx
       repl ctx initialWorld
     Repl (ReplOptions (Just file)) -> do
-      (_mn, ctx, theWorld, _bindings) <- expandFile file
-      repl ctx theWorld
+      (_mn, ctx, result) <- expandFile file
+      repl ctx (view expanderWorld result)
     Run (RunOptions file showWorld dumpBindings) -> do
-      (mn, _ctx, theWorld, theBindings) <- expandFile file
+      (mn, _ctx, result) <- expandFile file
       when showWorld $
-        prettyPrint theWorld
-      when dumpBindings $ do
-        prettyPrint theBindings
-      case Map.lookup mn (view worldEvaluated theWorld) of
+        prettyPrint $ view expanderWorld result
+      when dumpBindings $
+        prettyPrint $ view expanderBindingTable result
+      case Map.lookup mn (view worldEvaluated (view expanderWorld result)) of
         Nothing -> fail "Internal error: module not evaluated"
         Just results -> do
           -- Show just the results of evaluation in the module the user
@@ -102,7 +102,7 @@ mainWithOptions opts =
           case st of
             Left err -> prettyPrintLn err *> fail ""
             Right result ->
-              pure (mn, ctx, view expanderWorld result, view expanderBindingTable result)
+              pure (mn, ctx, result)
 
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
