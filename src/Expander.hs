@@ -108,7 +108,7 @@ expandModule thisMod src =
                            , _moduleBody = body
                            , _moduleExports = noExports
                            }
-    return $ Expanded theModule mempty -- TODO the bindings go here!
+    return $ Expanded theModule
 
 
 

@@ -91,7 +91,7 @@ evalMod startingEnvs startingTransformers basePhase m =
        -- Builtins go here, suitably shifted. There are no built-in
        -- values yet, only built-in syntax, but this may change.
       return (Map.empty, Map.empty, [])
-    Expanded em _ ->
+    Expanded em ->
       fmap (\((x, y), z) -> (x, y, z)) $
         execRWST (traverse evalDecl (view moduleBody em)) basePhase
           (startingEnvs, startingTransformers)

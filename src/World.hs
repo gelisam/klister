@@ -46,7 +46,7 @@ addExpandedModule m =
     Just m' -> Just m'
   where
     getName :: CompleteModule -> ModuleName
-    getName (Expanded em _) = view moduleName em
+    getName (Expanded em) = view moduleName em
     getName (KernelModule _) = KernelName kernelName
 
 

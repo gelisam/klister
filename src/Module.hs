@@ -145,11 +145,11 @@ newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl CompleteDecl Core }
 instance Phased CompleteDecl where
   shift i (CompleteDecl d) = CompleteDecl (shift i d)
 
-data CompleteModule = Expanded !(Module [] CompleteDecl) BindingTable | KernelModule Phase
+data CompleteModule = Expanded !(Module [] CompleteDecl) | KernelModule Phase
   deriving Show
 
 instance Phased CompleteModule where
-  shift i (Expanded m bs) = Expanded (shift i m) (shift i bs)
+  shift i (Expanded m) = Expanded (shift i m)
   shift i (KernelModule p) = KernelModule (shift i p)
 
 instance (Functor f, Phased a) => Phased (Module f a) where
