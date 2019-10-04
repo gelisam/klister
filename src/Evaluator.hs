@@ -63,13 +63,17 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter [] = id
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
-
+-- | Evaluate a module at some phase. Return the resulting
+-- environments for each phase and the closure and value for each
+-- example in the module.
 evalMod ::
-  Map Phase (Env Value) -> Phase -> CompleteModule ->
+  Map Phase (Env Value) {- ^ The environments for each phase -} ->
+  Phase                 {- ^ The current phase -} ->
+  CompleteModule        {- ^ The source code of a fully-expanded module -} ->
   Eval (Map Phase (Env Value), [(Env Value, Core, Value)])
 evalMod startingEnvs basePhase m =
   case m of
-    KernelModule _p-> return (Map.empty, []) -- TODO builtins go here, suitably shifted
+    KernelModule _p -> return (Map.empty, []) -- TODO builtins go here, suitably shifted
     Expanded em _ ->
       execRWST (traverse evalDecl (view moduleBody em)) basePhase startingEnvs
 
