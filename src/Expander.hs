@@ -26,6 +26,7 @@ module Expander (
   , expandEval
   , ExpansionErr(..)
   , ExpanderContext
+  , expanderBindingTable
   , expanderWorld
   , getState
   , addRootScope
@@ -47,6 +48,7 @@ import Data.Unique
 import System.Directory
 
 import Binding
+import Binding.Info
 import Control.Lens.IORef
 import Core
 import Env (Env)
@@ -64,6 +66,7 @@ import ScopeSet (ScopeSet)
 import Signals
 import SplitCore
 import Syntax
+import Syntax.SrcLoc
 import Value
 import World
 import qualified ScopeSet
@@ -86,7 +89,7 @@ initializeLanguage (Stx scs loc lang) = do
     addModuleBinding p n b =
       inPhase p $ do
         ident <- addModuleScope =<< addRootScope' (Stx scs loc n)
-        addBinding ident b
+        addImportBinding ident b
 
 
 expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
@@ -223,10 +226,23 @@ expandEval evalAction = do
 bindingTable :: Expand BindingTable
 bindingTable = view expanderBindingTable <$> getState
 
-addBinding :: Ident -> Binding -> Expand ()
-addBinding (Stx scs _ name) b = do
+addBinding :: Ident -> Binding -> BindingInfo SrcLoc -> Expand ()
+addBinding (Stx scs _ name) b info = do
   modifyState $ over (expanderBindingTable . at name) $
-    (Just . ((scs, b) :) . fromMaybe [])
+    (Just . ((scs, b, info) :) . fromMaybe [])
+
+addImportBinding :: Ident -> Binding -> Expand ()
+addImportBinding x@(Stx _ loc _) b =
+  addBinding x b (Imported loc)
+
+addDefinedBinding :: Ident -> Binding -> Expand ()
+addDefinedBinding x@(Stx _ loc _) b =
+  addBinding x b (Defined loc)
+
+addLocalBinding :: Ident -> Binding -> Expand ()
+addLocalBinding x@(Stx _ loc _) b =
+  addBinding x b (BoundLocally loc)
+
 
 bind :: Binding -> EValue -> Expand ()
 bind b v =
@@ -243,7 +259,7 @@ allMatchingBindings x scs = do
   let namesMatch = view (at x . non []) allBindings
   let scopesMatch =
         [ (scopes, b)
-        | (scopes, b) <- namesMatch
+        | (scopes, b, _) <- namesMatch
         , ScopeSet.isSubsetOf p scopes scs
         ]
   return scopesMatch
@@ -320,7 +336,7 @@ initializeKernel = do
             Stx _ _ (_, varStx, expr) <- mustBeVec stx
             x <- flip (addScope p) sc <$> mustBeIdent varStx
             b <- freshBinding
-            addBinding x b
+            addDefinedBinding x b
             var <- freshVar
             exprDest <- liftIO $ newSplitCorePtr
             bind b (EIncompleteDefn var x exprDest)
@@ -337,7 +353,7 @@ initializeKernel = do
               Stx _ _ (mname, mdef) <- mustBeVec def
               theName <- flip addScope' sc <$> mustBeIdent mname
               b <- freshBinding
-              addBinding theName b
+              addDefinedBinding theName b
               macroDest <- inEarlierPhase $ do
                 psc <- phaseRoot
                 schedule (addScope p (addScope (prior p) mdef psc) sc)
@@ -363,7 +379,7 @@ initializeKernel = do
             modExports <- getImports spec
             flip forExports_ modExports $ \p x b -> inPhase p do
               imported <- addRootScope' $ addScope' (Stx scs loc x) sc
-              addBinding imported b
+              addImportBinding imported b
             linkDecl dest (Import spec)
             nowValidAt pdest AllPhases
         )
@@ -556,7 +572,7 @@ initializeKernel = do
             -- phase) from being able to refer to the macro itself.
             let m' = addScope' m sc
             b <- freshBinding
-            addBinding m' b
+            addLocalBinding m' b
             macroDest <- inEarlierPhase $ do
               psc <- phaseRoot
               schedule (addScope (prior p) mdef psc)
@@ -606,7 +622,7 @@ initializeKernel = do
       psc <- phaseRoot
       let x' = addScope' (addScope p x sc) psc
       b <- freshBinding
-      addBinding x' b
+      addLocalBinding x' b
       var <- freshVar
       bind b (EVarMacro var)
       return (sc, x', var)

@@ -36,6 +36,7 @@ import World
 data Options = Options { optCommand :: CLICommand }
 data RunOptions = RunOptions { runOptFile :: FilePath
                              , runOptWorld :: Bool
+                             , runOptBindingInfo :: Bool
                              }
 data ReplOptions = ReplOptions { replOptFile :: Maybe FilePath }
 
@@ -51,13 +52,14 @@ main = do
   where
     fileArg = argument str (metavar "FILE")
     runOptions = Run <$>
-      (RunOptions
-       <$> fileArg
-       <*> switch
-         ( long "world"
-         <> short 'w'
-         <> help "Print the whole world" )
-         )
+      (RunOptions <$>
+       fileArg <*>
+       switch ( long "world" <>
+                short 'w' <>
+                help "Print the whole world" ) <*>
+       switch ( long "bindings" <>
+                help "Dump information about bindings encountered" )
+      )
     replOptions = Repl . ReplOptions <$> optional fileArg
     parser = Options <$>
       subparser
@@ -74,31 +76,34 @@ mainWithOptions opts =
       void $ execExpand initializeKernel ctx
       repl ctx initialWorld
     Repl (ReplOptions (Just file)) -> do
-      (_, ctx, theWorld) <- expandFile file
-      repl ctx theWorld
-    Run (RunOptions file showWorld) -> do
-      (mn, _, theWorld) <- expandFile file
-      if showWorld
-        then prettyPrint theWorld
-        else do
-          case Map.lookup mn (view worldEvaluated theWorld) of
-            Nothing -> fail "Internal error: module not evaluated"
-            Just results -> do
-              -- Show just the results of evaluation in the module the user
-              -- asked to run
-              for_ results $ \(EvalResult _ coreExpr val) -> do
-                putStr "Example: "
-                prettyPrint coreExpr
-                putStr " ↦ "
-                prettyPrintLn val
+      (_mn, ctx, result) <- expandFile file
+      repl ctx (view expanderWorld result)
+    Run (RunOptions file showWorld dumpBindings) -> do
+      (mn, _ctx, result) <- expandFile file
+      when showWorld $
+        prettyPrint $ view expanderWorld result
+      when dumpBindings $
+        prettyPrint $ view expanderBindingTable result
+      case Map.lookup mn (view worldEvaluated (view expanderWorld result)) of
+        Nothing -> fail "Internal error: module not evaluated"
+        Just results -> do
+          -- Show just the results of evaluation in the module the user
+          -- asked to run
+          for_ results $ \(EvalResult _ coreExpr val) -> do
+            putStr "Example: "
+            prettyPrint coreExpr
+            putStr " ↦ "
+            prettyPrintLn val
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
           void $ execExpand initializeKernel ctx
-          execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
-            \case
-              Left err -> prettyPrintLn err *> fail ""
-              Right result -> pure (mn, ctx, result)
+          st <- execExpand (visit mn >> getState) ctx
+          case st of
+            Left err -> prettyPrintLn err *> fail ""
+            Right result ->
+              pure (mn, ctx, result)
+
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =

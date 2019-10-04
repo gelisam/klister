@@ -18,6 +18,7 @@ import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Data.Unique
 
 import Binding
+import Binding.Info
 import Core
 import Env
 import Module
@@ -335,12 +336,21 @@ instance Pretty VarInfo CompleteModule where
 instance Pretty VarInfo Binding where
   pp _env (Binding b) = text "b" <> viaShow (hashUnique b)
 
+instance Pretty VarInfo loc => Pretty VarInfo (BindingInfo loc) where
+  pp env (BoundLocally loc) = pp env loc <> text ":" <+> text "local"
+  pp env (Defined loc) = pp env loc <> text ":" <+> text "defined"
+  pp env (Imported loc) = pp env loc <> text ":" <+> text "import"
+
+
 instance Pretty VarInfo BindingTable where
   pp env bs =
     group $ hang 2 $ vsep $
     punc (text ",") [ group $ hang 2 $
                       pp env n <+> text "↦" <> line <>
-                      text "{" <> group (vsep [pp env scs <+> text "↦" <+> pp env b | (scs, b) <- xs]) <> text "}"
+                      text "{" <> group (vsep [ pp env scs <+> text "↦" <+>
+                                                pp env b <+> text "@" <+>
+                                                pp env info
+                                              | (scs, b, info) <- xs]) <> text "}"
                     | (n, xs) <- Map.toList $ view bindings bs
                     ]
 

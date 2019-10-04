@@ -150,7 +150,7 @@ signalNum = toSignal <$> takeWhile1P (Just "signal (digits)") isDigit
     toSignal = Signal . read . T.unpack
 
 lexeme :: Parser a -> Parser (Located a)
-lexeme = located . L.lexeme eatWhitespace
+lexeme p = located p <* eatWhitespace
 
 located :: Parser a -> Parser (Located a)
 located p =

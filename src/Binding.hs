@@ -9,7 +9,9 @@ import ScopeSet
 import Data.Text (Text)
 import Data.Unique
 
+import Binding.Info
 import Phase
+import Syntax.SrcLoc
 
 newtype Binding = Binding Unique
   deriving (Eq, Ord)
@@ -17,7 +19,7 @@ newtype Binding = Binding Unique
 instance Show Binding where
   show (Binding b) = "(Binding " ++ show (hashUnique b) ++ ")"
 
-newtype BindingTable = BindingTable { _bindings :: Map Text [(ScopeSet, Binding)] }
+newtype BindingTable = BindingTable { _bindings :: Map Text [(ScopeSet, Binding, BindingInfo SrcLoc)] }
   deriving Show
 makeLenses ''BindingTable
 
@@ -31,7 +33,7 @@ instance Phased BindingTable where
   shift i = over bindings (Map.map (map (over _1 (shift i))))
 
 type instance Index BindingTable = Text
-type instance IxValue BindingTable = [(ScopeSet, Binding)]
+type instance IxValue BindingTable = [(ScopeSet, Binding, BindingInfo SrcLoc)]
 
 instance Ixed BindingTable where
   ix x f (BindingTable bs) = BindingTable <$> ix x f bs
