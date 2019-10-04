@@ -61,6 +61,7 @@ import Parser
 import Phase
 import Scope
 import ScopeSet (ScopeSet)
+import ShortShow
 import Signals
 import SplitCore
 import Syntax
@@ -223,6 +224,7 @@ bindingTable = view expanderBindingTable <$> getState
 
 addBinding :: Ident -> Binding -> Expand ()
 addBinding (Stx scs _ name) b = do
+  liftIO $ putStrLn $ "Binding " ++ shortShow name ++ " with " ++ shortShow scs
   modifyState $ over (expanderBindingTable . at name) $
     (Just . ((scs, b) :) . fromMaybe [])
 
@@ -259,6 +261,7 @@ checkUnambiguous best candidates blame =
 
 resolve :: Ident -> Expand Binding
 resolve stx@(Stx scs srcLoc x) = do
+  liftIO $ putStrLn $ "Resolving " ++ show x ++ " with " ++ shortShow scs ++ " at " ++ shortShow srcLoc
   p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of
