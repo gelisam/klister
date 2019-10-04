@@ -282,6 +282,15 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   assertAlphaEq "Example is #f" ex (Core (CoreBool False))
                 _ -> assertFailure "Expected import, import, macro, example"
           )
+        , ( "examples/macro-body-shift.kl"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              \case
+                [Import _, Define _ _ e, DefineMacros [(_, _, _)]] -> do
+                  spec <- lam \_x -> lam \y -> lam \_z -> y
+                  assertAlphaEq "Definition is λx y z . y" e spec
+                _ -> assertFailure "Expected an import, a definition, and a macro"
+          )
         ]
       ]
     shouldn'tWork =
