@@ -64,6 +64,15 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter [] = id
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
+-- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
+data EvalResult =
+  EvalResult { resultEnv :: Env Var Value
+             , resultExpr :: Core
+             , resultValue :: Value
+             }
+  deriving (Eq, Show)
+
+
 -- | Evaluate a module at some phase. Return the resulting
 -- environments and transformer environments for each phase and the
 -- closure and value for each example in the module.
@@ -74,7 +83,7 @@ evalMod ::
   CompleteModule                 {- ^ The source code of a fully-expanded module -} ->
   Eval ( Map Phase (Env Var Value)
        , Map Phase (Env MacroVar Value)
-       , [(Env Var Value, Core, Value)]
+       , [EvalResult]
        )
 evalMod startingEnvs startingTransformers basePhase m =
   case m of
@@ -124,7 +133,7 @@ evalMod startingEnvs startingTransformers basePhase m =
     evalDecl ::
       CompleteDecl ->
       RWST Phase
-           [(Env Var Value, Core, Value)]
+           [EvalResult]
            (Map Phase (Env Var Value), Map Phase (Env MacroVar Value))
            Eval
            ()
@@ -134,10 +143,13 @@ evalMod startingEnvs startingTransformers basePhase m =
         env <- currentEnv
         v <- lift $ withEnv env (eval e)
         extendCurrentEnv n x v
-      evalDecl' (Example e) = do
+      evalDecl' (Example expr) = do
         env <- currentEnv
-        v <- lift $ withEnv env (eval e)
-        tell [(env, e, v)]
+        value <- lift $ withEnv env (eval expr)
+        tell $ [EvalResult { resultEnv = env
+                           , resultExpr = expr
+                           , resultValue = value
+                           }]
       evalDecl' (DefineMacros macros) = do
         env <- local prior currentEnv
         for_ macros $ \(x, n, e) -> do

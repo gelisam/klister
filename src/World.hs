@@ -10,6 +10,7 @@ import Data.Set (Set)
 
 import Core (MacroVar, Var)
 import Env
+import Evaluator (EvalResult)
 import Module
 import ModuleName
 import Phase
@@ -20,6 +21,7 @@ data World a = World
   , _worldModules :: !(Map ModuleName CompleteModule)
   , _worldVisited :: !(Map ModuleName (Set Phase))
   , _worldExports :: !(Map ModuleName Exports)
+  , _worldEvaluated :: !(Map ModuleName [EvalResult])
   }
 makeLenses ''World
 
@@ -33,6 +35,7 @@ initialWorld =
         , _worldModules = Map.empty
         , _worldVisited = Map.empty
         , _worldExports = Map.empty
+        , _worldEvaluated = Map.empty
         }
 
 addExpandedModule :: CompleteModule -> World a -> World a
