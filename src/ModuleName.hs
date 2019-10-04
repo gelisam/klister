@@ -15,6 +15,7 @@ import qualified Data.Text as T
 import System.Directory
 import System.FilePath
 
+import ShortShow
 import Syntax.SrcLoc
 
 newtype KernelName = Kernel ()
@@ -25,6 +26,10 @@ kernelName = Kernel ()
 
 data ModuleName = ModuleName FilePath | KernelName KernelName
   deriving (Eq, Ord, Show)
+
+instance ShortShow ModuleName where
+  shortShow (ModuleName x) = x
+  shortShow (KernelName _k) = "kernel"
 
 moduleNameFromPath :: FilePath -> IO ModuleName
 moduleNameFromPath file = ModuleName <$> canonicalizePath file

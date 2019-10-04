@@ -5,9 +5,14 @@ module Phase (Phase, phaseNum, runtime, prior, PhaseSpec(..), Phased(..)) where
 import Control.Lens
 import Numeric.Natural
 
+import ShortShow
+
 newtype Phase = Phase { phaseNum :: Natural }
   deriving (Eq, Ord, Show)
 makePrisms ''Phase
+
+instance ShortShow Phase where
+  shortShow (Phase i) = "p" ++ show i
 
 data PhaseSpec = AllPhases | SpecificPhase !Phase
 makePrisms ''PhaseSpec

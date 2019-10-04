@@ -28,6 +28,7 @@ import qualified Data.Set as Set
 import Alpha
 import Phase
 import Scope
+import ShortShow
 
 data ScopeSet = ScopeSet
   { _universalScopes :: Set Scope
@@ -35,6 +36,10 @@ data ScopeSet = ScopeSet
   }
   deriving (Eq, Ord, Show)
 makeLenses ''ScopeSet
+
+instance ShortShow ScopeSet where
+  shortShow (ScopeSet always phased) =
+    "{" ++ show (Set.toList always) ++ " | " ++ show (Map.toList phased) ++ "}"
 
 instance Semigroup ScopeSet where
   scs1 <> scs2 =
