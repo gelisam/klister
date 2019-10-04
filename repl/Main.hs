@@ -34,6 +34,7 @@ import World
 data Options = Options { optCommand :: CLICommand }
 data RunOptions = RunOptions { runOptFile :: FilePath
                              , runOptWorld :: Bool
+                             , runOptBindingInfo :: Bool
                              }
 data ReplOptions = ReplOptions { replOptFile :: Maybe FilePath }
 
@@ -49,13 +50,14 @@ main = do
   where
     fileArg = argument str (metavar "FILE")
     runOptions = Run <$>
-      (RunOptions
-       <$> fileArg
-       <*> switch
-         ( long "world"
-         <> short 'w'
-         <> help "Print the whole world" )
-         )
+      (RunOptions <$>
+       fileArg <*>
+       switch ( long "world" <>
+                short 'w' <>
+                help "Print the whole world" ) <*>
+       switch ( long "bindings" <>
+                help "Dump information about bindings encountered" )
+      )
     replOptions = Repl . ReplOptions <$> optional fileArg
     parser = Options <$>
       subparser
@@ -72,20 +74,23 @@ mainWithOptions opts =
       void $ execExpand initializeKernel ctx
       repl ctx initialWorld
     Repl (ReplOptions (Just file)) -> do
-      (ctx, theWorld) <- expandFile file
+      (ctx, theWorld, _bindings) <- expandFile file
       repl ctx theWorld
-    Run (RunOptions file showWorld) -> do
-      (_, theWorld) <- expandFile file
+    Run (RunOptions file showWorld dumpBindings) -> do
+      (_, theWorld, theBindings) <- expandFile file
       when showWorld $
         prettyPrint theWorld
+      when dumpBindings $ do
+        prettyPrint theBindings
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
           void $ execExpand initializeKernel ctx
-          execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
-            \case
-              Left err -> prettyPrintLn err *> fail ""
-              Right result -> pure (ctx, result)
+          st <- execExpand (visit mn >> getState) ctx
+          case st of
+            Left err -> prettyPrintLn err *> fail ""
+            Right result ->
+              pure (ctx, view expanderWorld result, view expanderBindingTable result)
 
 tryCommand :: IORef (World Value) -> T.Text -> (T.Text -> IO ()) -> IO ()
 tryCommand w l nonCommand =
