@@ -10,6 +10,7 @@ import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.RWS.Strict
+import Data.Foldable (for_)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -64,28 +65,35 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
 -- | Evaluate a module at some phase. Return the resulting
--- environments for each phase and the closure and value for each
--- example in the module.
+-- environments and transformer environments for each phase and the
+-- closure and value for each example in the module.
 evalMod ::
-  Map Phase (Env Var Value) {- ^ The environments for each phase -} ->
-  Phase                 {- ^ The current phase -} ->
-  CompleteModule        {- ^ The source code of a fully-expanded module -} ->
+  Map Phase (Env Var Value)      {- ^ The environments for each phase -} ->
+  Map Phase (Env MacroVar Value) {- ^ The transformer environments for each phase -} ->
+  Phase                          {- ^ The current phase -} ->
+  CompleteModule                 {- ^ The source code of a fully-expanded module -} ->
   Eval ( Map Phase (Env Var Value)
+       , Map Phase (Env MacroVar Value)
        , [(Env Var Value, Core, Value)]
        )
-evalMod startingEnvs basePhase m =
+evalMod startingEnvs startingTransformers basePhase m =
   case m of
-    KernelModule _p -> return (Map.empty, []) -- TODO builtins go here, suitably shifted
+    KernelModule _p ->
+       -- Builtins go here, suitably shifted. There are no built-in
+       -- values yet, only built-in syntax, but this may change.
+      return (Map.empty, Map.empty, [])
     Expanded em _ ->
-      execRWST (traverse evalDecl (view moduleBody em)) basePhase startingEnvs
+      fmap (\((x, y), z) -> (x, y, z)) $
+        execRWST (traverse evalDecl (view moduleBody em)) basePhase
+          (startingEnvs, startingTransformers)
 
   where
     currentEnv ::
       Monoid w =>
-      RWST Phase w (Map Phase (Env Var Value)) Eval (Env Var Value)
+      RWST Phase w (Map Phase (Env Var Value), other) Eval (Env Var Value)
     currentEnv = do
       p <- ask
-      envs <- get
+      envs <- fst <$> get
       case Map.lookup p envs of
         Nothing -> return Env.empty
         Just env -> return env
@@ -93,10 +101,21 @@ evalMod startingEnvs basePhase m =
     extendCurrentEnv ::
       Monoid w =>
       Var -> Ident -> Value ->
-      RWST Phase w (Map Phase (Env Var Value)) Eval ()
+      RWST Phase w (Map Phase (Env Var Value), other) Eval ()
     extendCurrentEnv n x v = do
       p <- ask
-      modify $ \envs ->
+      modify $ over _1 $ \envs ->
+        case Map.lookup p envs of
+          Just env -> Map.insert p (Env.insert n x v env) envs
+          Nothing -> Map.insert p (Env.singleton n x v) envs
+
+    extendCurrentTransformerEnv ::
+      Monoid w =>
+      MacroVar -> Ident -> Value ->
+      RWST Phase w (other, Map Phase (Env MacroVar Value)) Eval ()
+    extendCurrentTransformerEnv n x v = do
+      p <- ask
+      modify $ over _2 $ \envs ->
         case Map.lookup p envs of
           Just env -> Map.insert p (Env.insert n x v env) envs
           Nothing -> Map.insert p (Env.singleton n x v) envs
@@ -104,7 +123,11 @@ evalMod startingEnvs basePhase m =
 
     evalDecl ::
       CompleteDecl ->
-      RWST Phase [(Env Var Value, Core, Value)] (Map Phase (Env Var Value)) Eval ()
+      RWST Phase
+           [(Env Var Value, Core, Value)]
+           (Map Phase (Env Var Value), Map Phase (Env MacroVar Value))
+           Eval
+           ()
     evalDecl (CompleteDecl d) = evalDecl' d
       where
       evalDecl' (Define x n e) = do
@@ -115,10 +138,11 @@ evalMod startingEnvs basePhase m =
         env <- currentEnv
         v <- lift $ withEnv env (eval e)
         tell [(env, e, v)]
-      evalDecl' (DefineMacros _macros) = do
-        pure () -- Macros only live in the transformer environment
-                -- TODO revisit as part of adding exports, where an expansion
-                -- environment is created
+      evalDecl' (DefineMacros macros) = do
+        env <- local prior currentEnv
+        for_ macros $ \(x, n, e) -> do
+          v <- lift $ withEnv env (eval e)
+          extendCurrentTransformerEnv n x v
       evalDecl' (Meta decl) = local prior (evalDecl decl)
       evalDecl' (Import _spec) = pure ()
       evalDecl' (Export _x) = pure ()

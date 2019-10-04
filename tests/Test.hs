@@ -269,7 +269,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               \case
                 [Import _,
                  Meta (view completeDecl -> Define _ _ _),
-                 DefineMacros [(_, _)],
+                 DefineMacros [(_, _, _)],
                  Example ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
                 _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
@@ -278,7 +278,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, DefineMacros [(_, _)], Example ex] ->
+                [Import _, Import _, DefineMacros [(_, _, _)], Example ex] ->
                   assertAlphaEq "Example is #f" ex (Core (CoreBool False))
                 _ -> assertFailure "Expected import, import, macro, example"
           )

@@ -2,16 +2,6 @@
 
 [import [shift "nary.kl" 1]]
 
--- [define fun [lambda [x] [lambda [y] [lambda [z] y]]]]
+[define fun [lambda [x] [lambda [y] [lambda [z] y]]]]
 
--- [define-macros ([m [lambda [stx] [pure [quote fun]]]])]
-
-
--- HYPOTHESIS:
-
- -- We currently shift the body of the module when loading
- -- it. However, macro values live in the compile-time environment,
- -- not in the module source code /per se/. So we probably need to
- -- either make sure to load macro defs from the module source, or to
- -- find them in the compile-time env and shift accordingly, rebinding
- -- on import.
+[define-macros ([m [lambda [stx] [pure [quote fun]]]])]

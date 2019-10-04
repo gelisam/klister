@@ -57,6 +57,7 @@ module Expander.Monad
   , expanderCompletedCore
   , expanderCompletedModBody
   , expanderCurrentEnvs
+  , expanderCurrentTransformerEnvs
   , expanderDeclPhases
   , expanderExpansionEnv
   , expanderKernelExports
@@ -131,9 +132,9 @@ data EValue
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
-  | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
-  | EIncompleteMacro MacroVar SplitCorePtr -- ^ Macros that are themselves not yet ready to go
-  | EIncompleteDefn Var Ident SplitCorePtr -- ^ Definitions that are not yet ready to go
+  | EUserMacro !SyntacticCategory !MacroVar -- ^ For user-written macros
+  | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
+  | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
@@ -176,6 +177,7 @@ data ExpanderState = ExpanderState
   , _expanderKernelExports :: !Exports
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
+  , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   }
 
 initExpanderState :: ExpanderState
@@ -197,6 +199,7 @@ initExpanderState = ExpanderState
   , _expanderKernelExports = noExports
   , _expanderDeclPhases = Map.empty
   , _expanderCurrentEnvs = Map.empty
+  , _expanderCurrentTransformerEnvs = Map.empty
   }
 
 makeLenses ''ExpanderContext
@@ -316,9 +319,9 @@ forkAwaitingSignal dest signal kont = do
   forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro ::
-  Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-forkAwaitingMacro b mdest dest stx = do
-  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+forkAwaitingMacro b v x mdest dest stx = do
+  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
