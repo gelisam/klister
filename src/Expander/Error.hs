@@ -35,6 +35,7 @@ data ExpansionErr
   | ValueNotSyntax Value
   | InternalError String
   | NoSuchFile String
+  | NotExported Ident Phase
   deriving (Show)
 
 instance Pretty VarInfo ExpansionErr where
@@ -79,5 +80,9 @@ instance Pretty VarInfo ExpansionErr where
     hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
   pp _env (NoSuchFile filename) =
     text "User error; no such file: " <> string filename
+  pp env (NotExported (Stx _ loc x) p) =
+    group $ hang 4 $ vsep [ pp env loc <> text ":"
+                          , text "Not available at phase" <+> pp env p <> text ":" <+> pp env x
+                          ]
   pp _env (InternalError str) =
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str

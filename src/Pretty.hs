@@ -294,7 +294,7 @@ instance Pretty VarInfo MacroAction where
           Bound -> "bound-identifier=?"
 
 instance Pretty VarInfo Phase where
-  pp = const viaShow
+  pp _env p = text "p" <> viaShow (phaseNum p)
 
 instance Pretty VarInfo a => Pretty VarInfo (World a) where
   pp env w =

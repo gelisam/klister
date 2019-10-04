@@ -138,8 +138,15 @@ loadModuleFile modName =
 
 getImports :: ImportSpec -> Expand Exports
 getImports (ImportModule (Stx _ _ mn)) = visit mn
-getImports (ImportOnly spec idents) =
-  filterExports (\_ x -> x `elem` (map (view stxValue) idents)) <$> getImports spec
+getImports (ImportOnly spec idents) = do
+  imports <- getImports spec
+  p <- currentPhase
+  -- Check that all the identifiers are actually exported
+  for_ idents $ \x ->
+    case getExport p (view stxValue x) imports of
+      Nothing -> throwError $ NotExported x p
+      Just _ -> pure ()
+  return $ filterExports (\_ x -> x `elem` (map (view stxValue) idents)) imports
 getImports (ShiftImports spec i) = do
   p <- currentPhase
   inPhase (shift i p) $ getImports spec

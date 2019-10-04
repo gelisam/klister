@@ -298,10 +298,15 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
       [ testCase fn (testFileError fn p)
       | (fn, p) <-
         [ ( "examples/non-examples/import-phase.kl"
-            , \case
-                Unknown (Stx _ _ "define") -> True
-                _ -> False
-            )
+          , \case
+              Unknown (Stx _ _ "define") -> True
+              _ -> False
+          )
+        , ( "examples/non-examples/missing-import.kl"
+          , \case
+              NotExported (Stx _ _ "magic") p -> p == runtime
+              _ -> False
+          )
         ]
       ]
 
