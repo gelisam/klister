@@ -13,6 +13,7 @@ module Expander.Monad
   , execExpand
   , freshScope
   , freshVar
+  , freshMacroVar
   , getBody
   , getDecl
   , getState
@@ -56,6 +57,7 @@ module Expander.Monad
   , expanderCompletedCore
   , expanderCompletedModBody
   , expanderCurrentEnvs
+  , expanderCurrentTransformerEnvs
   , expanderDeclPhases
   , expanderExpansionEnv
   , expanderKernelExports
@@ -130,9 +132,9 @@ data EValue
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
-  | EUserMacro !SyntacticCategory !Value -- ^ For user-written macros
-  | EIncompleteMacro SplitCorePtr -- ^ Macros that are themselves not yet ready to go
-  | EIncompleteDefn Var Ident SplitCorePtr -- ^ Definitions that are not yet ready to go
+  | EUserMacro !SyntacticCategory !MacroVar -- ^ For user-written macros
+  | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
+  | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
@@ -174,7 +176,8 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelExports :: !Exports
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
-  , _expanderCurrentEnvs :: !(Map Phase (Env Value))
+  , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
+  , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   }
 
 initExpanderState :: ExpanderState
@@ -196,6 +199,7 @@ initExpanderState = ExpanderState
   , _expanderKernelExports = noExports
   , _expanderDeclPhases = Map.empty
   , _expanderCurrentEnvs = Map.empty
+  , _expanderCurrentTransformerEnvs = Map.empty
   }
 
 makeLenses ''ExpanderContext
@@ -292,6 +296,8 @@ linkedCore slot =
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
 
+freshMacroVar :: Expand MacroVar
+freshMacroVar = MacroVar <$> liftIO newUnique
 
 stillStuck :: TaskID -> ExpanderTask -> Expand ()
 stillStuck tid task = do
@@ -313,9 +319,9 @@ forkAwaitingSignal dest signal kont = do
   forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro ::
-  Binding -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-forkAwaitingMacro b mdest dest stx = do
-  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b [mdest] mdest stx)
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+forkAwaitingMacro b v x mdest dest stx = do
+  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -369,11 +375,11 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Define x v e'
     flattenDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
-      for macros \(x, e) ->
+      for macros \(x, v, e) ->
         linkedCore e >>=
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
-          Just e' -> pure $ (x, e')
+          Just e' -> pure $ (x, v, e')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
     flattenDecl (Example e) =

@@ -10,6 +10,7 @@ import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.RWS.Strict
+import Data.Foldable (for_)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Text (Text)
@@ -48,10 +49,10 @@ evalErrorText (EvalErrorCase val) =
   "Didn't match any pattern: " <> valueText val
 
 newtype Eval a = Eval
-   { runEval :: ReaderT (Env Value) (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader (Env Value), MonadError EvalError)
+   { runEval :: ReaderT VEnv (ExceptT EvalError IO) a }
+   deriving (Functor, Applicative, Monad, MonadReader VEnv, MonadError EvalError)
 
-withEnv :: Env Value -> Eval a -> Eval a
+withEnv :: VEnv -> Eval a -> Eval a
 withEnv = local . const
 
 withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
@@ -65,28 +66,43 @@ withManyExtendedEnv exts act = local (inserter exts) act
 
 -- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
 data EvalResult =
-  EvalResult { resultEnv :: Env Value
+  EvalResult { resultEnv :: VEnv
              , resultExpr :: Core
              , resultValue :: Value
              }
   deriving (Eq, Show)
 
+
+-- | Evaluate a module at some phase. Return the resulting
+-- environments and transformer environments for each phase and the
+-- closure and value for each example in the module.
 evalMod ::
-  Map Phase (Env Value) -> Phase -> CompleteModule ->
-  Eval (Map Phase (Env Value), [EvalResult])
-evalMod startingEnvs basePhase m =
+  Map Phase VEnv {- ^ The environments for each phase -} ->
+  Map Phase TEnv {- ^ The transformer environments for each phase -} ->
+  Phase          {- ^ The current phase -} ->
+  CompleteModule {- ^ The source code of a fully-expanded module -} ->
+  Eval ( Map Phase VEnv
+       , Map Phase TEnv
+       , [EvalResult]
+       )
+evalMod startingEnvs startingTransformers basePhase m =
   case m of
-    KernelModule _p-> return (Map.empty, []) -- TODO builtins go here, suitably shifted
+    KernelModule _p ->
+       -- Builtins go here, suitably shifted. There are no built-in
+       -- values yet, only built-in syntax, but this may change.
+      return (Map.empty, Map.empty, [])
     Expanded em _ ->
-      execRWST (traverse evalDecl (view moduleBody em)) basePhase startingEnvs
+      fmap (\((x, y), z) -> (x, y, z)) $
+        execRWST (traverse evalDecl (view moduleBody em)) basePhase
+          (startingEnvs, startingTransformers)
 
   where
     currentEnv ::
       Monoid w =>
-      RWST Phase w (Map Phase (Env Value)) Eval (Env Value)
+      RWST Phase w (Map Phase VEnv, other) Eval VEnv
     currentEnv = do
       p <- ask
-      envs <- get
+      envs <- fst <$> get
       case Map.lookup p envs of
         Nothing -> return Env.empty
         Just env -> return env
@@ -94,16 +110,33 @@ evalMod startingEnvs basePhase m =
     extendCurrentEnv ::
       Monoid w =>
       Var -> Ident -> Value ->
-      RWST Phase w (Map Phase (Env Value)) Eval ()
+      RWST Phase w (Map Phase VEnv, other) Eval ()
     extendCurrentEnv n x v = do
       p <- ask
-      modify $ \envs ->
+      modify $ over _1 $ \envs ->
+        case Map.lookup p envs of
+          Just env -> Map.insert p (Env.insert n x v env) envs
+          Nothing -> Map.insert p (Env.singleton n x v) envs
+
+    extendCurrentTransformerEnv ::
+      Monoid w =>
+      MacroVar -> Ident -> Value ->
+      RWST Phase w (other, Map Phase TEnv) Eval ()
+    extendCurrentTransformerEnv n x v = do
+      p <- ask
+      modify $ over _2 $ \envs ->
         case Map.lookup p envs of
           Just env -> Map.insert p (Env.insert n x v env) envs
           Nothing -> Map.insert p (Env.singleton n x v) envs
 
 
-    evalDecl :: CompleteDecl -> RWST Phase [EvalResult] (Map Phase (Env Value)) Eval ()
+    evalDecl ::
+      CompleteDecl ->
+      RWST Phase
+           [EvalResult]
+           (Map Phase VEnv, Map Phase TEnv)
+           Eval
+           ()
     evalDecl (CompleteDecl d) = evalDecl' d
       where
       evalDecl' (Define x n e) = do
@@ -117,10 +150,11 @@ evalMod startingEnvs basePhase m =
                            , resultExpr = expr
                            , resultValue = value
                            }]
-      evalDecl' (DefineMacros _macros) = do
-        pure () -- Macros only live in the transformer environment
-                -- TODO revisit as part of adding exports, where an expansion
-                -- environment is created
+      evalDecl' (DefineMacros macros) = do
+        env <- local prior currentEnv
+        for_ macros $ \(x, n, e) -> do
+          v <- lift $ withEnv env (eval e)
+          extendCurrentTransformerEnv n x v
       evalDecl' (Meta decl) = local prior (evalDecl decl)
       evalDecl' (Import _spec) = pure ()
       evalDecl' (Export _x) = pure ()

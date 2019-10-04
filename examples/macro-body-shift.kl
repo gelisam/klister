@@ -1,0 +1,7 @@
+#lang "n-ary-app.kl"
+
+[import [shift "n-ary-app.kl" 1]]
+
+[define fun [lambda [x] [lambda [y] [lambda [z] y]]]]
+
+[define-macros ([m [lambda [stx] [pure [quote fun]]]])]

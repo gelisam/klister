@@ -10,38 +10,37 @@ import Control.Lens
 import Data.Map (Map)
 import qualified Data.Map as Map
 
-import Core (Var(..))
 import Syntax (Ident)
 
-newtype Env a = Env (Map Var (Ident, a))
+newtype Env v a = Env (Map v (Ident, a))
   deriving (Eq, Functor, Monoid, Semigroup, Show)
 
-empty :: Env a
+empty :: Env v a
 empty = Env (Map.empty)
 
-toList :: Env a -> [(Var, Ident, a)]
+toList :: Env v a -> [(v, Ident, a)]
 toList (Env env) = [(x, n, v) | (x, (n, v)) <- Map.toList env]
 
-singleton :: Var -> Ident -> a -> Env a
+singleton :: v -> Ident -> a -> Env v a
 singleton x n v = Env (Map.singleton x (n, v))
 
-insert :: Var -> Ident -> a -> Env a -> Env a
+insert :: Ord v => v -> Ident -> a -> Env v a -> Env v a
 insert x n v (Env env) = Env (Map.insert x (n, v) env)
 
-lookup :: Var -> Env a -> Maybe (Ident, a)
+lookup :: Ord v => v -> Env v a -> Maybe (Ident, a)
 lookup x (Env env) = Map.lookup x env
 
-lookupVal :: Var -> Env a -> Maybe a
+lookupVal :: Ord v => v -> Env v a -> Maybe a
 lookupVal x env = snd <$> lookup x env
 
-lookupIdent :: Var -> Env a -> Maybe Ident
+lookupIdent :: Ord v => v -> Env v a -> Maybe Ident
 lookupIdent x env = fst <$> lookup x env
 
-type instance Index (Env a) = Var
-type instance IxValue (Env a) = (Ident, a)
+type instance Index (Env v a) = v
+type instance IxValue (Env v a) = (Ident, a)
 
-instance Ixed (Env a) where
+instance Ord v => Ixed (Env v a) where
   ix var f (Env env) = Env <$> ix var f env
 
-instance At (Env a) where
+instance Ord v => At (Env v a) where
   at x f (Env env) = Env <$> at x f env

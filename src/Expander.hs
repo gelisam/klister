@@ -51,7 +51,6 @@ import Binding
 import Binding.Info
 import Control.Lens.IORef
 import Core
-import Env (Env)
 import qualified Env
 import Evaluator
 import Expander.DeclScope
@@ -171,18 +170,23 @@ visit modName = do
   visitedp <- Set.member p .
               view (expanderWorld . worldVisited . at modName . non Set.empty) <$>
               getState
-
   unless visitedp $ do
     let m' = shift i m
     let envs = view worldEnvironments world'
-    (moreEnvs, evalResults) <- expandEval $ evalMod envs p m'
+    let tenvs = view worldTransformerEnvironments world'
+    (moreEnvs, transformerEnvs, evalResults) <- expandEval $ evalMod envs tenvs p m'
     modifyState $
       set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
           (Just ())
-    modifyState $ over (expanderWorld . worldEnvironments) (<> moreEnvs)
+    modifyState $
+      over (expanderWorld . worldEnvironments) (<> moreEnvs)
+    modifyState $
+      over (expanderWorld . worldTransformerEnvironments) (<> transformerEnvs)
+
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
           (Just evalResults)
+
 
   return (shift i es)
 
@@ -204,8 +208,16 @@ getTasks = view expanderTasks <$> getState
 clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
 
+currentTransformerEnv :: Expand TEnv
+currentTransformerEnv = do
+  phase <- currentPhase
+  globalEnv <- view (expanderWorld . worldTransformerEnvironments . at phase . non Env.empty) <$>
+               getState
+  localEnv <- view (expanderCurrentTransformerEnvs . at phase . non Env.empty) <$>
+              getState
+  return (globalEnv <> localEnv)
 
-currentEnv :: Expand (Env Value)
+currentEnv :: Expand VEnv
 currentEnv = do
   phase <- currentPhase
   globalEnv <- maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
@@ -357,8 +369,9 @@ initializeKernel = do
               macroDest <- inEarlierPhase $ do
                 psc <- phaseRoot
                 schedule (addScope p (addScope (prior p) mdef psc) sc)
-              bind b $ EIncompleteMacro macroDest
-              return (theName, macroDest)
+              v <- freshMacroVar
+              bind b $ EIncompleteMacro v theName macroDest
+              return (theName, v, macroDest)
             linkDecl dest $ DefineMacros macros
             nowValidAt pdest (SpecificPhase p)
         )
@@ -573,10 +586,11 @@ initializeKernel = do
             let m' = addScope' m sc
             b <- freshBinding
             addLocalBinding m' b
+            v <- freshMacroVar
             macroDest <- inEarlierPhase $ do
               psc <- phaseRoot
               schedule (addScope (prior p) mdef psc)
-            forkAwaitingMacro b macroDest dest (addScope p body sc)
+            forkAwaitingMacro b v m' macroDest dest (addScope p body sc)
         )
       ]
 
@@ -742,21 +756,26 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just () -> do
           let result = ValueSignal signal  -- TODO: return unit instead
           forkContinueMacroAction dest result kont
-    AwaitingMacro dest (TaskAwaitMacro b deps mdest stx) -> do
+    AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
         (_:_) -> do
           tid' <- if Set.fromList newDeps == Set.fromList deps
                     then return tid
                     else newTaskID
-          laterMacro tid' b dest newDeps mdest stx
+          laterMacro tid' b v x dest newDeps mdest stx
         [] ->
           linkedCore mdest >>=
           \case
             Nothing -> error "Internal error - macro body not fully expanded"
             Just macroImpl -> do
+              p <- currentPhase
               macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
-              bind b $ EUserMacro ExprMacro macroImplVal
+              let tenv = Env.singleton v x macroImplVal
+              -- Extend the env!
+              modifyState $ over (expanderCurrentTransformerEnvs . at p) $
+                Just . maybe tenv (<> tenv)
+              bind b $ EUserMacro ExprMacro v
               forkExpandSyntax dest stx
     AwaitingDefn x n b defn dest stx ->
       Env.lookupVal x <$> currentEnv >>=
@@ -816,11 +835,11 @@ runTask (tid, localData, task) = withLocal localData $ do
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
   where
-    laterMacro tid' b dest deps mdest stx = do
+    laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
       modifyState $
         over expanderTasks $
-          ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b deps mdest stx)) :)
+          ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
 
 
 
@@ -843,29 +862,34 @@ expandOneExpression dest stx
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
             Vec xs -> expandOneExpression dest (addApp Vec stx xs)
-        EIncompleteMacro mdest -> do
-          forkAwaitingMacro b mdest dest stx
+        EIncompleteMacro transformerName sourceIdent mdest -> do
+          forkAwaitingMacro b transformerName sourceIdent mdest dest stx
         EIncompleteDefn x n d ->
           forkAwaitingDefn x n b d dest stx
-        EUserMacro ExprMacro (ValueClosure macroImpl) -> do
+        EUserMacro ExprMacro transformerName -> do
           stepScope <- freshScope
           p <- currentPhase
-          macroVal <- inEarlierPhase $ expandEval $
-                      apply macroImpl $
-                      ValueSyntax $ addScope p stx stepScope
-          case macroVal of
-            ValueMacroAction act -> do
-              res <- interpretMacroAction act
-              case res of
-                Left (sig, kont) -> do
-                  forkAwaitingSignal dest sig kont
-                Right expanded ->
-                  case expanded of
-                    ValueSyntax expansionResult ->
-                      forkExpandSyntax dest (flipScope p expansionResult stepScope)
-                    other -> throwError $ ValueNotSyntax other
-            other ->
-              throwError $ ValueNotMacro other
+          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
+          case implV of
+            Just (ValueClosure macroImpl) -> do
+              macroVal <- inEarlierPhase $ expandEval $
+                          apply macroImpl $
+                          ValueSyntax $ addScope p stx stepScope
+              case macroVal of
+                ValueMacroAction act -> do
+                  res <- interpretMacroAction act
+                  case res of
+                    Left (sig, kont) -> do
+                      forkAwaitingSignal dest sig kont
+                    Right expanded ->
+                      case expanded of
+                        ValueSyntax expansionResult ->
+                          forkExpandSyntax dest (flipScope p expansionResult stepScope)
+                        other -> throwError $ ValueNotSyntax other
+                other ->
+                  throwError $ ValueNotMacro other
+            Nothing -> throwError $ InternalError "No transformer yet created"
+            Just other -> throwError $ ValueNotMacro other
         EUserMacro _otherCat _otherVal ->
           throwError $ InternalError $ "Invalid macro for expressions"
   | otherwise =
@@ -903,7 +927,7 @@ expandOneDeclaration sc dest stx ph
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro _ _impl ->
           error "Unimplemented: user-defined macros - decl context"
-        EIncompleteMacro _ ->
+        EIncompleteMacro _ _ _ ->
           error "Unimplemented: user-defined macros - decl context - incomplete"
   | otherwise =
     throwError $ InternalError "All declarations should be identifier-headed"

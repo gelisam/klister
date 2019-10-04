@@ -34,6 +34,8 @@ data ExpanderTask
 
 data TaskAwaitMacro = TaskAwaitMacro
   { awaitMacroBinding :: Binding
+  , awaitMacroName :: MacroVar
+  , awaitMacroIdent :: Ident
   , awaitMacroDependsOn :: [SplitCorePtr] -- the [Unique] is the collection of open problems that represent the macro's expansion. When it's empty, the macro is available.
   , awaitMacroLocation :: SplitCorePtr -- the destination into which the macro will be expanded.
   , awaitMacroSyntax :: Syntax -- the syntax object to be expanded once the macro is available
@@ -41,8 +43,8 @@ data TaskAwaitMacro = TaskAwaitMacro
   deriving (Show)
 
 instance ShortShow TaskAwaitMacro where
-  shortShow (TaskAwaitMacro _ deps _ stx) =
-    "(TaskAwaitMacro " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
+  shortShow (TaskAwaitMacro _ _ x deps _ stx) =
+    "(TaskAwaitMacro " ++ show x ++ " " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
 
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
