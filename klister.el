@@ -47,6 +47,11 @@
   "How to highlight Klister build-in operators."
   :group 'klister)
 
+(defcustom klister-command "klister-repl"
+  "The command to run to execute Klister."
+  :type 'string
+  :group 'klister)
+
 ;;; Highlighting
 
 (defconst klister-keywords
@@ -98,10 +103,46 @@
     (font-lock-extend-after-change-region-function . klister--extend-after-change-region-function))
   "Highlighting instructions for Klister.")
 
+;;; Running
+
+(defun klister--compilation-buffer-name-function (_mode)
+  "Compute a name for the Klister compilation buffer."
+  "*Klister*")
+
+(defun klister-run-file (filename)
+  "Run FILENAME in Klister."
+  (interactive "fFile to run in Klister: ")
+  (let* ((dir (file-name-directory filename))
+         (file (file-name-nondirectory filename))
+         (command (concat klister-command " run " file))
+         ;; Special variables that configure compilation mode
+         (compilation-buffer-name-function
+          'klister--compilation-buffer-name-function)
+         (default-directory dir))
+    (let ((compilation-finish-functions (list (lambda (_x) (message "Done!")))))
+      (compile command))))
+
+(defun klister-run-buffer (buffer)
+  "Run the file from BUFFER in Klister."
+  (interactive "bBuffer: ")
+  (let ((file (buffer-file-name buffer)))
+    (if file
+        (progn (when (buffer-modified-p buffer)
+                 (when (yes-or-no-p "Buffer modified. Save first? ")
+                   (save-buffer buffer)))
+               (klister-run-file file))
+      (error "Buffer %s has no file" buffer))))
+
+(defun klister-run-current-buffer ()
+  "Run the current buffer in Klister."
+  (interactive)
+  (klister-run-buffer (current-buffer)))
+
 ;;; Default keybindings
 
 (defvar klister-mode-map
   (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c C-c") 'klister-run-current-buffer)
     map)
   "Keymap for Klister mode.")
 
