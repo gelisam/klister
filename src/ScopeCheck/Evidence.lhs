@@ -3,9 +3,40 @@
 \usepackage{amsmath}
 \usepackage{mathtools}
 \usepackage{latexsym}
-\usepackage{fancyvrb}
 \usepackage[utf8]{inputenc}
-\newenvironment{code}{\VerbatimEnvironment\begin{Verbatim}}{\end{Verbatim}}
+
+% From https://wiki.haskell.org/Literate_programming
+\usepackage{listings}
+\lstloadlanguages{Haskell}
+\lstnewenvironment{code}
+    {\lstset{}%
+      \csname lst@SetFirstLabel\endcsname}
+    {\csname lst@SaveFirstLabel\endcsname}
+    \lstset{
+      language=Haskell,
+      basicstyle=\small\ttfamily,
+      flexiblecolumns=false,
+      basewidth={0.5em,0.45em},
+      literate={+}{{$+$}}1 {/}{{$/$}}1 {*}{{$*$}}1 {=}{{$=$}}1
+               {>}{{$>$}}1 {<}{{$<$}}1 {\\}{{$\lambda$}}1
+               {\\\\}{{\char`\\\char`\\}}1
+               {->}{{$\rightarrow$}}2 {>=}{{$\geq$}}2 {<-}{{$\leftarrow$}}2
+               {<=}{{$\leq$}}2 {=>}{{$\Rightarrow$}}2
+               {\ .}{{$\circ$}}2 {\ .\ }{{$\circ$}}2
+               {>>}{{>>}}2 {>>=}{{>>=}}2
+               {|}{{$\mid$}}1
+               % for our purposes:
+               {emptyContext}{{$\cdot$}}1
+               {ctx}{{$\Gamma$}}1
+               {var}{{$x_1$}}2
+               {var1}{{$x_1$}}2
+               {var2}{{$x_2$}}2
+               {pat}{{$p_i$}}2
+               {e0}{{$e_0$}}2
+               {e1}{{$e_1$}}2
+               {e2}{{$e_2$}}2
+               {ei}{{$e_i$}}2
+    }
 
 % optionally automatically resized paired delimiters
 \makeatletter % https://goo.gl/osSmHV
@@ -113,24 +144,27 @@ well-formed.
 \begin{code}
 newtype Context = Context { getContext :: Set Var }
 
+emptyContext :: Context
+emptyContext = Context Set.empty
+
 modifyContext :: (Set Var -> Set Var) -> Context -> Context
 modifyContext f (Context ctx) = Context (f ctx)
 
 addToContext :: Var -> Context -> Context
-addToContext v = modifyContext (Set.insert v)
+addToContext var = modifyContext (Set.insert var)
 
 addManyToContext :: Foldable f => f Var -> Context -> Context
-addManyToContext vs ctx = foldr addToContext ctx vs
+addManyToContext vars ctx = foldr addToContext ctx vars
 
 inContext :: Var -> Context -> Bool
-inContext v (Context ctx) = Set.member v ctx
+inContext var (Context ctx) = Set.member var ctx
 \end{code}
 
 \subsection{Patterns}
 
 Patterns may add variables to the context.
 \begin{code}
--- | Invariant: The returned context is larger
+-- | The returned context is always larger
 bindPatternVars :: Pattern -> Context -> Context
 bindPatternVars =
   \case
@@ -141,7 +175,7 @@ identifier $x$ and makes it available on the RHS of the match:
   \frac{}{\pat{\Gamma}{\patIdent{x}}{\Gamma,x}}
 \end{equation*}
 \begin{code}
-    PatternIdentifier _ident var -> addToContext var
+    PatternIdentifier _ var -> addToContext var
 \end{code}
 The pattern $\patVec{x_1\;\ldots\;x_n}$ matches a vector of syntax objects of
 length $n$:
@@ -156,7 +190,7 @@ The pattern $\patCons{x}{y}$ matches a cons cell of syntax objects:
   \frac{}{\pat{\Gamma}{\patCons{x}{y}}{\Gamma,x,y}}
 \end{equation*}
 \begin{code}
-    PatternCons _ident1 var1 _ident2 var2 ->
+    PatternCons _ var1 _ var2 ->
       addToContext var1 . addToContext var2
 \end{code}
 The empty pattern $\patEmpty$ matches an empty list of syntax objects, and binds
@@ -204,7 +238,9 @@ in the pattern in the LHS of that branch:
   }{\wellscoped{\Gamma}{\eSyntaxCase{e_0}{\brackets{p_i\;e_i}}}}
 \end{equation*}
 \begin{code}
-      CoreCase scrutinee cases -> _
+      CoreCase e0 cases ->
+        flip all cases $ \(pat, ei) ->
+          wellScopedCore (bindPatternVars pat ctx) ei
 \end{code}
 All other expressions are well-scoped when their subtrees are:
 \begin{gather*}
