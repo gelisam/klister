@@ -74,7 +74,24 @@
 \newcommand{\hypspace}{\qquad} % space between hypotheses
 \setlength{\jot}{1em} % space between equations in multi-line envs
 \begin{document}
-\section{Forms of Judgment}
+
+\section{Scope checking}
+
+\begin{code}
+{-# LANGUAGE LambdaCase #-}
+\end{code}
+
+\begin{code}
+module ScopeCheck.Evidence
+  (
+  ) where
+
+import           Data.Set (Set)
+import qualified Data.Set as Set
+
+import Core
+
+\end{code}
 
 \subsection{Well-formed contexts}
 
@@ -87,6 +104,27 @@ with a variable.
 \end{gather*}
 The remainder of rules presented here presuppose that all contexts are
 well-formed.
+
+In the implementation, contexts are implemented as sets, so they are always
+well-formed.
+
+% Optimally, this would be in another module and we wouldn't expose the
+% constructor nor modifyContext...
+\begin{code}
+newtype Context = Context { getContext :: Set Var }
+
+modifyContext :: (Set Var -> Set Var) -> Context -> Context
+modifyContext f (Context ctx) = Context (f ctx)
+
+addToContext :: Var -> Context -> Context
+addToContext v = modifyContext (Set.insert v)
+
+addManyToContext :: Foldable f => f Var -> Context -> Context
+addManyToContext vs ctx = foldr addToContext ctx vs
+
+inContext :: Var -> Context -> Bool
+inContext v (Context ctx) = Set.member v ctx
+\end{code}
 
 \subsection{Patterns}
 
@@ -110,13 +148,24 @@ no new variables in the context:
   \frac{}{\pat{\Gamma}{\patEmpty}{\Gamma}}
 \end{equation*}
 
-\subsection{Well-scoped expressions}
+\begin{code}
+bindPatternVars :: Pattern -> Context -> Context
+bindPatternVars =
+  \case
+    PatternIdentifier _ident var -> addToContext var
+    PatternEmpty -> id
+    PatternCons _ident1 var1 _ident2 var2 ->
+      addToContext var1 . addToContext var2
+    PatternVec pairs -> addManyToContext (map snd pairs)
+\end{code}
 
+\subsection{Well-scoped expressions}
 
 Variables are well-scoped in environments that contain them:
 \begin{equation*}
   \frac{x \in \Gamma}{\wellscoped{\Gamma}{\eIdentifier{x}}}
 \end{equation*}
+
 % TODO(lb): Can lambdas bind variables from elsewhere in the context (not just the end)?
 Lambda expressions extend the context with an additional variable:
 \begin{equation*}
@@ -149,13 +198,32 @@ All other expressions are well-scoped when their subtrees are:
   \wellScopedRecIII{\eIf} \\
 \end{gather*}
 
-
 \begin{code}
-module ScopeCheck.Evidence
-  (
-  ) where
-
-data Evidence = Evidence ()
+wellScopedCore :: Context -> Core -> Bool
+wellScopedCore ctx core =
+  let inSameContext = all (wellScopedCore ctx)
+  in
+    case unCore core of
+      CoreVar var -> inContext var ctx
+      CoreLam _ident var body -> wellScopedCore (addToContext var ctx) body
+      CoreApp e0 e1 -> inSameContext [e0, e1]
+      CorePure e0 -> inSameContext [e0]
+      CoreBind e0 e1 -> inSameContext [e0, e1]
+      CoreSyntaxError (SyntaxError _ e0) -> inSameContext [e0]
+      CoreSendSignal e0 -> inSameContext [e0]
+      CoreWaitSignal e0 -> inSameContext [e0]
+      CoreIdentEq _howEq e0 e1 -> inSameContext [e0, e1]
+      CoreSyntax syntax -> _
+      CoreCase scrutinee cases -> _
+      CoreIdentifier ident -> _
+      CoreSignal _signal -> True
+      CoreBool _bool -> True
+      CoreIf cond thenBranch elseBranch ->
+        inSameContext [cond, thenBranch, elseBranch]
+      CoreIdent (ScopedIdent _ident _pos) -> _
+      CoreEmpty (ScopedEmpty e0) -> _
+      CoreCons (ScopedCons head tail _pos) -> _
+      CoreVec (ScopedVec elements _pos) -> _
 \end{code}
 
 \end{document}
