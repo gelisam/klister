@@ -45,12 +45,31 @@
 \newcommand{\eIdentifier}[1]{#1}
 \newcommand{\eTrue}{\texttt{true}}
 \newcommand{\eFalse}{\texttt{false}}
-\newcommand{\eSignal}[1]{\eApp{\texttt{signal}}{#1}} % TODO: ???
+\newcommand{\eSignal}{\texttt{signal}} % TODO: ???
 \newcommand{\eIf}[3]{\eAppIII{\texttt{if}}{#1}{#2}{#3}}
 \newcommand{\eIdent}[1]{\eApp{\texttt{ident-syntax}}{#1}}
 \newcommand{\eEmpty}{\texttt{empty-syntax}}
 \newcommand{\eCons}[2]{\eAppII{\texttt{cons-syntax}}{#1}{#2}}
 \newcommand{\eVec}[1]{\eAppII{\texttt{vec-syntax}}{#1}}
+
+% abbreviations for simple recursive cases
+\newcommand{\wellScopedAlways}[1]{\frac{}{\wellscoped{\Gamma}{#1}}}
+\newcommand{\wellScopedRecI}[1]{
+  \frac{\wellscoped{\Gamma}{e}}{\wellscoped{\Gamma}{#1{e}}}
+}
+\newcommand{\wellScopedRecII}[1]{
+  \frac{
+    \wellscoped{\Gamma}{e_0}
+    \hypspace \wellscoped{\Gamma}{e_1}
+  }{\wellscoped{\Gamma}{#1{e_0}{e_1}}}
+}
+\newcommand{\wellScopedRecIII}[2]{
+  \frac{
+    \wellscoped{\Gamma}{e_0}
+    \hypspace \wellscoped{\Gamma}{e_1}
+    \hypspace \wellscoped{\Gamma}{e_2}
+  }{\wellscoped{\Gamma}{#1{e_0}{e_1}{e_2}}}
+}
 
 \newcommand{\hypspace}{\qquad} % space between hypotheses
 \setlength{\jot}{1em} % space between equations in multi-line envs
@@ -96,7 +115,7 @@ no new variables in the context:
 
 Variables are well-scoped in environments that contain them:
 \begin{equation*}
-  \frac{x \in \Gamma}{\wellscoped{\Gamma}{x}}
+  \frac{x \in \Gamma}{\wellscoped{\Gamma}{\eIdentifier{x}}}
 \end{equation*}
 % TODO(lb): Can lambdas bind variables from elsewhere in the context (not just the end)?
 Lambda expressions extend the context with an additional variable:
@@ -116,16 +135,20 @@ in the pattern in the LHS of that branch:
 
 All other expressions are well-scoped when their subtrees are:
 \begin{gather*}
-  \frac{
-    \wellscoped{\Gamma}{e_0}
-    \hypspace \wellscoped{\Gamma}{e_1}
-  }{\wellscoped{\Gamma}{\eApp1{e_0}{e_1}}} \\
-  \frac{\wellscoped{\Gamma}{e}}{\wellscoped{\Gamma}{\ePure{e}}} \\
-  \frac{
-    \wellscoped{\Gamma}{e_0}
-    \hypspace \wellscoped{\Gamma}{e_1}
-  }{\wellscoped{\Gamma}{\eBind{e_0}{e_1}}} \\
+  \wellScopedRecII{\eApp} \\
+  \wellScopedRecI{\ePure} \\
+  \wellScopedRecII{\eBind} \\
+  \wellScopedRecI{\eError} \\
+  \wellScopedRecI{\eSend} \\
+  \wellScopedRecI{\eWait} \\
+  \wellScopedRecI{\eSyntax} \\
+  \wellScopedAlways{\eTrue} \\
+  \wellScopedAlways{\eFalse} \\
+  \wellScopedAlways{\eSignal} \\
+  % TODO: ident, empty, cons, vec, and a few others
+  \wellScopedRecIII{\eIf} \\
 \end{gather*}
+
 
 \begin{code}
 module ScopeCheck.Evidence
