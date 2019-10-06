@@ -112,9 +112,12 @@
 
 \begin{code}
 {-# LANGUAGE GADTs #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE StandaloneDeriving #-}
 \end{code}
 
 \begin{code}
@@ -124,13 +127,19 @@ module ScopeCheck.Evidence
   ) where
 
 import           Prelude hiding (head, tail)
+import           Control.Monad (unless)
+import qualified Control.Monad.Except as MTL
+import qualified Control.Monad.Reader as MTL
 import           Data.Foldable (for_)
+import           Data.Map (Map)
+import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import Core
 import SplitCore
 import Module
+import PartialCore
 import Phase
 import Schedule
 
@@ -144,21 +153,26 @@ tasks along the way.
 \begin{code}
 
 data ScopeCheckError = ScopeCheckError ()
-data ScopeCheckTodo a where
-  TodoExpr :: SplitCorePtr -> ScopeCheckTodo (CoreF SplitCorePtr)
-  TodoDecl :: DeclPtr -> ScopeCheckTodo (Decl DeclPtr SplitCorePtr)
+
+data ScopeCheckTodo when a where
+  TodoSplitCore :: SplitCorePtr -> ScopeCheckTodo SplitCore ()
+  TodoPartialCore :: PartialCore -> ScopeCheckTodo PartialCore ()
+  TodoCore :: Core -> ScopeCheckTodo Core ()
+  TodoSplitDecl :: DeclPtr -> ScopeCheckTodo SplitCore ()
+
+newtype PhasedTodo when a = PhasedTodo (Phase, ScopeCheckTodo when a)
 
 -- | Laws:
 --
 -- * @forall v. bindVarIn v (use v) == pure ()@
-class (Schedule f, Todo f ~ ScopeCheckTodo) => ScopeCheck f where
+class (Schedule f, Todo f ~ PhasedTodo when) =>
+      ScopeCheck when f where
   -- | Record that this variable was used at this phase
   use :: Phase -> Var -> f ()
   -- | Extend the context with a variable in a subtask
   bindVarIn :: Phase -> Var -> f a -> f a
 
-
-bindVarsIn :: (ScopeCheck f, Foldable t) => Phase -> t Var -> f a -> f a
+bindVarsIn :: (ScopeCheck when f, Foldable t) => Phase -> t Var -> f a -> f a
 bindVarsIn phase vars subtask =
   foldr (bindVarIn phase) subtask vars
 \end{code}
@@ -168,7 +182,7 @@ bindVarsIn phase vars subtask =
 Patterns may add variables to the context.
 \begin{code}
 -- | Extend the context with variables captured in a pattern
-bindPatternIn :: ScopeCheck f => Phase -> Pattern -> f a -> f a
+bindPatternIn :: ScopeCheck when f => Phase -> Pattern -> f a -> f a
 bindPatternIn phase =
   \case
 \end{code}
@@ -208,7 +222,7 @@ no new variables in the context:
 \subsection{Well-scoped expressions}
 
 \begin{code}
-scopeCheckCore :: (Applicative f, ScopeCheck f) => Phase -> Core -> f ()
+scopeCheckCore :: (Applicative f, ScopeCheck when f) => Phase -> Core -> f ()
 scopeCheckCore phase core =
   let inSameContext = flip for_ (scopeCheckCore phase)
   in
@@ -306,22 +320,54 @@ In the implementation, contexts are implemented as sets, so they are always
 well-formed.
 
 \begin{code}
-newtype Context = Context { getContext :: Set Var }
+newtype Context = Context { getContext :: Map Phase (Set Var) }
 
 emptyContext :: Context
-emptyContext = Context Set.empty
+emptyContext = Context Map.empty
 
-modifyContext :: (Set Var -> Set Var) -> Context -> Context
-modifyContext f (Context ctx) = Context (f ctx)
+modifyContext :: Phase -> (Set Var -> Set Var) -> Context -> Context
+modifyContext phase f (Context ctx) =
+  Context $ Map.alter (Just . maybe Set.empty f) phase ctx
 
-addToContext :: Var -> Context -> Context
-addToContext var = modifyContext (Set.insert var)
+addToContext :: Phase -> Var -> Context -> Context
+addToContext phase var = modifyContext phase (Set.insert var)
 
-addManyToContext :: Foldable f => f Var -> Context -> Context
-addManyToContext vars ctx = foldr addToContext ctx vars
+addManyToContext :: Foldable t => Phase -> t Var -> Context -> Context
+addManyToContext phase vars ctx = foldr (addToContext phase) ctx vars
 
-inContext :: Var -> Context -> Bool
-inContext var (Context ctx) = Set.member var ctx
+inContext :: Phase -> Var -> Context -> Bool
+inContext phase var (Context ctx) =
+  case Map.lookup phase ctx of
+    Nothing -> False
+    Just vars -> Set.member var vars
+\end{code}
+
+\subsubsection{The Monad}
+
+\begin{code}
+newtype ScopeCheckRecurT m a =
+  ScopeCheckRecurT (MTL.ReaderT Context (MTL.ExceptT ScopeCheckError m) a)
+  deriving (Applicative, Functor, Monad)
+
+deriving instance Monad m => MTL.MonadError ScopeCheckError (ScopeCheckRecurT m)
+deriving instance Monad m => MTL.MonadReader Context (ScopeCheckRecurT m)
+
+
+-- TODO: is selective enough here?
+instance Monad m => ScopeCheck Core (ScopeCheckRecurT m) where
+  use phase var = do
+    ctx <- MTL.ask
+    unless (inContext phase var ctx) $
+      MTL.throwError (ScopeCheckError ())
+
+  bindVarIn phase var = MTL.local (addToContext phase var)
+
+-- TODO: is selective enough here?
+instance Monad m => Schedule (ScopeCheckRecurT m) where
+  type Todo (ScopeCheckRecurT m) = PhasedTodo Core
+  schedule =
+    \case
+      PhasedTodo (phase, TodoCore e0) -> scopeCheckCore phase e0
 \end{code}
 
 \end{document}
