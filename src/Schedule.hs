@@ -8,6 +8,8 @@ import           Data.Kind (Type)
 import           Data.Functor.Identity
 
 -- | Delay the current computation until the result from a subtask is available
+--
+-- TODO: switch to a fundep?
 class Schedule (f :: Type -> Type) where
   type Todo f :: Type -> Type
   schedule :: Todo f a -> f a

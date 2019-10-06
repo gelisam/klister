@@ -28,7 +28,7 @@
                % for our purposes:
                {emptyContext}{{$\cdot$}}1
                {ctx}{{$\Gamma$}}1
-               {var}{{$x_1$}}2
+               {var}{{$x_0$}}2
                {var1}{{$x_1$}}2
                {var2}{{$x_2$}}2
                {pat}{{$p_i$}}2
@@ -122,7 +122,10 @@
 
 \begin{code}
 module ScopeCheck.Evidence
-  ( ScopeCheckTodo
+  ( ScopeCheckTodo(..)
+  , PhasedTodo(..)
+  , ScopeCheck(..)
+  , ScopeCheckRecurT
   , scopeCheckCore
   ) where
 
@@ -160,7 +163,19 @@ data ScopeCheckTodo when a where
   TodoCore :: Core -> ScopeCheckTodo Core ()
   TodoSplitDecl :: DeclPtr -> ScopeCheckTodo SplitCore ()
 
-newtype PhasedTodo when a = PhasedTodo (Phase, ScopeCheckTodo when a)
+instance Show (ScopeCheckTodo when a) where
+  show =
+    \case
+      TodoSplitCore ptr -> "TodoSplitCore " ++ show ptr
+      TodoPartialCore part -> "TodoPartialCore " ++ show part
+      TodoCore core -> "TodoCore " ++ show core
+      TodoSplitDecl ptr -> "TodoSplitDecl " ++ show ptr
+
+data PhasedTodo when a =
+  PhasedTodo { ptPhase :: Phase
+             , ptTodo :: ScopeCheckTodo when a
+             }
+  deriving Show
 
 -- | Laws:
 --
@@ -299,9 +314,9 @@ All other expressions are well-scoped when their subtrees are:
         inSameContext (pos : elements)
 \end{code}
 
-\subsection{An instance of \texttt{MonadScopeCheck}}
+\subsection{An instance of \texttt{ScopeCheck}}
 
-The simplest instance of \texttt{MonadScopeCheck} simply recurs on the scheduled
+The simplest instance of \texttt{ScopeCheck} simply recurs on the scheduled
 tasks.
 
 \subsubsection{Well-formed contexts}
@@ -320,10 +335,7 @@ In the implementation, contexts are implemented as sets, so they are always
 well-formed.
 
 \begin{code}
-newtype Context = Context { getContext :: Map Phase (Set Var) }
-
-emptyContext :: Context
-emptyContext = Context Map.empty
+newtype Context = Context { _getContext :: Map Phase (Set Var) }
 
 modifyContext :: Phase -> (Set Var -> Set Var) -> Context -> Context
 modifyContext phase f (Context ctx) =
@@ -331,9 +343,6 @@ modifyContext phase f (Context ctx) =
 
 addToContext :: Phase -> Var -> Context -> Context
 addToContext phase var = modifyContext phase (Set.insert var)
-
-addManyToContext :: Foldable t => Phase -> t Var -> Context -> Context
-addManyToContext phase vars ctx = foldr (addToContext phase) ctx vars
 
 inContext :: Phase -> Var -> Context -> Bool
 inContext phase var (Context ctx) =
@@ -367,7 +376,7 @@ instance Monad m => Schedule (ScopeCheckRecurT m) where
   type Todo (ScopeCheckRecurT m) = PhasedTodo Core
   schedule =
     \case
-      PhasedTodo (phase, TodoCore e0) -> scopeCheckCore phase e0
+      PhasedTodo phase (TodoCore e0) -> scopeCheckCore phase e0
 \end{code}
 
 \end{document}

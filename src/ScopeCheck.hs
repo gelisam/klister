@@ -5,7 +5,8 @@
 {-# LANGUAGE KindSignatures #-}
 {-# LANGUAGE UndecidableInstances #-}
 
-module ScopeCheck
+module ScopeCheck where
+{-
   ( MonadScopeCheck(..)
   , ScopeCheckError(..)
   , Todo(..)
@@ -72,3 +73,4 @@ scopeCheckCore ::
   ModuleBodyF ModBodyPtr (CoreF SplitCorePtr) ->
   f (ScopeChecked Core)
 scopeCheckCore mod = _
+-}

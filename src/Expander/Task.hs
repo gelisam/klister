@@ -11,6 +11,7 @@ import Module
 import Phase
 import Pretty
 import Scope
+import ScopeCheck.Evidence
 import ShortShow
 import Signals
 import SplitCore
@@ -35,6 +36,7 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
+  | ScopeCheck (PhasedTodo SplitCore ())
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro

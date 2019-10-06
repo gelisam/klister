@@ -1,8 +1,10 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
 module Expander.Monad
   ( module Expander.Error
   , module Expander.DeclScope
@@ -79,6 +81,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Data.IORef
 import Data.Map (Map)
+import Data.Maybe (isJust)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Traversable
@@ -98,6 +101,8 @@ import Phase
 import Signals
 import SplitCore
 import Scope
+import ScopeCheck.Evidence
+import Schedule
 import Syntax
 import Value
 import World
@@ -109,7 +114,6 @@ newtype Expand a = Expand
 
 execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
-
 
 newtype TaskID = TaskID Unique
   deriving (Eq, Ord)
@@ -392,3 +396,22 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Example e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
+
+instance Schedule Expand where
+  type Todo Expand = PhasedTodo SplitCore
+  schedule pt@(PhasedTodo _ todo) =
+    -- case split to learn that return type is ()... ugly
+    case todo of
+      TodoSplitCore{} -> forkExpanderTask (ScopeCheck pt)
+      TodoPartialCore{} -> forkExpanderTask (ScopeCheck pt)
+      TodoCore{} -> forkExpanderTask (ScopeCheck pt)
+      TodoSplitDecl{} -> forkExpanderTask (ScopeCheck pt)
+
+instance ScopeCheck SplitCore Expand where
+  use phase var = do
+    st <- getState
+    -- TODO(lb): is this the right check?
+    unless (isJust (view (expanderCurrentEnvs . at phase . non Env.empty . at var) st)) $
+      fail $ "Var out of scope: " ++ show var -- TODO(lb)
+
+  bindVarIn _ _ _ = undefined -- TODO(lb)
