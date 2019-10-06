@@ -48,6 +48,8 @@
 \def\paren{\@ifstar{\Paren}{\Paren*}}
 \makeatother
 
+\newcommand{\klister}{\textsc{Klister}}
+
 % judgments
 \newcommand{\ctx}[1]{#1\textbf{ ctx}}
 \newcommand{\pat}[3]{#1 \vdash #2 \textbf{ pat} \leadsto #3}
@@ -109,64 +111,65 @@
 \section{Scope checking}
 
 \begin{code}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TypeFamilies #-}
 \end{code}
 
 \begin{code}
 module ScopeCheck.Evidence
-  (
+  ( ScopeCheckTodo
+  , scopeCheckCore
   ) where
 
+import           Prelude hiding (head, tail)
+import           Data.Foldable (for_)
 import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import Core
+import SplitCore
+import Module
+import Phase
+import Schedule
 
 \end{code}
 
-\subsection{Well-formed contexts}
+\subsection{The scope-checking monad}
 
-During scope checking, a context $\Gamma$ records the set of variables that are
-in scope. Well-formed contexts are either empty ($\cdot$), or a context extended
-with a variable.
-\begin{gather*}
-  \frac{}{\ctx{\cdot}} \\
-  \frac{\ctx{\Gamma} \hypspace x\notin\Gamma}{\ctx{\Gamma , x}}
-\end{gather*}
-The remainder of rules presented here presuppose that all contexts are
-well-formed.
-
-In the implementation, contexts are implemented as sets, so they are always
-well-formed.
-
-% Optimally, this would be in another module and we wouldn't expose the
-% constructor nor modifyContext...
+In \klister{}, Scope checking is interleaved with macro expansion. As such, it
+avoids a directly recursive style, instead scheduling further scope-checking
+tasks along the way.
 \begin{code}
-newtype Context = Context { getContext :: Set Var }
 
-emptyContext :: Context
-emptyContext = Context Set.empty
+data ScopeCheckError = ScopeCheckError ()
+data ScopeCheckTodo a where
+  TodoExpr :: SplitCorePtr -> ScopeCheckTodo (CoreF SplitCorePtr)
+  TodoDecl :: DeclPtr -> ScopeCheckTodo (Decl DeclPtr SplitCorePtr)
 
-modifyContext :: (Set Var -> Set Var) -> Context -> Context
-modifyContext f (Context ctx) = Context (f ctx)
+-- | Laws:
+--
+-- * @forall v. bindVarIn v (use v) == pure ()@
+class (Schedule f, Todo f ~ ScopeCheckTodo) => ScopeCheck f where
+  -- | Record that this variable was used at this phase
+  use :: Phase -> Var -> f ()
+  -- | Extend the context with a variable in a subtask
+  bindVarIn :: Phase -> Var -> f a -> f a
 
-addToContext :: Var -> Context -> Context
-addToContext var = modifyContext (Set.insert var)
 
-addManyToContext :: Foldable f => f Var -> Context -> Context
-addManyToContext vars ctx = foldr addToContext ctx vars
-
-inContext :: Var -> Context -> Bool
-inContext var (Context ctx) = Set.member var ctx
+bindVarsIn :: (ScopeCheck f, Foldable t) => Phase -> t Var -> f a -> f a
+bindVarsIn phase vars subtask =
+  foldr (bindVarIn phase) subtask vars
 \end{code}
 
 \subsection{Patterns}
 
 Patterns may add variables to the context.
 \begin{code}
--- | The returned context is always larger
-bindPatternVars :: Pattern -> Context -> Context
-bindPatternVars =
+-- | Extend the context with variables captured in a pattern
+bindPatternIn :: ScopeCheck f => Phase -> Pattern -> f a -> f a
+bindPatternIn phase =
   \case
 \end{code}
 The pattern $\patIdent{x}$ matches an
@@ -175,7 +178,7 @@ identifier $x$ and makes it available on the RHS of the match:
   \frac{}{\pat{\Gamma}{\patIdent{x}}{\Gamma,x}}
 \end{equation*}
 \begin{code}
-    PatternIdentifier _ var -> addToContext var
+    PatternIdentifier _ var -> bindVarIn phase var
 \end{code}
 The pattern $\patVec{x_1\;\ldots\;x_n}$ matches a vector of syntax objects of
 length $n$:
@@ -183,7 +186,7 @@ length $n$:
   \frac{}{\pat{\Gamma}{\patVec{x_1\;\ldots\;x_n}}{\Gamma,x_1,\ldots,x_n}}
 \end{equation*}
 \begin{code}
-    PatternVec pairs -> addManyToContext (map snd pairs)
+    PatternVec pairs -> bindVarsIn phase (map snd pairs)
 \end{code}
 The pattern $\patCons{x}{y}$ matches a cons cell of syntax objects:
 \begin{equation*}
@@ -191,7 +194,7 @@ The pattern $\patCons{x}{y}$ matches a cons cell of syntax objects:
 \end{equation*}
 \begin{code}
     PatternCons _ var1 _ var2 ->
-      addToContext var1 . addToContext var2
+      bindVarIn phase var1 . bindVarIn phase var2
 \end{code}
 The empty pattern $\patEmpty$ matches an empty list of syntax objects, and binds
 no new variables in the context:
@@ -205,9 +208,9 @@ no new variables in the context:
 \subsection{Well-scoped expressions}
 
 \begin{code}
-wellScopedCore :: Context -> Core -> Bool
-wellScopedCore ctx core =
-  let inSameContext = all (wellScopedCore ctx)
+scopeCheckCore :: (Applicative f, ScopeCheck f) => Phase -> Core -> f ()
+scopeCheckCore phase core =
+  let inSameContext = flip for_ (scopeCheckCore phase)
   in
     case unCore core of
 \end{code}
@@ -216,7 +219,7 @@ Variables are well-scoped in environments that contain them:
   \frac{x \in \Gamma}{\wellscoped{\Gamma}{\eIdentifier{x}}}
 \end{equation*}
 \begin{code}
-      CoreVar var -> inContext var ctx
+      CoreVar var -> use phase var
 \end{code}
 % TODO(lb): Can lambdas bind variables from elsewhere in the context (not just the end)?
 Lambda expressions extend the context with an additional variable:
@@ -225,7 +228,7 @@ Lambda expressions extend the context with an additional variable:
 \end{equation*}
 \begin{code}
       CoreLam _ident var body ->
-        wellScopedCore (addToContext var ctx) body
+        bindVarIn phase var (scopeCheckCore phase body)
 \end{code}
 A \texttt{syntax-case} expression is well-scoped in $\Gamma$ when the RHS of
 each branch is well-scoped in $\Gamma$ extended with the variables bound
@@ -239,8 +242,9 @@ in the pattern in the LHS of that branch:
 \end{equation*}
 \begin{code}
       CoreCase e0 cases ->
-        flip all cases $ \(pat, ei) ->
-          wellScopedCore (bindPatternVars pat ctx) ei
+        for_ cases $ \(pat, ei) ->
+          inSameContext [e0] *>
+          bindPatternIn phase pat (scopeCheckCore phase ei)
 \end{code}
 All other expressions are well-scoped when their subtrees are:
 \begin{gather*}
@@ -265,16 +269,59 @@ All other expressions are well-scoped when their subtrees are:
       CoreSendSignal e0 -> inSameContext [e0]
       CoreWaitSignal e0 -> inSameContext [e0]
       CoreIdentEq _howEq e0 e1 -> inSameContext [e0, e1]
-      CoreSyntax syntax -> _
-      CoreIdentifier ident -> _
-      CoreSignal _signal -> True
-      CoreBool _bool -> True
+      CoreSyntax _syntax -> pure () -- TODO: is this right?
+      CoreIdentifier _ident -> pure () -- TODO: is this right?
+      CoreSignal _signal -> pure ()
+      CoreBool _bool -> pure ()
       CoreIf cond thenBranch elseBranch ->
         inSameContext [cond, thenBranch, elseBranch]
-      CoreIdent (ScopedIdent _ident _pos) -> _
-      CoreEmpty (ScopedEmpty e0) -> _
-      CoreCons (ScopedCons head tail _pos) -> _
-      CoreVec (ScopedVec elements _pos) -> _
+      CoreIdent (ScopedIdent ident pos) ->
+        inSameContext [ident, pos]
+      CoreEmpty (ScopedEmpty e0) ->
+        inSameContext [e0]
+      CoreCons (ScopedCons head tail pos) ->
+        inSameContext [head, tail, pos]
+      CoreVec (ScopedVec elements pos) ->
+        inSameContext (pos : elements)
+\end{code}
+
+\subsection{An instance of \texttt{MonadScopeCheck}}
+
+The simplest instance of \texttt{MonadScopeCheck} simply recurs on the scheduled
+tasks.
+
+\subsubsection{Well-formed contexts}
+
+During scope checking, a context $\Gamma$ records the set of variables that are
+in scope. Well-formed contexts are either empty ($\cdot$), or a context extended
+with a variable.
+\begin{gather*}
+  \frac{}{\ctx{\cdot}} \\
+  \frac{\ctx{\Gamma} \hypspace x\notin\Gamma}{\ctx{\Gamma , x}}
+\end{gather*}
+The remainder of rules presented here presuppose that all contexts are
+well-formed.
+
+In the implementation, contexts are implemented as sets, so they are always
+well-formed.
+
+\begin{code}
+newtype Context = Context { getContext :: Set Var }
+
+emptyContext :: Context
+emptyContext = Context Set.empty
+
+modifyContext :: (Set Var -> Set Var) -> Context -> Context
+modifyContext f (Context ctx) = Context (f ctx)
+
+addToContext :: Var -> Context -> Context
+addToContext var = modifyContext (Set.insert var)
+
+addManyToContext :: Foldable f => f Var -> Context -> Context
+addManyToContext vars ctx = foldr addToContext ctx vars
+
+inContext :: Var -> Context -> Bool
+inContext var (Context ctx) = Set.member var ctx
 \end{code}
 
 \end{document}
