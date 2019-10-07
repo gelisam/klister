@@ -66,9 +66,13 @@
 [export quote]
 [export meta]
 [export import]
+[export >>=]
 [export pure]
+[export if]
 [export syntax-error]
 [export syntax-case]
 [export vec-syntax]
 [export cons-list-syntax]
 [export empty-list-syntax]
+[export free-identifier=?]
+

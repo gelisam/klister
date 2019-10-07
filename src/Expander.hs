@@ -632,6 +632,9 @@ initializeKernel = do
         Syntax (Stx _ _ (List [])) -> do
           rhsDest <- schedule rhs
           return (PatternEmpty, rhsDest)
+        Syntax (Stx _ _ (Id "_")) -> do
+          rhsDest <- schedule rhs
+          return (PatternAny, rhsDest)
         other ->
           throwError $ UnknownPattern other
 

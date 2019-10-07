@@ -40,6 +40,7 @@ data Pattern
   | PatternEmpty
   | PatternCons Ident Var Ident Var
   | PatternVec [(Ident, Var)]
+  | PatternAny
   deriving (Eq, Show)
 makePrisms ''Pattern
 
@@ -340,6 +341,7 @@ instance ShortShow Pattern where
     = "(Vec "
    ++ shortShow (map snd xs)
    ++ ")"
+  shortShow PatternAny = "_"
 
 instance ShortShow core => ShortShow (ScopedIdent core) where
   shortShow (ScopedIdent ident scope)

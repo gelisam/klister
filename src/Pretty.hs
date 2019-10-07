@@ -153,6 +153,7 @@ instance PrettyBinder VarInfo Pattern where
           | (Stx _ _ x, v) <- vars
           ],
      foldr (\(x, v) e -> Env.insert x v () e) Env.empty [(v, x) | (x, v) <- vars])
+  ppBind _env PatternAny = (text "_", Env.empty)
 
 instance Pretty VarInfo core => Pretty VarInfo (ScopedIdent core) where
   pp env ident =

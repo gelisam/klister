@@ -1,0 +1,74 @@
+#lang "n-ary-app.kl"
+
+[import [shift "n-ary-app.kl" 1]]
+
+[define-macros
+  ([unquote
+    [lambda (stx)
+      (syntax-error [quote "Used out of context"] stx)]])]
+
+[meta [define fix
+        [lambda (f)
+          ([lambda (x) (f [lambda (y) (x x y)])]
+           [lambda (x) (f [lambda (y) (x x y)])])]]]
+
+[meta
+  [define map-syntax
+    (fix [lambda (rec f stx)
+         (syntax-case stx
+           [() stx]
+           [[cons hd tl] [cons-list-syntax (f hd) (rec f tl) stx]]
+           [[vec []] stx]
+           [[vec [x]] [vec-syntax [(f x)] stx]]
+           [[vec [x y]] [vec-syntax [(f x) (f y)] stx]]
+           [[vec [x y z]] [vec-syntax [(f x) (f y) (f z)] stx]]
+           [[vec [w x y z]] [vec-syntax [(f w) (f x) (f y) (f z)] stx]]
+           [[vec [v w x y z]] [vec-syntax [(f v) (f w) (f x) (f y) (f z)] stx]])])]]
+
+
+[meta
+  -- quotify : Syntax -> Macro Syntax
+  [define quotify
+    (fix
+     [lambda (rec stx)
+       (syntax-case stx
+         [[ident x] [pure [vec-syntax [[quote quote] x] stx]]]
+         [()
+          [pure
+           [vec-syntax [[quote empty-list-syntax] [vec-syntax [[quote quote] stx] stx]]
+             stx]]]
+         [[vec [x arg]]
+          (syntax-case x
+            [[ident i]
+             [>>= [free-identifier=? i [quote unquote]]
+               [lambda (done?)
+                [if done?
+                    [pure arg]
+                    [>>= (rec x)
+                     [lambda (x*)
+                       [>>= (rec arg)
+                         [lambda (arg*)
+                           [pure [vec-syntax [[quote cons-list-syntax] (rec x*) (rec arg*) [vec-syntax [[quote quote] stx] stx]] stx]]]]]]]]]]
+            [_
+             [>>= (rec x)
+              [lambda (x*)
+                [>>= (rec arg)
+                  [lambda (arg*)
+                  [pure [vec-syntax [[quote vec-syntax] [vec-syntax [(rec x*) (rec arg*)] stx] [vec-syntax [[quote quote] stx] stx]] stx]]]]]]])])])]]
+
+[define-macros
+  ([quasiquote
+     [lambda (stx)
+       (syntax-case stx
+         [[ident x]
+          (syntax-error [quote "No arguments given to quasiquote"] stx)]
+         [[vec [_ args]]
+          (quotify args)]
+         [_ (syntax-error [vec-syntax [[quote "Bad quasiquote invocation:"] stx] stx] stx)])]])]
+
+[define thing [quote nothing]]
+
+[example thing]
+
+[example [quasiquote thing]]
+[example [quasiquote [unquote thing]]]

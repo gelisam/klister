@@ -374,3 +374,5 @@ doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
                                 | v <- vs] $
             eval rhs
         _ -> next
+    match _next PatternAny rhs =
+      const (eval rhs)
