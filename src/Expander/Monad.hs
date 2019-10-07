@@ -274,10 +274,7 @@ makePrisms ''ExpanderTask
 
 linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 linkExpr dest layer =
-  modifyState $
-  \st -> st { _expanderCompletedCore =
-              _expanderCompletedCore st <> Map.singleton dest layer
-            }
+  modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
 linkDecl :: DeclPtr -> Decl DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =

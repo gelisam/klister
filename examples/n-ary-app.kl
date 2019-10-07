@@ -67,3 +67,8 @@
 [export meta]
 [export import]
 [export pure]
+[export syntax-error]
+[export syntax-case]
+[export vec-syntax]
+[export cons-list-syntax]
+[export empty-list-syntax]
