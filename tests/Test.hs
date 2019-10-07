@@ -1,19 +1,30 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Main where
 
 import Control.Lens hiding (List)
 import Control.Monad
 import qualified Data.Map as Map
+import Control.Monad.IO.Class (liftIO)
+import Data.Maybe (maybeToList)
 import Data.Text (Text)
+import Data.Set (Set)
 import qualified Data.Text as T
+import Data.Unique (newUnique)
 
 import Test.Tasty
 import Test.Tasty.HUnit
+import Test.Tasty.Hedgehog (testProperty)
 
+import           Hedgehog hiding (eval, Var)
+import qualified Hedgehog.Gen as Gen
+import qualified Hedgehog.Range as Range
+import qualified Hedgehog.Internal.Gen as Gen (generalize)
+import qualified Hedgehog.Internal.Property as Prop (forAllT)
 
 import Alpha
 import Core
@@ -25,10 +36,11 @@ import Module
 import ModuleName
 import Parser
 import PartialCore
-import Phase (prior, runtime, Phased(..))
+import Phase (prior, runtime, Phased(..), Phase)
 import Pretty
 import Scope
 import qualified ScopeSet
+import ScopeSet (ScopeSet)
 import ShortShow
 import Signals
 import SplitCore
@@ -41,7 +53,16 @@ main :: IO ()
 main = defaultMain tests
 
 tests :: TestTree
-tests = testGroup "Expander tests" [ operationTests, miniTests, moduleTests ]
+tests = testGroup "All tests"
+  [ testGroup "Expander tests" [ operationTests, miniTests, moduleTests ]
+  , testGroup "Hedgehog tests" [ testProperty
+                                   "runPartialCore . nonPartial = id"
+                                   propRunPartialCoreNonPartial
+                               , testProperty
+                                   "unsplit . split = pure"
+                                   propSplitUnsplit
+                               ]
+  ]
 
 operationTests :: TestTree
 operationTests =
@@ -524,3 +545,166 @@ assertAlphaEq preface expected actual =
   unless (alphaEq actual expected) (assertFailure msg)
  where msg = (if null preface then "" else preface ++ "\n") ++
              "expected: " ++ shortShow expected ++ "\n but got: " ++ shortShow actual
+
+--------------------------------------------------------------------------------
+-- Hedgehog
+
+-- TODO(lb): Should we be accessing size parameters from the Gen monad to decide
+-- these ranges?
+
+range32 :: Range.Range Int
+range32 = Range.linear 0 32
+
+range256 :: Range.Range Int
+range256 = Range.linear 0 256
+
+range1024 :: Range.Range Int
+range1024 = Range.linear 0 1024
+
+genPhase :: MonadGen m => m Phase
+genPhase =
+  let more 0 phase  = phase
+      more n phase = more (n - 1) (prior phase)
+  in more <$> Gen.int range256 <*> pure runtime
+
+genScope :: MonadGen m => m Scope
+genScope = Scope <$> Gen.int range1024
+
+genSetScope :: MonadGen m => m (Set Scope)
+genSetScope = Gen.set range32 genScope
+
+genScopeSet :: MonadGen m => m ScopeSet
+genScopeSet =
+  let more :: MonadGen m => Int -> ScopeSet -> m ScopeSet
+      more 0 ss = pure ss
+      more n ss = do
+        b <- Gen.choice [pure True, pure False]
+        more (n - 1) =<<
+          if b
+          then ScopeSet.insertAtPhase <$> genPhase <*> genScope <*> pure ss
+          else ScopeSet.insertUniversally <$> genScope <*> pure ss
+  in flip more ScopeSet.empty =<< Gen.int range256
+
+genSrcPos :: MonadGen m => m SrcPos
+genSrcPos = SrcPos <$> Gen.int range256 <*> Gen.int range256
+
+genSrcLoc :: MonadGen m => m SrcLoc
+genSrcLoc = SrcLoc <$> Gen.string range256 Gen.ascii <*> genSrcPos <*> genSrcPos
+
+genStx :: MonadGen m => m a -> m (Stx a)
+genStx subgen =
+  Stx
+  <$> genScopeSet
+  <*> genSrcLoc
+  <*> subgen
+
+genIdent :: MonadGen m => m Ident
+genIdent = genStx (Gen.text range256 Gen.ascii)
+
+genVar :: GenT IO Var
+genVar = liftIO $ Var <$> newUnique
+
+genSyntaxError :: MonadGen m => m a -> m (SyntaxError a)
+genSyntaxError subgen =
+  SyntaxError
+  <$> Gen.list range256 subgen
+  <*> subgen
+
+genLam :: (CoreF Bool -> GenT IO a) -> GenT IO (CoreF a)
+genLam subgen = do
+  ident <- Gen.generalize genIdent
+  var <- genVar
+  CoreLam ident var <$> subgen (CoreLam ident var True)
+
+-- | Generate an instance of 'CoreF'
+--
+-- Subgenerators have access to both a list of identifiers and the knowledge of
+-- which subtree of 'CoreF' they're being asked to generate.
+genCoreF :: forall a.
+  (Maybe (GenT IO Var) -> CoreF Bool -> GenT IO a) {- ^ Generic sub-generator -} ->
+  Maybe (GenT IO Var) {- ^ Variable generator -} ->
+  GenT IO (CoreF a)
+genCoreF subgen varGen =
+  let sameVars = subgen varGen
+      -- A unary constructor with no binding
+      unary :: (forall b. b -> CoreF b) -> GenT IO (CoreF a)
+      unary constructor = constructor <$> sameVars (constructor True)
+      -- A binary constructor with no binding
+      binary :: (forall b. b -> b -> CoreF b) -> GenT IO (CoreF a)
+      binary constructor =
+        constructor
+        <$> sameVars (constructor True False)
+        <*> sameVars (constructor False True)
+      -- A ternary constructor with no binding
+      ternary :: (forall b. b -> b -> b -> CoreF b) -> GenT IO (CoreF a)
+      ternary constructor =
+        constructor
+        <$> sameVars (constructor True False False)
+        <*> sameVars (constructor False True False)
+        <*> sameVars (constructor False False True)
+      nonRecursive =
+        [ CoreBool <$> Gen.bool
+        , CoreSignal . Signal <$> Gen.int range1024
+        ] ++ map (fmap CoreVar) (maybeToList varGen)
+      recursive =
+        [ genLam sameVars
+        , binary CoreApp
+        , unary CorePure
+        , binary CoreBind
+        , CoreSyntaxError <$> genSyntaxError (sameVars (CoreSyntaxError (SyntaxError [] True)))
+        , unary CoreSendSignal
+        , unary CoreWaitSignal
+        -- , CoreIdentEq _ <$> sameVars <*> sameVars
+        -- , CoreSyntax Syntax
+        -- , CoreCase sameVars [(Pattern, core)]
+        -- , CoreIdentifier Ident
+        , ternary CoreIf
+        -- , CoreIdent (ScopedIdent core)
+        -- , CoreEmpty (ScopedEmpty core)
+        -- , CoreCons (ScopedCons core)
+        -- , CoreVec (ScopedVec core)
+        ]
+  in Gen.recursive Gen.choice nonRecursive recursive
+
+
+-- | Generate possibly-ill-scoped 'Core'
+genAnyCore :: GenT IO Core
+genAnyCore = Core <$> genCoreF (\_varGen _pos -> genAnyCore) (Just genVar)
+
+-- | Generate well-scoped but possibly-ill-formed 'Core'
+--
+-- e.g. @f a@ where @f@ is not a lambda
+genWellScopedCore :: GenT IO Core
+genWellScopedCore =
+  let sub :: Maybe (GenT IO Var) -> CoreF Bool -> GenT IO Core
+      sub vars pos = top $
+        case pos of
+          CoreLam _ var _ -> Just $ Gen.choice (pure var : maybeToList vars)
+          _ -> vars
+      top vars = Core <$> genCoreF sub vars
+  in top Nothing
+
+propRunPartialCoreNonPartial :: Property
+propRunPartialCoreNonPartial = property $ do
+  core <- Prop.forAllT $ genAnyCore
+  Just core === runPartialCore (nonPartial core)
+
+propSplitUnsplit :: Property
+propSplitUnsplit = property $ do
+  core <- Prop.forAllT $ genAnyCore
+  let part = nonPartial core
+  splitted <- liftIO $ split part
+  part === unsplit splitted
+
+-- | Test that everything generated by 'genWellFormedCore' can be evaluated
+--
+-- TODO(lb) this needs to wait for a well-typed 'Core' generator
+-- propEvalWellFormed :: Property
+-- propEvalWellFormed =
+--   property $ do
+--     core <- Prop.forAllT $ genWellScopedCore
+--     out <- liftIO $ runExceptT $ runReaderT (runEval (eval core)) Env.empty
+--     True ===
+--       case out of
+--         Left _err -> False
+--         Right _val -> True

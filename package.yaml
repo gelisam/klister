@@ -32,6 +32,8 @@ tests:
     dependencies:
       - call-stack
       - deepseq
+      - hedgehog
       - klister
       - tasty
       - tasty-hunit
+      - tasty-hedgehog
