@@ -67,3 +67,4 @@
 [export meta]
 [export import]
 [export pure]
+[export syntax-error]
