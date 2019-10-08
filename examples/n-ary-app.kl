@@ -75,4 +75,5 @@
 [export cons-list-syntax]
 [export empty-list-syntax]
 [export free-identifier=?]
-
+[export log]
+[export export]
