@@ -64,6 +64,7 @@ import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
+import ShortShow
 import SplitCore
 import Syntax
 import Syntax.SrcLoc
@@ -187,9 +188,9 @@ visit modName = do
       set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
           (Just ())
     modifyState $
-      over (expanderWorld . worldEnvironments) (<> moreEnvs)
+      over (expanderWorld . worldEnvironments) (Map.unionWith (<>) moreEnvs)
     modifyState $
-      over (expanderWorld . worldTransformerEnvironments) (<> transformerEnvs)
+      over (expanderWorld . worldTransformerEnvironments) (Map.unionWith (<>) transformerEnvs)
 
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
@@ -905,7 +906,10 @@ expandOneExpression dest stx
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
-            Nothing -> throwError $ InternalError "No transformer yet created"
+            Nothing ->
+              throwError $ InternalError $
+              "No transformer yet created for " ++ shortShow ident ++
+              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
         EUserMacro _otherCat _otherVal ->
           throwError $ InternalError $ "Invalid macro for expressions"

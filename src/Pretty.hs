@@ -337,6 +337,12 @@ instance Pretty VarInfo a => Pretty VarInfo (Env Var a) where
          | (x, n, v) <- Env.toList rho
          ]
 
+instance Pretty VarInfo a => Pretty VarInfo (Env MacroVar a) where
+  pp env rho =
+    vsep [ hang 4 $ viaShow x <+> pp env n <> line <> pp env v
+         | (x, n, v) <- Env.toList rho
+         ]
+
 instance Pretty VarInfo CompleteModule where
   pp env (Expanded em) = pp env em
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
@@ -380,3 +386,4 @@ instance Pretty VarInfo ScopeSet where
         text "{" <> commaSep (map (pp env) (Set.toList s)) <> text "}"
       ppMap m =
         group (vsep [group (viaShow k <+> text "↦" <> line <> v) | (k, v) <- Map.toList m])
+

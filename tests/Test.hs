@@ -319,6 +319,32 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                     other -> assertFailure ("Unexpected thing def " ++ show other)
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
+        , ( "examples/hygiene.kl"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              \case
+                [Import _, Import _, Define _ fun1 firstFun, DefineMacros [_], Define _ fun2 secondFun,
+                 Example e1, Example e2, DefineMacros [_], Example e3] -> do
+                  spec1 <- lam \x -> lam \_y -> x
+                  spec2 <- lam \_x -> lam \y -> y
+                  assertAlphaEq "First fun drops second argument" firstFun spec1
+                  assertAlphaEq "Second fun drops first argument" secondFun spec2
+                  case e1 of
+                    Core (CoreApp (Core (CoreApp f _)) _) ->
+                      assertAlphaEq "Ex 1 picks fun 2" (Core (CoreVar fun2)) f
+                    other -> assertFailure $ "Ex 1 should be an application, but it's " ++ shortShow other
+                  case e2 of
+                    Core (CoreApp (Core (CoreApp f _)) _) ->
+                      assertAlphaEq "Ex 2 picks fun 1" (Core (CoreVar fun1)) f
+                    other -> assertFailure $ "Ex 2 should be an application, but it's " ++ shortShow other
+                  spec3 <- lam (const (pure (Core (CoreVar fun2))))
+                  case e3 of
+                    Core (CoreApp (Core (CoreApp (Core (CoreApp f _)) _)) _) ->
+                      assertAlphaEq "Ex 3 picks fun 2" f spec3
+                    other -> assertFailure $ "Ex 3 should be an application, but it's " ++ shortShow other
+
+                _ -> assertFailure "Expected two imports, a def, a macro, a def, two examples, a macro, and an example"
+          )
         ]
       ]
     shouldn'tWork =
