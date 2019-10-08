@@ -1,0 +1,18 @@
+#lang "n-ary-app.kl"
+
+[import "quasiquote.kl"]
+
+[define thing 'nothing]
+
+[example thing]
+[example `thing]
+[example `,thing]
+
+[example `[thing]]
+[example `[,thing]]
+
+[example `[vec-syntax [,thing thing] thing]]
+
+[example `[vec-syntax [,thing thing ()] thing]]
+
+[example `(thing ,thing thing)]

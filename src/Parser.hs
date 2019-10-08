@@ -43,7 +43,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> vec <|> ident <|> signal <|> bool <|> string
+expr = list <|> vec <|> ident <|> signal <|> bool <|> string <|> quoted <|> quasiquoted <|> unquoted
 
 ident :: Parser Syntax
 ident =
@@ -95,6 +95,34 @@ hashLang :: Parser Syntax
 hashLang =
   do literal "#lang"
      expr
+
+quoted :: Parser Syntax
+quoted =
+  do Located loc1 _ <- lexeme (literal "'")
+     e@(Syntax (Stx _ loc2 _)) <- expr
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
+       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "quote"))
+           , e
+           ]
+
+quasiquoted :: Parser Syntax
+quasiquoted =
+  do Located loc1 _ <- lexeme (literal "`")
+     e@(Syntax (Stx _ loc2 _)) <- expr
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
+       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "quasiquote"))
+           , e
+           ]
+
+unquoted :: Parser Syntax
+unquoted =
+  do Located loc1 _ <- lexeme (literal ",")
+     e@(Syntax (Stx _ loc2 _)) <- expr
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
+       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "unquote"))
+           , e
+           ]
+
 
 -- | The identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text
