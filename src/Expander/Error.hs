@@ -52,24 +52,33 @@ instance Pretty VarInfo ExpansionErr where
       vsep (map (pp env) tasks)
   pp env (NotIdentifier stx) =
     text "Not an identifier:" <+> pp env stx
-  pp env (NotEmpty stx) = text "Expected (), but got" <+> pp env stx
+  pp env (NotEmpty stx) =
+    hang 2 $ group $ vsep [text "Expected (), but got", pp env stx]
   pp env (NotCons stx) =
-    text "Expected non-empty parens, but got" <+> pp env stx
+    hang 2 $ group $ vsep [text "Expected non-empty parens, but got", pp env stx]
   pp env (NotList stx) =
-    text "Expected parens, but got" <+> pp env stx
+    hang 2 $ group $ vsep [text "Expected parens, but got", pp env stx]
   pp env (NotString stx) =
-    text "Expected string literal, but got" <+> pp env stx
+    hang 2 $ group $
+    vsep [ text "Expected string literal, but got"
+         , pp env stx
+         ]
   pp env (NotModName stx) =
-    text "Expected module name (string or `kernel'), but got" <+> pp env stx
+    hang 2 $ group $
+    vsep [ text "Expected module name (string or `kernel'), but got"
+         , pp env stx
+         ]
   pp env (NotRightLength len stx) =
-    text "Expected" <+> viaShow len <+>
-    text "entries between square brackets, but got" <+> pp env stx
+    hang 2 $ group $
+    vsep [ text "Expected" <+> viaShow len <+> text "entries between square brackets, but got"
+         , pp env stx
+         ]
   pp env (NotVec stx) =
-    text "Expected square-bracketed vec but got" <+> pp env stx
+    hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
   pp env (NotImportSpec stx) =
-    text "Expected import spec but got" <+> pp env stx
+    hang 2 $ group $ vsep [text "Expected import spec but got", pp env stx]
   pp env (UnknownPattern stx) =
-    text "Unknown pattern" <+> pp env stx
+    hang 2 $ group $ vsep [text "Unknown pattern",  pp env stx]
   pp env (MacroRaisedSyntaxError err) =
     let locs = view syntaxErrorLocations err
         msg = text "Syntax error from macro:" <> line <>

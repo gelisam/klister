@@ -104,6 +104,8 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
         case how of
           Free -> "free-identifier=?"
           Bound -> "bound-identifier=?"
+  pp env (CoreLog msg) =
+    group (hang 2 (vsep ["log", pp env msg]))
   pp env (CoreSyntax stx) =
     pp env stx
   pp env (CoreCase scrut pats) =
@@ -250,9 +252,11 @@ instance Pretty VarInfo SrcPos where
 
 instance Pretty VarInfo a => Pretty VarInfo (Stx a) where
   pp env (Stx _ loc v) =
-    text "#[" <> pp env loc <> "]<" <>
-    align (pp env v) <>
-    text ">"
+    text "#" <>
+    (align . group)
+      (text "[" <> pp env loc <> text "]" <> line' <> text "<" <>
+       align (pp env v) <>
+       text ">")
 
 instance Pretty VarInfo Syntax where
   pp env (Syntax e) = pp env e
@@ -293,6 +297,8 @@ instance Pretty VarInfo MacroAction where
         case how of
           Free  -> "free-identifier=?"
           Bound -> "bound-identifier=?"
+  pp env (MacroActionLog stx) =
+    hang 2 $ group $ vsep [text "log", pp env stx]
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)
