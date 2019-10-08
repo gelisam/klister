@@ -328,7 +328,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   spec1 <- lam \x -> lam \_y -> x
                   spec2 <- lam \_x -> lam \y -> y
                   assertAlphaEq "First fun drops second argument" firstFun spec1
-                  assertAlphaEq "Second fun is drops first argument" secondFun spec2
+                  assertAlphaEq "Second fun drops first argument" secondFun spec2
                   case e1 of
                     Core (CoreApp (Core (CoreApp f _)) _) ->
                       assertAlphaEq "Ex 1 picks fun 2" (Core (CoreVar fun2)) f
