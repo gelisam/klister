@@ -64,6 +64,7 @@ import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
+import ShortShow
 import SplitCore
 import Syntax
 import Syntax.SrcLoc
@@ -905,7 +906,10 @@ expandOneExpression dest stx
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
-            Nothing -> throwError $ InternalError "No transformer yet created"
+            Nothing ->
+              throwError $ InternalError $
+              "No transformer yet created for " ++ shortShow ident ++
+              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
         EUserMacro _otherCat _otherVal ->
           throwError $ InternalError $ "Invalid macro for expressions"
