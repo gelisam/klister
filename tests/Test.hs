@@ -299,53 +299,23 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [ Example e1, Example e2, Example e3, Example e4
-                          , Example e5, Example e6, Example e7, Example e8
-                          , Export _, Export _ ] -> do
-                          case e1 of
-                            Core (CoreVar _) -> pure ()
-                            other -> assertFailure ("Expected a var ref, got " ++ show other)
-                          case e2 of
-                            Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))) -> pure ()
-                            other -> assertFailure ("Expected thing, got " ++ show other)
-                          assertAlphaEq "Third and first example are the same" e3 e1
-                          case e4 of
-                            Core (CoreVec (ScopedVec [Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))] _)) -> pure ()
-                            other -> assertFailure ("Expected [thing], got " ++ shortShow other)
-                          case e5 of
-                            Core (CoreVec (ScopedVec [expr] _)) -> assertAlphaEq "the expression is e1" expr e1
-                            other -> assertFailure ("Expected [nothing], got " ++ shortShow other)
-                          case e6 of
-                            Core (CoreVec (ScopedVec [(Core (CoreSyntax (Syntax (Stx _ _ (Id "vec-syntax")))))
-                                                     , Core (CoreVec (ScopedVec [expr, Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))] _))
-                                                     , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))]
-                                            _)) -> assertAlphaEq "the expression is e1" expr e1
-                            other -> assertFailure ("Expected [vec-syntax [nothing thing] thing], got " ++ shortShow other)
-                          case e7 of
-                            Core (CoreVec (ScopedVec [(Core (CoreSyntax (Syntax (Stx _ _ (Id "vec-syntax")))))
-                                                     , Core (CoreVec (ScopedVec [ expr
-                                                                                , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))
-                                                                                , Core (CoreEmpty (ScopedEmpty _))]
-                                                                       _))
-                                                     , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))]
-                                            _)) -> assertAlphaEq "the expression is e1" expr e1
-                            other -> assertFailure ("Expected [vec-syntax [nothing thing ()] thing], got " ++ shortShow other)
-                          -- assertFailure
-                          case e8 of
-                            Core (CoreCons (ScopedCons
-                                             (Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))))
-                                             (Core (CoreCons
-                                                     (ScopedCons
-                                                       expr
-                                                       (Core (CoreCons (ScopedCons
-                                                                         (Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))))
-                                                                         (Core (CoreEmpty (ScopedEmpty _)))
-                                                                         _)))
-                                                       _)))
-                                             _)) -> assertAlphaEq "the expression is e1" expr e1
-                            other -> assertFailure ("Expected [vec-syntax [nothing thing ()] thing], got " ++ shortShow other)
-
-                        other -> assertFailure ("Expected 8 examples: " ++ show other)
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Export _, Export _ ] -> do
+                          testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
+                        other -> assertFailure ("Expected 8 examples and 2 exports: " ++ show other)
+                    other -> assertFailure ("Unexpected thing def " ++ show other)
+                _ -> assertFailure "Expected an import, two macros, a definition, and examples"
+          )
+        , ( "examples/quasiquote-syntax-test.kl"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              \case
+                (Import _ : Define _ _ thingDef : examples) -> do
+                  case thingDef of
+                    Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
+                      case examples of
+                        [e1, e2, e3, e4, e5, e6, e7, e8] -> do
+                          testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
+                        other -> assertFailure ("Expected 8 examples and 2 exports: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
@@ -372,6 +342,55 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
+testQuasiquoteExamples :: Show decl => [Decl decl Core] -> IO ()
+testQuasiquoteExamples examples =
+  case examples of
+    [ Example e1, Example e2, Example e3, Example e4,
+      Example e5, Example e6, Example e7, Example e8 ] -> do
+      case e1 of
+        Core (CoreVar _) -> pure ()
+        other -> assertFailure ("Expected a var ref, got " ++ show other)
+      case e2 of
+        Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))) -> pure ()
+        other -> assertFailure ("Expected thing, got " ++ show other)
+      assertAlphaEq "Third and first example are the same" e3 e1
+      case e4 of
+        Core (CoreVec (ScopedVec [Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))] _)) -> pure ()
+        other -> assertFailure ("Expected [thing], got " ++ shortShow other)
+      case e5 of
+        Core (CoreVec (ScopedVec [expr] _)) -> assertAlphaEq "the expression is e1" expr e1
+        other -> assertFailure ("Expected [nothing], got " ++ shortShow other)
+      case e6 of
+        Core (CoreVec (ScopedVec [(Core (CoreSyntax (Syntax (Stx _ _ (Id "vec-syntax")))))
+                                 , Core (CoreVec (ScopedVec [expr, Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))] _))
+                                 , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))]
+                        _)) -> assertAlphaEq "the expression is e1" expr e1
+        other -> assertFailure ("Expected [vec-syntax [nothing thing] thing], got " ++ shortShow other)
+      case e7 of
+        Core (CoreVec (ScopedVec [(Core (CoreSyntax (Syntax (Stx _ _ (Id "vec-syntax")))))
+                                 , Core (CoreVec (ScopedVec [ expr
+                                                            , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))
+                                                            , Core (CoreEmpty (ScopedEmpty _))]
+                                                   _))
+                                 , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))]
+                        _)) -> assertAlphaEq "the expression is e1" expr e1
+        other -> assertFailure ("Expected [vec-syntax [nothing thing ()] thing], got " ++ shortShow other)
+      -- assertFailure
+      case e8 of
+        Core (CoreCons (ScopedCons
+                         (Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))))
+                         (Core (CoreCons
+                                 (ScopedCons
+                                   expr
+                                   (Core (CoreCons (ScopedCons
+                                                     (Core (CoreSyntax (Syntax (Stx _ _ (Id "thing")))))
+                                                     (Core (CoreEmpty (ScopedEmpty _)))
+                                                     _)))
+                                   _)))
+                         _)) -> assertAlphaEq "the expression is e1" expr e1
+        other -> assertFailure ("Expected [vec-syntax [nothing thing ()] thing], got " ++ shortShow other)
+
+    other -> assertFailure ("Expected 8 examples: " ++ show other)
 
 
 testExpander :: Text -> IO Core -> Assertion
