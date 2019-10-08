@@ -188,9 +188,9 @@ visit modName = do
       set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
           (Just ())
     modifyState $
-      over (expanderWorld . worldEnvironments) (<> moreEnvs)
+      over (expanderWorld . worldEnvironments) (Map.unionWith (<>) moreEnvs)
     modifyState $
-      over (expanderWorld . worldTransformerEnvironments) (<> transformerEnvs)
+      over (expanderWorld . worldTransformerEnvironments) (Map.unionWith (<>) transformerEnvs)
 
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
