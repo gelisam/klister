@@ -60,6 +60,7 @@ import Module
 import ModuleName
 import Parser
 import Phase
+import Pretty
 import Scope
 import ScopeSet (ScopeSet)
 import Signals
@@ -599,6 +600,12 @@ initializeKernel = do
               schedule (addScope (prior p) mdef psc)
             forkAwaitingMacro b v m' macroDest dest (addScope p body sc)
         )
+      , ( "log"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, message) <- mustBeVec stx
+            msgDest <- schedule message
+            linkExpr dest $ CoreLog msgDest
+        )
       ]
 
     expandPatternCase :: Stx (Syntax, Syntax) -> Expand (Pattern, SplitCorePtr)
@@ -632,6 +639,9 @@ initializeKernel = do
         Syntax (Stx _ _ (List [])) -> do
           rhsDest <- schedule rhs
           return (PatternEmpty, rhsDest)
+        Syntax (Stx _ _ (Id "_")) -> do
+          rhsDest <- schedule rhs
+          return (PatternAny, rhsDest)
         other ->
           throwError $ UnknownPattern other
 
@@ -1001,4 +1011,6 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
       case how of
         Free  -> "free-identifier=?"
         Bound -> "bound-identifier=?"
-
+interpretMacroAction (MacroActionLog stx) = do
+  liftIO $ prettyPrint stx >> putStrLn ""
+  pure $ Right (ValueBool False) -- TODO unit type

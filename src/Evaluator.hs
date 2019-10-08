@@ -210,6 +210,9 @@ eval (Core (CoreWaitSignal signalExpr)) = do
        $ MacroActionWaitSignal theSignal
 eval (Core (CoreIdentEq how e1 e2)) =
   ValueMacroAction <$> (MacroActionIdentEq how <$> eval e1 <*> eval e2)
+eval (Core (CoreLog msg)) = do
+  msgVal <- evalAsSyntax msg
+  return $ ValueMacroAction (MacroActionLog msgVal)
 eval (Core (CoreSignal signal)) =
   pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do
@@ -374,3 +377,5 @@ doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
                                 | v <- vs] $
             eval rhs
         _ -> next
+    match _next PatternAny rhs =
+      const (eval rhs)

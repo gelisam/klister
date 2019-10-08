@@ -1,0 +1,115 @@
+#lang "n-ary-app.kl"
+
+[import [shift "n-ary-app.kl" 1]]
+
+[define-macros
+  ([unquote
+    [lambda (stx)
+      (syntax-error [quote "Used out of context"] stx)]]
+   [quasiquote
+    [lambda (stx)
+      (syntax-case stx
+        [[vec [_ e]]
+         (syntax-case e
+           [[ident x]
+            [pure [vec-syntax [[quote quote] x] x]]]
+           [()
+            [pure
+             [vec-syntax [[quote empty-list-syntax]
+                          [vec-syntax [[quote quote]
+                                       e]
+                                      [quote here]]]
+                         e]]]
+           [[cons a d]
+            [pure
+             [vec-syntax [[quote cons-list-syntax]
+                          [vec-syntax [[quote quasiquote] a] a]
+                          [vec-syntax [[quote quasiquote] d] d]
+                          [vec-syntax [[quote quote] e] e]]
+                         e]]]
+           [[vec [x]]
+            [pure
+             [vec-syntax [[quote vec-syntax]
+                          [vec-syntax [[vec-syntax [[quote quasiquote] x] e]]
+                                      [vec-syntax [[quote quote] stx] stx]]
+                          [vec-syntax [[quote quote] stx] stx]]
+                         stx]]]
+           [[vec [x y]]
+            (syntax-case x
+              [[ident i]
+               [>>= [free-identifier=? i [quote unquote]]
+                 [lambda [unquote?]
+                   [if unquote?
+                       [pure y]
+                       [pure
+                        [vec-syntax [[quote vec-syntax]
+                                     [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                                  [vec-syntax [[quote quasiquote] y] e]]
+                                                 [vec-syntax [[quote quote] stx] stx]]
+                                     [vec-syntax [[quote quote] stx] stx]]
+                                    stx]]]]]]
+              [_ [pure
+                  [vec-syntax [[quote vec-syntax]
+                               [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                            [vec-syntax [[quote quasiquote] y] e]]
+                                           [vec-syntax [[quote quote] stx] stx]]
+                               [vec-syntax [[quote quote] stx] stx]]
+                              stx]]])]
+           [[vec [x y z]]
+            [pure
+             [vec-syntax [[quote vec-syntax]
+                          [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                       [vec-syntax [[quote quasiquote] y] e]
+                                       [vec-syntax [[quote quasiquote] z] e]]
+                                      [vec-syntax [[quote quote] stx] stx]]
+                          [vec-syntax [[quote quote] stx] stx]] stx]]]
+           [[vec [x y z æ]]
+            [pure
+             [vec-syntax [[quote vec-syntax]
+                          [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                       [vec-syntax [[quote quasiquote] y] e]
+                                       [vec-syntax [[quote quasiquote] z] e]
+                                       [vec-syntax [[quote quasiquote] z] æ]]
+                                      [vec-syntax [[quote quote] stx] stx]]
+                          [vec-syntax [[quote quote] stx] stx]] stx]]]
+           [[vec [x y z æ ø]]
+            [pure
+             [vec-syntax [[quote vec-syntax]
+                          [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                       [vec-syntax [[quote quasiquote] y] e]
+                                       [vec-syntax [[quote quasiquote] z] e]
+                                       [vec-syntax [[quote quasiquote] z] æ]
+                                       [vec-syntax [[quote quasiquote] z] ø]]
+                                      [vec-syntax [[quote quote] stx] stx]]
+                          [vec-syntax [[quote quote] stx] stx]] stx]]]
+           [[vec [x y z æ ø å]]
+            [pure
+             [vec-syntax [[quote vec-syntax]
+                          [vec-syntax [[vec-syntax [[quote quasiquote] x] e]
+                                       [vec-syntax [[quote quasiquote] y] e]
+                                       [vec-syntax [[quote quasiquote] z] e]
+                                       [vec-syntax [[quote quasiquote] z] æ]
+                                       [vec-syntax [[quote quasiquote] z] ø]
+                                       [vec-syntax [[quote quasiquote] z] å]]
+                                      [vec-syntax [[quote quote] stx] stx]]
+                          [vec-syntax [[quote quote] stx] stx]] stx]]])]
+        [_ (syntax-error [vec-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
+
+
+[define thing [quote nothing]]
+
+[example thing]
+[example [quasiquote thing]]
+[example [quasiquote [unquote thing]]]
+
+[example [quasiquote [thing]]]
+[example [quasiquote [[unquote thing]]]]
+
+[example [quasiquote [vec-syntax [[unquote thing] thing] thing]]]
+
+[example [quasiquote [vec-syntax [[unquote thing] thing ()] thing]]]
+
+[example [quasiquote (thing [unquote thing] thing)]]
+
+[export quasiquote]
+[export unquote]

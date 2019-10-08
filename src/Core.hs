@@ -40,6 +40,7 @@ data Pattern
   | PatternEmpty
   | PatternCons Ident Var Ident Var
   | PatternVec [(Ident, Var)]
+  | PatternAny
   deriving (Eq, Show)
 makePrisms ''Pattern
 
@@ -84,6 +85,7 @@ data CoreF core
   | CoreSendSignal core                 -- :: Signal -> Macro ()
   | CoreWaitSignal core                 -- :: Signal -> Macro ()
   | CoreIdentEq HowEq core core
+  | CoreLog core
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
   | CoreIdentifier Ident
@@ -285,6 +287,8 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(CoreIdentEq " ++ show how
     ++ " " ++ shortShow e1
     ++ " " ++ shortShow e2 ++ ")"
+  shortShow (CoreLog msg)
+    = "(CoreLog " ++ shortShow msg ++ ")"
   shortShow (CoreSyntax syntax)
     = "(Syntax "
    ++ shortShow syntax
@@ -340,6 +344,7 @@ instance ShortShow Pattern where
     = "(Vec "
    ++ shortShow (map snd xs)
    ++ ")"
+  shortShow PatternAny = "_"
 
 instance ShortShow core => ShortShow (ScopedIdent core) where
   shortShow (ScopedIdent ident scope)
