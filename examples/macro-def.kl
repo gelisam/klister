@@ -1,5 +1,0 @@
-#lang kernel
-
-[define-macros ([id [lambda [stx] [pure [quote [lambda [x] x]]]]])]
-
-[example id]

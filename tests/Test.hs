@@ -223,6 +223,14 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         [ ( "examples/small.kl"
           , \m -> isEmpty (view moduleBody m)
           )
+        , ( "examples/two-defs.kl"
+          , \m ->
+              view moduleBody m & map (view completeDecl) &
+              filter (\case {(Define {}) -> True; _ -> False}) &
+              \case
+                [Define {}, Define {}] -> pure ()
+                _ -> assertFailure "Expected two definitions"
+          )
         , ( "examples/id-compare.kl"
           , \m ->
               view moduleBody m & map (view completeDecl) &
