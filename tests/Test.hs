@@ -359,7 +359,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/defun.kl"
           , \_m exampleVals ->
               case exampleVals of
-                [_, _] -> pure ()
+                [ValueSyntax (Syntax (Stx _ _ (Id "a"))), ValueSyntax (Syntax (Stx _ _ (Id "g")))] ->
+                  pure ()
+                [_, _] -> assertFailure $ "Wrong example values: " ++ show exampleVals
                 _ -> assertFailure "Wrong number of examples in file"
           )
         ]
