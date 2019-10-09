@@ -1,0 +1,19 @@
+#lang kernel
+
+[import [shift (only kernel lambda syntax-case cons-list-syntax vec-syntax pure) 1]]
+[import [shift (only "quasiquote.kl" quasiquote unquote) 1]]
+
+-- Let for a single variable
+
+[define-macros
+  ([let1
+     [lambda
+       [stx]
+       (syntax-case stx
+         [[vec [_ pair body]]
+          (syntax-case pair
+            [[vec [idt expr]]
+             [pure `[[lambda [,idt] ,body] ,expr]]])])]])]
+
+[define id [lambda [x] x]]
+[example [let1 [my-id id] [my-id #f]]]
