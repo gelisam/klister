@@ -7,6 +7,7 @@ module Main where
 
 import Control.Lens hiding (List)
 import Control.Monad
+import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -17,6 +18,7 @@ import Test.Tasty.HUnit
 import Alpha
 import Core
 import Core.Builder
+import Evaluator (EvalResult(..))
 import Expander
 import Expander.Monad
 import Module
@@ -32,6 +34,7 @@ import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
+import Value
 import World
 
 main :: IO ()
@@ -221,10 +224,10 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
       [ testCase fn (testFile fn p)
       | (fn, p) <-
         [ ( "examples/small.kl"
-          , \m -> isEmpty (view moduleBody m)
+          , \m _ -> isEmpty (view moduleBody m)
           )
         , ( "examples/two-defs.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               filter (\case {(Define {}) -> True; _ -> False}) &
               \case
@@ -232,7 +235,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected two definitions"
           )
         , ( "examples/id-compare.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
               \case
@@ -242,7 +245,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected two examples"
           )
         , ( "examples/lang.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 [Define _fn fv fbody, Example e] -> do
@@ -255,7 +258,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected two examples"
           )
         , ( "examples/import.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               filter (\case {(Example _) -> True; _ -> False}) &
               \case
@@ -272,7 +275,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected two examples"
           )
         , ( "examples/phase1.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _,
@@ -283,7 +286,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
           )
         , ( "examples/imports-shifted-macro.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _, Import _, DefineMacros [(_, _, _)], Example ex] ->
@@ -291,7 +294,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected import, import, macro, example"
           )
         , ( "examples/macro-body-shift.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _, Define _ _ e, DefineMacros [(_, _, _)]] -> do
@@ -300,7 +303,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected an import, a definition, and a macro"
           )
         , ( "examples/quasiquote.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 (Import _ : DefineMacros [_, _] : Define _ _ thingDef : examples) -> do
@@ -314,7 +317,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
         , ( "examples/quasiquote-syntax-test.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 (Import _ : Define _ _ thingDef : examples) -> do
@@ -328,7 +331,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
         , ( "examples/hygiene.kl"
-          , \m ->
+          , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _, Import _, Define _ fun1 firstFun, DefineMacros [_], Define _ fun2 secondFun,
@@ -353,6 +356,12 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
 
                 _ -> assertFailure "Expected two imports, a def, a macro, a def, two examples, a macro, and an example"
           )
+        , ( "examples/defun.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [_, _] -> pure ()
+                _ -> assertFailure "Wrong number of examples in file"
+          )
         ]
       ]
     shouldn'tWork =
@@ -371,7 +380,6 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         ]
       ]
-
 
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
@@ -473,7 +481,7 @@ testExpansionFails input okp =
   where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 
-testFile :: FilePath -> (Module [] CompleteDecl -> Assertion) -> Assertion
+testFile :: FilePath -> (Module [] CompleteDecl -> [Value] -> Assertion) -> Assertion
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
@@ -489,7 +497,10 @@ testFile f p = do
           Just (KernelModule _) ->
             assertFailure "Expected user module, got kernel"
           Just (Expanded m) ->
-            p m
+            case Map.lookup mn (view worldEvaluated w) of
+              Nothing -> assertFailure "Module valuees not in its own expansion"
+              Just evalResults ->
+                p m [val | EvalResult _ _ val <- evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do

@@ -17,18 +17,23 @@ import SplitCore
 import Syntax
 import Value
 
+data MacroDest
+  = ExprDest SplitCorePtr
+  | DeclDest DeclPtr Scope DeclValidityPtr
+  deriving Show
+
 data ExpanderTask
-  = ExpandSyntax SplitCorePtr Syntax
-  | AwaitingSignal SplitCorePtr Signal [Closure]
-  | AwaitingMacro SplitCorePtr TaskAwaitMacro
+  = ExpandSyntax MacroDest Syntax
+  | AwaitingSignal MacroDest Signal [Closure]
+  | AwaitingMacro MacroDest TaskAwaitMacro
   | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | ExpandDecl DeclPtr Scope Syntax DeclValidityPtr
     -- ^ Where to put it, the scope, the decl, where to put the phase
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclValidityPtr
     -- Depends on the binding of the name(s) from the decl and the phase
-  | InterpretMacroAction SplitCorePtr MacroAction [Closure]
-  | ContinueMacroAction SplitCorePtr Value [Closure]
+  | InterpretMacroAction MacroDest MacroAction [Closure]
+  | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
   deriving (Show)
 

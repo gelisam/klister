@@ -1,0 +1,30 @@
+#lang "n-ary-app.kl"
+[import [shift "n-ary-app.kl" 1]]
+[import [shift "quasiquote.kl" 1]]
+
+[define fix
+  [lambda (fun)
+    ([lambda (rec) (fun [lambda (x) (rec rec x)])]
+     [lambda (rec) (fun [lambda (x) (rec rec x)])])]]
+
+[define-macros
+  ([defun
+    [lambda (stx)
+      (syntax-case stx
+        [[vec [_ f args body]]
+         [pure `[define ,f (fix [lambda (,f) [lambda ,args ,body]])]]]
+        [_ (syntax-error '"bad syntax" stx)])]])]
+
+[defun const (x y) x]
+
+[example (const 'a 'b)]
+
+[defun last-stx (stx)
+  (syntax-case stx
+    [[cons a d]
+     (syntax-case d
+       [() a]
+       [_ (last-stx d)])]
+    [_ stx])]
+
+[example (last-stx '(a b c d e f g))]
