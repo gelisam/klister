@@ -18,16 +18,11 @@ before_install:
 install:
  - cabal --version
  - echo "$(ghc --version) [$(ghc --print-project-git-commit-id 2> /dev/null || echo '?')]"
- - travis_retry cabal update
- - |
-   if [[ $CABALVER != "3.0" ]]; then
-     cabal install --only-dependencies --enable-tests
-   else
-     cabal install --only-dependencies
-   fi
+ - travis_retry cabal v2-update
+ - cabal v2-configure --enable-tests --enable-benchmarks -v2
+ - cabal v2-install --only-dependencies
 
 script:
- - cabal configure --enable-tests --enable-benchmarks -v2
- - cabal build
- - cabal test
+ - cabal v2-build
+ - cabal v2-test
  - cabal sdist   # tests that a source-distribution can be generated
