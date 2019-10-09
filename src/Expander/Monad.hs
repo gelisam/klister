@@ -34,6 +34,7 @@ module Expander.Monad
   , module Expander.Task
   , forkAwaitingDefn
   , forkAwaitingMacro
+  , forkAwaitingDeclMacro
   , forkAwaitingSignal
   , forkContinueMacroAction
   , forkExpandSyntax
@@ -132,7 +133,7 @@ data EValue
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
-  | EUserMacro !SyntacticCategory !MacroVar -- ^ For user-written macros
+  | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
 
@@ -307,18 +308,23 @@ forkExpanderTask task = do
   localState <- view expanderLocal
   overIORef expanderState expanderTasks ((tid, localState, task) :)
 
-forkExpandSyntax :: SplitCorePtr -> Syntax -> Expand ()
-forkExpandSyntax dest stx = do
+forkExpandSyntax :: MacroDest -> Syntax -> Expand ()
+forkExpandSyntax dest stx =
   forkExpanderTask $ ExpandSyntax dest stx
 
-forkAwaitingSignal :: SplitCorePtr -> Signal -> [Closure] -> Expand ()
-forkAwaitingSignal dest signal kont = do
+forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
+forkAwaitingSignal dest signal kont =
   forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
-forkAwaitingMacro b v x mdest dest stx = do
-  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
+forkAwaitingMacro b v x mdest dest stx =
+  forkExpanderTask $ AwaitingMacro (ExprDest dest) (TaskAwaitMacro b v x [mdest] mdest stx)
+
+forkAwaitingDeclMacro ::
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
+forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
+  forkExpanderTask $ AwaitingMacro (DeclDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -328,11 +334,11 @@ forkAwaitingDefn x n b defn dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn dest stx
 
 
-forkInterpretMacroAction :: SplitCorePtr -> MacroAction -> [Closure] -> Expand ()
+forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
   forkExpanderTask $ InterpretMacroAction dest act kont
 
-forkContinueMacroAction :: SplitCorePtr -> Value -> [Closure] -> Expand ()
+forkContinueMacroAction :: MacroDest -> Value -> [Closure] -> Expand ()
 forkContinueMacroAction dest value kont = do
   forkExpanderTask $ ContinueMacroAction dest value kont
 

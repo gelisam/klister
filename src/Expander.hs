@@ -75,7 +75,7 @@ import qualified ScopeSet
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  forkExpandSyntax dest stx
+  forkExpandSyntax (ExprDest dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
   return $ SplitCore { _splitCoreRoot = dest
@@ -362,7 +362,7 @@ initializeKernel = do
             exprDest <- liftIO $ newSplitCorePtr
             bind b (EIncompleteDefn var x exprDest)
             linkDecl dest (Define x var exprDest)
-            forkExpandSyntax exprDest expr
+            forkExpandSyntax (ExprDest exprDest) expr
             nowValidAt pdest (SpecificPhase p)
         )
       ,("define-macros"
@@ -390,7 +390,7 @@ initializeKernel = do
             Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
-            forkExpandSyntax exprDest (addScope p expr sc)
+            forkExpandSyntax (ExprDest exprDest) (addScope p expr sc)
             nowValidAt pdest (SpecificPhase p)
         )
       , ("import"
@@ -663,7 +663,7 @@ initializeKernel = do
     schedule :: Syntax -> Expand SplitCorePtr
     schedule stx = do
       dest <- liftIO newSplitCorePtr
-      forkExpandSyntax dest stx
+      forkExpandSyntax (ExprDest dest) stx
       return dest
 
     addToKernel name p b =
@@ -765,7 +765,11 @@ runTask :: (TaskID, ExpanderLocal, ExpanderTask) -> Expand ()
 runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
-      expandOneExpression dest stx
+      case dest of
+        ExprDest d ->
+          expandOneExpression d stx
+        DeclDest d sc ph ->
+          expandOneDeclaration sc d stx ph
     AwaitingSignal dest signal kont -> do
       signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
@@ -793,7 +797,7 @@ runTask (tid, localData, task) = withLocal localData $ do
               -- Extend the env!
               modifyState $ over (expanderCurrentTransformerEnvs . at p) $
                 Just . maybe tenv (<> tenv)
-              bind b $ EUserMacro ExprMacro v
+              bind b $ EUserMacro v
               forkExpandSyntax dest stx
     AwaitingDefn x n b defn dest stx ->
       Env.lookupVal x <$> currentEnv >>=
@@ -809,10 +813,10 @@ runTask (tid, localData, task) = withLocal localData $ do
               modifyState $ over (expanderCurrentEnvs . at p) $
                 Just . maybe env (<> env)
               bind b $ EVarMacro x
-              forkExpandSyntax dest stx
+              forkExpandSyntax (ExprDest dest) stx
         Just _v -> do
           bind b $ EVarMacro x
-          forkExpandSyntax dest stx
+          forkExpandSyntax (ExprDest dest) stx
     ExpandDecl dest sc stx ph ->
       expandOneDeclaration sc dest stx ph
     ExpandMoreDecls dest sc stx waitingOn -> do
@@ -884,7 +888,7 @@ expandOneExpression dest stx
           forkAwaitingMacro b transformerName sourceIdent mdest dest stx
         EIncompleteDefn x n d ->
           forkAwaitingDefn x n b d dest stx
-        EUserMacro ExprMacro transformerName -> do
+        EUserMacro transformerName -> do
           stepScope <- freshScope
           p <- currentPhase
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
@@ -898,11 +902,11 @@ expandOneExpression dest stx
                   res <- interpretMacroAction act
                   case res of
                     Left (sig, kont) -> do
-                      forkAwaitingSignal dest sig kont
+                      forkAwaitingSignal (ExprDest dest) sig kont
                     Right expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
-                          forkExpandSyntax dest (flipScope p expansionResult stepScope)
+                          forkExpandSyntax (ExprDest dest) (flipScope p expansionResult stepScope)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
@@ -911,7 +915,7 @@ expandOneExpression dest stx
               "No transformer yet created for " ++ shortShow ident ++
               " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
-        EUserMacro _otherCat _otherVal ->
+        EUserMacro _otherVal ->
           throwError $ InternalError $ "Invalid macro for expressions"
   | otherwise =
     case syntaxE stx of
@@ -946,10 +950,36 @@ expandOneDeclaration sc dest stx ph
           throwError $ InternalError "Current context won't accept expressions"
         EIncompleteDefn _ _ _ ->
           throwError $ InternalError "Current context won't accept expressions"
-        EUserMacro _ _impl ->
-          error "Unimplemented: user-defined macros - decl context"
-        EIncompleteMacro _ _ _ ->
-          error "Unimplemented: user-defined macros - decl context - incomplete"
+        EUserMacro transformerName -> do
+          stepScope <- freshScope
+          p <- currentPhase
+          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
+          case implV of
+            Just (ValueClosure macroImpl) -> do
+              macroVal <- inEarlierPhase $ expandEval $
+                          apply macroImpl $
+                          ValueSyntax $ addScope p stx stepScope
+              case macroVal of
+                ValueMacroAction act -> do
+                  res <- interpretMacroAction act
+                  case res of
+                    Left (sig, kont) -> do
+                      forkAwaitingSignal (DeclDest dest sc ph) sig kont
+                    Right expanded ->
+                      case expanded of
+                        ValueSyntax expansionResult ->
+                          forkExpandSyntax (DeclDest dest sc ph) (flipScope p expansionResult stepScope)
+                        other -> throwError $ ValueNotSyntax other
+                other ->
+                  throwError $ ValueNotMacro other
+            Nothing ->
+              throwError $ InternalError $
+              "No transformer yet created for " ++ shortShow ident ++
+              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
+            Just other -> throwError $ ValueNotMacro other
+
+        EIncompleteMacro transformerName sourceIdent mdest ->
+          forkAwaitingDeclMacro b transformerName sourceIdent mdest dest sc ph stx
   | otherwise =
     throwError $ InternalError "All declarations should be identifier-headed"
 
