@@ -127,7 +127,7 @@ loadModuleFile modName =
          when (not existsp) $ throwError $ NoSuchFile $ show file
          stx <- liftIO (readModule file) >>=
                 \case
-                  Left err -> throwError $ InternalError $ show err -- TODO
+                  Left err -> throwError $ ReaderError err
                   Right stx -> return stx
          m <- expandModule modName stx
          es <- view expanderModuleExports <$> getState
