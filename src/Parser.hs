@@ -43,7 +43,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> vec <|> ident <|> signal <|> bool <|> string <|> quoted <|> quasiquoted <|> unquoted
+expr = list <|> ident <|> signal <|> bool <|> string <|> quoted <|> quasiquoted <|> unquoted
 
 ident :: Parser Syntax
 ident =
@@ -56,23 +56,19 @@ signal =
      return $ Syntax $ Stx ScopeSet.empty srcloc (Sig s)
 
 list :: Parser Syntax
-list =
-  do Located loc1 _ <- located (literal "(")
-     xs <- many expr
-     Located loc2 _ <- located (literal ")")
-     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (List xs)
+list = parenned "(" ")" <|> parenned "[" "]"
+  where
+    parenned open close =
+      do Located loc1 _ <- located (literal open)
+         xs <- many expr
+         Located loc2 _ <- located (literal close)
+         return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (List xs)
 
 manyStx :: Parser Syntax -> Parser Syntax
 manyStx p =
   do Located loc xs <- located (many p)
      return $ Syntax $ Stx ScopeSet.empty loc (List xs)
 
-vec :: Parser Syntax
-vec =
-  do Located loc1 _ <- located (literal "[")
-     xs <- many expr
-     Located loc2 _ <- located (literal "]")
-     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) (Vec xs)
 
 bool :: Parser Syntax
 bool =
@@ -101,27 +97,27 @@ quoted =
   do Located loc1 _ <- lexeme (literal "'")
      e@(Syntax (Stx _ loc2 _)) <- expr
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
-       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "quote"))
-           , e
-           ]
+       List [ Syntax (Stx ScopeSet.empty loc1 (Id "quote"))
+            , e
+            ]
 
 quasiquoted :: Parser Syntax
 quasiquoted =
   do Located loc1 _ <- lexeme (literal "`")
      e@(Syntax (Stx _ loc2 _)) <- expr
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
-       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "quasiquote"))
-           , e
-           ]
+       List [ Syntax (Stx ScopeSet.empty loc1 (Id "quasiquote"))
+            , e
+            ]
 
 unquoted :: Parser Syntax
 unquoted =
   do Located loc1 _ <- lexeme (literal ",")
      e@(Syntax (Stx _ loc2 _)) <- expr
      return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
-       Vec [ Syntax (Stx ScopeSet.empty loc1 (Id "unquote"))
-           , e
-           ]
+       List [ Syntax (Stx ScopeSet.empty loc1 (Id "unquote"))
+            , e
+            ]
 
 
 -- | The identifier rules from R6RS Scheme, minus hex escapes

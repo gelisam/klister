@@ -2,15 +2,16 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList) where
+module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList, named) where
 
 import Prelude hiding (lookup)
 
 import Control.Lens
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Text (Text)
 
-import Syntax (Ident)
+import Syntax (Ident, Stx(..))
 
 newtype Env v a = Env (Map v (Ident, a))
   deriving (Eq, Functor, Monoid, Semigroup, Show)
@@ -35,6 +36,9 @@ lookupVal x env = snd <$> lookup x env
 
 lookupIdent :: Ord v => v -> Env v a -> Maybe Ident
 lookupIdent x env = fst <$> lookup x env
+
+named :: Text -> Env v a -> [(v, a)]
+named n (Env xs) = [(x, a) | (x, (Stx _ _ n', a)) <- Map.toList xs, n == n']
 
 type instance Index (Env v a) = v
 type instance IxValue (Env v a) = (Ident, a)

@@ -1,6 +1,6 @@
 #lang kernel
 
-[import [shift (only kernel cons-list-syntax lambda pure quote syntax-case vec-syntax export import) 1]]
+[import [shift (only kernel cons-list-syntax lambda pure quote syntax-case list-syntax export import) 1]]
 
 
 
@@ -18,23 +18,23 @@
                 [cons-list-syntax
                   [quote my-app]
                   [cons-list-syntax
-                    [vec-syntax [[quote #%app] fun arg0] stx]
+                    [list-syntax [[quote #%app] fun arg0] stx]
                     more-args
                     stx]
                   stx]]])])])]]
    [my-lam
     [lambda [stx]
      (syntax-case stx
-       [[vec [_ args body]]
+       [[list [_ args body]]
         (syntax-case args
           [() [pure body]]
           [[cons arg0 more-args]
-           [pure [vec-syntax [[quote lambda]
-                              [vec-syntax [arg0] arg0]
-                              [vec-syntax [[quote my-lam] more-args body] stx]]
-                          stx]]]
-          [[vec [arg]]
-           [pure [vec-syntax [[quote lambda] args body] stx]]])])]])]
+           [pure [list-syntax [[quote lambda]
+                               [list-syntax [arg0] arg0]
+                               [list-syntax [[quote my-lam] more-args body] stx]]
+                           stx]]]
+          [[list [arg]]
+           [pure [list-syntax [[quote lambda] args body] stx]]])])]])]
 
 [define-macros
   ([#%app
@@ -47,8 +47,8 @@
   ([lambda
     [lambda [stx]
      (syntax-case stx
-      [[vec [_ args body]]
-       [pure [vec-syntax [[quote my-lam] args body] stx]]])]])]
+      [[list [_ args body]]
+       [pure [list-syntax [[quote my-lam] args body] stx]]])]])]
 
 [define id [lambda (x) x]]
 
@@ -78,7 +78,7 @@
 [export if]
 [export syntax-error]
 [export syntax-case]
-[export vec-syntax]
+[export list-syntax]
 [export cons-list-syntax]
 [export empty-list-syntax]
 [export free-identifier=?]

@@ -43,35 +43,35 @@ mustBeModName (Syntax (Stx scs srcloc (Id "kernel"))) =
   return (Stx scs srcloc (KernelName kernelName))
 mustBeModName other = throwError (NotModName other)
 
-class MustBeVec a where
-  mustBeVec :: Syntax -> Expand (Stx a)
+class FixedLengthList a where
+  mustHaveEntries :: Syntax -> Expand (Stx a)
 
-instance MustBeVec () where
-  mustBeVec (Syntax (Stx scs srcloc (Vec []))) = return (Stx scs srcloc ())
-  mustBeVec other = throwError (NotRightLength 0 other)
+instance FixedLengthList () where
+  mustHaveEntries (Syntax (Stx scs srcloc (List []))) = return (Stx scs srcloc ())
+  mustHaveEntries other = throwError (NotRightLength 0 other)
 
-instance MustBeVec Syntax where
-  mustBeVec (Syntax (Stx scs srcloc (Vec [x]))) = return (Stx scs srcloc x)
-  mustBeVec other = throwError (NotRightLength 1 other)
+instance FixedLengthList Syntax where
+  mustHaveEntries (Syntax (Stx scs srcloc (List [x]))) = return (Stx scs srcloc x)
+  mustHaveEntries other = throwError (NotRightLength 1 other)
 
-instance MustBeVec (Syntax, Syntax) where
-  mustBeVec (Syntax (Stx scs srcloc (Vec [x, y]))) = return (Stx scs srcloc (x, y))
-  mustBeVec other = throwError (NotRightLength 2 other)
+instance FixedLengthList (Syntax, Syntax) where
+  mustHaveEntries (Syntax (Stx scs srcloc (List [x, y]))) = return (Stx scs srcloc (x, y))
+  mustHaveEntries other = throwError (NotRightLength 2 other)
 
-instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => MustBeVec (a, b, c) where
-  mustBeVec (Syntax (Stx scs srcloc (Vec [x, y, z]))) = return (Stx scs srcloc (x, y, z))
-  mustBeVec other = throwError (NotRightLength 3 other)
+instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => FixedLengthList (a, b, c) where
+  mustHaveEntries (Syntax (Stx scs srcloc (List [x, y, z]))) = return (Stx scs srcloc (x, y, z))
+  mustHaveEntries other = throwError (NotRightLength 3 other)
 
-instance MustBeVec (Syntax, Syntax, Syntax, Syntax) where
-  mustBeVec (Syntax (Stx scs srcloc (Vec [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
-  mustBeVec other = throwError (NotRightLength 4 other)
+instance FixedLengthList (Syntax, Syntax, Syntax, Syntax) where
+  mustHaveEntries (Syntax (Stx scs srcloc (List [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
+  mustHaveEntries other = throwError (NotRightLength 4 other)
 
-instance MustBeVec (Syntax, Syntax, Syntax, Syntax, Syntax) where
-  mustBeVec (Syntax (Stx scs srcloc (Vec [v, w, x, y, z]))) =
+instance FixedLengthList (Syntax, Syntax, Syntax, Syntax, Syntax) where
+  mustHaveEntries (Syntax (Stx scs srcloc (List [v, w, x, y, z]))) =
     return (Stx scs srcloc (v, w, x, y, z))
-  mustBeVec other = throwError (NotRightLength 5 other)
+  mustHaveEntries other = throwError (NotRightLength 5 other)
 
-instance MustBeVec [Syntax] where
-  mustBeVec (Syntax (Stx scs srcloc (Vec xs))) =
+instance FixedLengthList [Syntax] where
+  mustHaveEntries (Syntax (Stx scs srcloc (List xs))) =
     return (Stx scs srcloc xs)
-  mustBeVec other = throwError (NotVec other)
+  mustHaveEntries other = throwError (NotList other)

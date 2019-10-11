@@ -9,17 +9,11 @@ module Evaluator where
 import Control.Lens hiding (List, elements)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.RWS.Strict
-import Data.Foldable (for_)
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 
 import Core
 import Env
-import Module
-import Phase
 import Signals
 import Syntax
 import Value
@@ -71,94 +65,6 @@ data EvalResult =
              , resultValue :: Value
              }
   deriving (Eq, Show)
-
-
--- | Evaluate a module at some phase. Return the resulting
--- environments and transformer environments for each phase and the
--- closure and value for each example in the module.
-evalMod ::
-  Map Phase VEnv {- ^ The environments for each phase -} ->
-  Map Phase TEnv {- ^ The transformer environments for each phase -} ->
-  Phase          {- ^ The current phase -} ->
-  CompleteModule {- ^ The source code of a fully-expanded module -} ->
-  Eval ( Map Phase VEnv
-       , Map Phase TEnv
-       , [EvalResult]
-       )
-evalMod startingEnvs startingTransformers basePhase m =
-  case m of
-    KernelModule _p ->
-       -- Builtins go here, suitably shifted. There are no built-in
-       -- values yet, only built-in syntax, but this may change.
-      return (Map.empty, Map.empty, [])
-    Expanded em ->
-      fmap (\((x, y), z) -> (x, y, z)) $
-        execRWST (traverse evalDecl (view moduleBody em)) basePhase
-          (startingEnvs, startingTransformers)
-
-  where
-    currentEnv ::
-      Monoid w =>
-      RWST Phase w (Map Phase VEnv, other) Eval VEnv
-    currentEnv = do
-      p <- ask
-      envs <- fst <$> get
-      case Map.lookup p envs of
-        Nothing -> return Env.empty
-        Just env -> return env
-
-    extendCurrentEnv ::
-      Monoid w =>
-      Var -> Ident -> Value ->
-      RWST Phase w (Map Phase VEnv, other) Eval ()
-    extendCurrentEnv n x v = do
-      p <- ask
-      modify $ over _1 $ \envs ->
-        case Map.lookup p envs of
-          Just env -> Map.insert p (Env.insert n x v env) envs
-          Nothing -> Map.insert p (Env.singleton n x v) envs
-
-    extendCurrentTransformerEnv ::
-      Monoid w =>
-      MacroVar -> Ident -> Value ->
-      RWST Phase w (other, Map Phase TEnv) Eval ()
-    extendCurrentTransformerEnv n x v = do
-      p <- ask
-      modify $ over _2 $ \envs ->
-        case Map.lookup p envs of
-          Just env -> Map.insert p (Env.insert n x v env) envs
-          Nothing -> Map.insert p (Env.singleton n x v) envs
-
-
-    evalDecl ::
-      CompleteDecl ->
-      RWST Phase
-           [EvalResult]
-           (Map Phase VEnv, Map Phase TEnv)
-           Eval
-           ()
-    evalDecl (CompleteDecl d) = evalDecl' d
-      where
-      evalDecl' (Define x n e) = do
-        env <- currentEnv
-        v <- lift $ withEnv env (eval e)
-        extendCurrentEnv n x v
-      evalDecl' (Example expr) = do
-        env <- currentEnv
-        value <- lift $ withEnv env (eval expr)
-        tell $ [EvalResult { resultEnv = env
-                           , resultExpr = expr
-                           , resultValue = value
-                           }]
-      evalDecl' (DefineMacros macros) = do
-        env <- local prior currentEnv
-        for_ macros $ \(x, n, e) -> do
-          v <- lift $ withEnv env (eval e)
-          extendCurrentTransformerEnv n x v
-      evalDecl' (Meta decl) = local prior (evalDecl decl)
-      evalDecl' (Import _spec) = pure ()
-      evalDecl' (Export _x) = pure ()
-
 
 apply :: Closure -> Value -> Eval Value
 apply (Closure {..}) value = do
@@ -261,11 +167,6 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
             { _typeErrorExpected = "id"
             , _typeErrorActual   = "list"
             }
-        Vec _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "vec"
-            }
         Id name -> withScopeOf scope $ Id name
 eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
 eval (Core (CoreCons (ScopedCons hd tl scope))) = do
@@ -275,11 +176,6 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
     Syntax (Stx _ _ expr) ->
       case expr of
         List vs -> withScopeOf scope $ List $ hdSyntax : vs
-        Vec _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "vec"
-            }
         String _ ->
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "list"
@@ -300,8 +196,8 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
             { _typeErrorExpected = "list"
             , _typeErrorActual   = "signal"
             }
-eval (Core (CoreVec (ScopedVec elements scope))) = do
-  vec <- Vec <$> traverse evalAsSyntax elements
+eval (Core (CoreList (ScopedList elements scope))) = do
+  vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
 
 evalErrorType :: Text -> Value -> Eval a
@@ -368,9 +264,9 @@ doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
           withExtendedEnv nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs)))) $
           eval rhs
         _ -> next
-    match next (PatternVec xs) rhs =
+    match next (PatternList xs) rhs =
       \case
-        (ValueSyntax (Syntax (Stx _ _ (Vec vs))))
+        (ValueSyntax (Syntax (Stx _ _ (List vs))))
           | length vs == length xs ->
             withManyExtendedEnv [(n, x, (ValueSyntax v))
                                 | (n,x) <- xs

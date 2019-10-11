@@ -39,7 +39,7 @@ data Pattern
   = PatternIdentifier Ident Var
   | PatternEmpty
   | PatternCons Ident Var Ident Var
-  | PatternVec [(Ident, Var)]
+  | PatternList [(Ident, Var)]
   | PatternAny
   deriving (Eq, Show)
 makePrisms ''Pattern
@@ -65,12 +65,12 @@ data ScopedCons core = ScopedCons
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedCons
 
-data ScopedVec core = ScopedVec
-  { _scopedVecElements :: [core]
-  , _scopedVecScope    :: core
+data ScopedList core = ScopedList
+  { _scopedListElements :: [core]
+  , _scopedListScope    :: core
   }
   deriving (Eq, Functor, Foldable, Show, Traversable)
-makeLenses ''ScopedVec
+makeLenses ''ScopedList
 
 data HowEq = Free | Bound
   deriving (Eq, Show)
@@ -95,7 +95,7 @@ data CoreF core
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
-  | CoreVec (ScopedVec core)
+  | CoreList (ScopedList core)
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 
@@ -182,8 +182,8 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreCons scopedCons1)
              (CoreCons scopedCons2) = do
     alphaCheck scopedCons1 scopedCons2
-  alphaCheck (CoreVec scopedVec1)
-             (CoreVec scopedVec2) = do
+  alphaCheck (CoreList scopedVec1)
+             (CoreList scopedVec2) = do
     alphaCheck scopedVec1 scopedVec2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -203,8 +203,8 @@ instance AlphaEq Pattern where
              (PatternCons _ x2 _ xs2) = do
     alphaCheck x1   x2
     alphaCheck xs1  xs2
-  alphaCheck (PatternVec xs1)
-             (PatternVec xs2) = do
+  alphaCheck (PatternList xs1)
+             (PatternList xs2) = do
     alphaCheck (map snd xs1) (map snd xs2)
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -226,9 +226,9 @@ instance AlphaEq core => AlphaEq (ScopedCons core) where
     alphaCheck tl1    tl2
     alphaCheck scope1 scope2
 
-instance AlphaEq core => AlphaEq (ScopedVec core) where
-  alphaCheck (ScopedVec elements1 scope1)
-             (ScopedVec elements2 scope2) = do
+instance AlphaEq core => AlphaEq (ScopedList core) where
+  alphaCheck (ScopedList elements1 scope1)
+             (ScopedList elements2 scope2) = do
     alphaCheck elements1 elements2
     alphaCheck scope1    scope2
 
@@ -323,8 +323,8 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(Cons "
    ++ shortShow scopedCons
    ++ ")"
-  shortShow (CoreVec scopedVec)
-    = "(Vec "
+  shortShow (CoreList scopedVec)
+    = "(List "
    ++ shortShow scopedVec
    ++ ")"
 
@@ -340,8 +340,8 @@ instance ShortShow Pattern where
    ++ " "
    ++ shortShow xs
    ++ ")"
-  shortShow (PatternVec xs)
-    = "(Vec "
+  shortShow (PatternList xs)
+    = "(List "
    ++ shortShow (map snd xs)
    ++ ")"
   shortShow PatternAny = "_"
@@ -370,9 +370,9 @@ instance ShortShow core => ShortShow (ScopedCons core) where
    ++ shortShow scope
    ++ ")"
 
-instance ShortShow core => ShortShow (ScopedVec core) where
-  shortShow (ScopedVec elements scope)
-    = "(ScopedVec "
+instance ShortShow core => ShortShow (ScopedList core) where
+  shortShow (ScopedList elements scope)
+    = "(ScopedList "
    ++ shortShow elements
    ++ " "
    ++ shortShow scope

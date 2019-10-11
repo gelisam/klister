@@ -72,7 +72,7 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotRightLength len stx) =
     hang 2 $ group $
-    vsep [ text "Expected" <+> viaShow len <+> text "entries between square brackets, but got"
+    vsep [ text "Expected" <+> viaShow len <+> text "entries between parentheses, but got"
          , pp env stx
          ]
   pp env (NotVec stx) =

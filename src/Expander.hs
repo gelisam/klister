@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
@@ -36,6 +37,7 @@ module Expander (
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.Writer
 import Data.Foldable
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
@@ -164,41 +166,65 @@ getImports (PrefixImports spec pref) =
 
 visit :: ModuleName -> Expand Exports
 visit modName = do
-  (world', m, es) <-
+  (m, es) <-
     do world <- view expanderWorld <$> getState
        case view (worldModules . at modName) world of
          Just m -> do
            let es = maybe noExports id (view (worldExports . at modName) world)
-           return (world, m, es)
+           return (m, es)
          Nothing -> do
            (m, es) <- inPhase runtime $ loadModuleFile modName
-           w <- view expanderWorld <$> getState
-           return (w, m, es)
+           return (m, es)
   p <- currentPhase
   let i = phaseNum p
   visitedp <- Set.member p .
               view (expanderWorld . worldVisited . at modName . non Set.empty) <$>
               getState
   unless visitedp $ do
-    let m' = shift i m
-    let envs = view worldEnvironments world'
-    let tenvs = view worldTransformerEnvironments world'
-    (moreEnvs, transformerEnvs, evalResults) <- expandEval $ evalMod envs tenvs p m'
-    modifyState $
-      set (expanderWorld . worldVisited . at modName . non Set.empty . at p)
-          (Just ())
-    modifyState $
-      over (expanderWorld . worldEnvironments) (Map.unionWith (<>) moreEnvs)
-    modifyState $
-      over (expanderWorld . worldTransformerEnvironments) (Map.unionWith (<>) transformerEnvs)
-
+    let m' = shift i m -- Shift the syntax literals in the module source code
+    evalResults <- inPhase p $ evalMod m'
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
           (Just evalResults)
-
-
   return (shift i es)
 
+-- | Evaluate an expanded module at the current expansion phase,
+-- recursively loading its run-time dependencies.
+evalMod :: CompleteModule -> Expand [EvalResult]
+evalMod (KernelModule _) =
+  -- Builtins go here, suitably shifted. There are no built-in values
+  -- yet, only built-in syntax, but this may change.
+  return []
+evalMod (Expanded em) = snd <$> runWriterT (traverse_ evalDecl (view moduleBody em))
+  where
+    evalDecl (CompleteDecl d) =
+      case d of
+        Define x n e -> do
+          val <- lift $ expandEval (eval e)
+          p <- lift currentPhase
+          lift $ modifyState $
+            over (expanderWorld . worldEnvironments . at p . non Env.empty) $
+              Env.insert n x val
+        Example expr -> do
+          env <- lift currentEnv
+          value <- lift $ expandEval (eval expr)
+          tell $ [EvalResult { resultEnv = env
+                             , resultExpr = expr
+                             , resultValue = value
+                             }]
+
+        DefineMacros macros -> do
+          p <- lift currentPhase
+          lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
+            v <- expandEval (eval e)
+            modifyState $
+              over (expanderWorld . worldTransformerEnvironments . at p . non Env.empty) $
+                Env.insert n x v
+        Meta decl -> do
+          ((), out) <- lift $ inEarlierPhase (runWriterT $ evalDecl decl)
+          tell out
+        Import spec -> lift $ getImports spec >> pure () -- for side effect of evaluating module
+        Export _ -> pure ()
 
 freshBinding :: Expand Binding
 freshBinding = Binding <$> liftIO newUnique
@@ -229,7 +255,7 @@ currentTransformerEnv = do
 currentEnv :: Expand VEnv
 currentEnv = do
   phase <- currentPhase
-  globalEnv <- maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
+  globalEnv <-  maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
   localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
   return (globalEnv <> localEnv)
 
@@ -337,7 +363,7 @@ initializeKernel = do
               Nothing -> do
                 bodyPtr <- liftIO newModBodyPtr
                 modifyState $ set expanderModuleTop (Just bodyPtr)
-                Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustBeVec stx
+                Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustHaveEntries stx
                 _actualName <- mustBeIdent name
 
                 resolveImports imports
@@ -354,7 +380,7 @@ initializeKernel = do
       [ ("define"
         , \ sc dest pdest stx -> do
             p <- currentPhase
-            Stx _ _ (_, varStx, expr) <- mustBeVec stx
+            Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
             x <- flip (addScope p) sc <$> mustBeIdent varStx
             b <- freshBinding
             addDefinedBinding x b
@@ -367,11 +393,11 @@ initializeKernel = do
         )
       ,("define-macros"
         , \ sc dest pdest stx -> do
-            Stx _ _ (_ :: Syntax, macroList) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
             Stx _ _ macroDefs <- mustBeList macroList
             p <- currentPhase
             macros <- for macroDefs $ \def -> do
-              Stx _ _ (mname, mdef) <- mustBeVec def
+              Stx _ _ (mname, mdef) <- mustHaveEntries def
               theName <- flip addScope' sc <$> mustBeIdent mname
               b <- freshBinding
               addDefinedBinding theName b
@@ -387,7 +413,7 @@ initializeKernel = do
       , ("example"
         , \ sc dest pdest stx -> do
             p <- currentPhase
-            Stx _ _ (_ :: Syntax, expr) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
             linkDecl dest (Example exprDest)
             forkExpandSyntax (ExprDest exprDest) (addScope p expr sc)
@@ -396,7 +422,7 @@ initializeKernel = do
       , ("import"
          -- TODO Make import spec language extensible and use bindings rather than literals
         , \sc dest pdest stx -> do
-            Stx scs loc (_ :: Syntax, toImport) <- mustBeVec stx
+            Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
             spec <- importSpec toImport
             modExports <- getImports spec
             flip forExports_ modExports $ \p x b -> inPhase p do
@@ -407,7 +433,7 @@ initializeKernel = do
         )
       , ("export"
         , \_sc dest pdest stx -> do
-            Stx _ _ (_ :: Syntax, ident) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, ident) <- mustHaveEntries stx
             exported@(Stx _ _ x) <- mustBeIdent ident
             p <- currentPhase
             b <- resolve exported
@@ -417,7 +443,7 @@ initializeKernel = do
         )
       , ("meta"
         , \sc dest pdest stx -> do
-            Stx _ _ (_ :: Syntax, subDecl) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
             subDest <- liftIO newDeclPtr
             linkDecl dest (Meta subDest)
             inEarlierPhase $
@@ -441,14 +467,6 @@ initializeKernel = do
           | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
               subSpec <- importSpec spec
               RenameImports subSpec <$> traverse getRename renamings
-          | otherwise = throwError $ NotImportSpec stx
-          where
-            getRename s = do
-              Stx _ _ (old', new') <- mustBeVec s
-              old <- mustBeIdent old'
-              new <- mustBeIdent new'
-              return (old, new)
-        importSpec stx@(Syntax (Stx _ _ (Vec elts)))
           | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Sig (Signal i)))] <- elts = do
               subSpec <- importSpec spec
               return $ ShiftImports subSpec (fromIntegral i)
@@ -457,6 +475,12 @@ initializeKernel = do
             Stx _ _ p <- mustBeIdent prefix
             return $ PrefixImports subSpec p
           | otherwise = throwError $ NotImportSpec stx
+          where
+            getRename s = do
+              Stx _ _ (old', new') <- mustHaveEntries s
+              old <- mustBeIdent old'
+              new <- mustBeIdent new'
+              return (old, new)
         importSpec other = throwError $ NotImportSpec other
 
 
@@ -467,8 +491,8 @@ initializeKernel = do
         )
       , ( "lambda"
         , \ dest stx -> do
-            Stx _ _ (_, arg, body) <- mustBeVec stx
-            Stx _ _ theArg <- mustBeVec arg
+            Stx _ _ (_, arg, body) <- mustHaveEntries stx
+            Stx _ _ theArg <- mustHaveEntries arg
             (sc, arg', coreArg) <- prepareVar theArg
             p <- currentPhase
             psc <- phaseRoot
@@ -477,20 +501,20 @@ initializeKernel = do
         )
       , ( "#%app"
         , \ dest stx -> do
-            Stx _ _ (_, fun, arg) <- mustBeVec stx
+            Stx _ _ (_, fun, arg) <- mustHaveEntries stx
             funDest <- schedule fun
             argDest <- schedule arg
             linkExpr dest $ CoreApp funDest argDest
         )
       , ( "pure"
         , \ dest stx -> do
-            Stx _ _ (_ :: Syntax, v) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, v) <- mustHaveEntries stx
             argDest <- schedule v
             linkExpr dest $ CorePure argDest
         )
       , ( ">>="
         , \ dest stx -> do
-            Stx _ _ (_, act, cont) <- mustBeVec stx
+            Stx _ _ (_, act, cont) <- mustHaveEntries stx
             actDest <- schedule act
             contDest <- schedule cont
             linkExpr dest $ CoreBind actDest contDest
@@ -505,85 +529,85 @@ initializeKernel = do
         )
       , ( "send-signal"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, sig) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
             sigDest <- schedule sig
             linkExpr dest $ CoreSendSignal sigDest
         )
       , ( "wait-signal"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, sig) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
             sigDest <- schedule sig
             linkExpr dest $ CoreWaitSignal sigDest
         )
       , ( "bound-identifier=?"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
             newE <- CoreIdentEq Bound <$> schedule id1 <*> schedule id2
             linkExpr dest newE
         )
       , ( "free-identifier=?"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, id1, id2) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
             newE <- CoreIdentEq Free <$> schedule id1 <*> schedule id2
             linkExpr dest newE
         )
       , ( "quote"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, quoted) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
             linkExpr dest $ CoreSyntax quoted
         )
       , ( "if"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, b, t, f) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, b, t, f) <- mustHaveEntries stx
             linkExpr dest =<< CoreIf <$> schedule b <*> schedule t <*> schedule f
         )
       , ( "ident"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, someId) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, someId) <- mustHaveEntries stx
             x@(Stx _ _ _) <- mustBeIdent someId
             linkExpr dest $ CoreIdentifier x
         )
       , ( "ident-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, someId, source) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, someId, source) <- mustHaveEntries stx
             idDest <- schedule someId
             sourceDest <- schedule source
             linkExpr dest $ CoreIdent $ ScopedIdent idDest sourceDest
         )
       , ( "empty-list-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, source) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, source) <- mustHaveEntries stx
             sourceDest <- schedule source
             linkExpr dest $ CoreEmpty $ ScopedEmpty sourceDest
         )
       , ( "cons-list-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, car, cdr, source) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, car, cdr, source) <- mustHaveEntries stx
             carDest <- schedule car
             cdrDest <- schedule cdr
             sourceDest <- schedule source
             linkExpr dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
         )
-      , ( "vec-syntax"
+      , ( "list-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, vec, source) <- mustBeVec stx
-            Stx _ _ vecItems <- mustBeVec vec
-            vecDests <- traverse schedule vecItems
+            Stx _ _ (_ :: Syntax, list, source) <- mustHaveEntries stx
+            Stx _ _ listItems <- mustHaveEntries list
+            listDests <- traverse schedule listItems
             sourceDest <- schedule source
-            linkExpr dest $ CoreVec $ ScopedVec vecDests sourceDest
+            linkExpr dest $ CoreList $ ScopedList listDests sourceDest
         )
       , ( "syntax-case"
         , \dest stx -> do
             Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
             Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
             scrutDest <- schedule scrutinee
-            patternDests <- traverse (mustBeVec >=> expandPatternCase) patterns
+            patternDests <- traverse (mustHaveEntries >=> expandPatternCase) patterns
             linkExpr dest $ CoreCase scrutDest patternDests
         )
       , ( "let-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, macro, body) <- mustBeVec stx
-            Stx _ _ (mName, mdef) <- mustBeVec macro
+            Stx _ _ (_ :: Syntax, macro, body) <- mustHaveEntries stx
+            Stx _ _ (mName, mdef) <- mustHaveEntries macro
             sc <- freshScope
             m <- mustBeIdent mName
             p <- currentPhase
@@ -603,7 +627,7 @@ initializeKernel = do
         )
       , ( "log"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, message) <- mustBeVec stx
+            Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
             msgDest <- schedule message
             linkExpr dest $ CoreLog msgDest
         )
@@ -614,23 +638,23 @@ initializeKernel = do
     expandPatternCase (Stx _ _ (lhs, rhs)) = do
       p <- currentPhase
       case lhs of
-        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "ident")),
-                              patVar])) -> do
+        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "ident")),
+                               patVar])) -> do
           (sc, x', var) <- prepareVar patVar
           let rhs' = addScope p rhs sc
           rhsDest <- schedule rhs'
           let patOut = PatternIdentifier x' var
           return (patOut, rhsDest)
-        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "vec")),
-                              Syntax (Stx _ _ (Vec vars))])) -> do
+        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
+                               Syntax (Stx _ _ (List vars))])) -> do
           varInfo <- traverse prepareVar vars
           let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
           rhsDest <- schedule rhs'
-          let patOut = PatternVec [(ident, var) | (_, ident, var) <- varInfo]
+          let patOut = PatternList [(ident, var) | (_, ident, var) <- varInfo]
           return (patOut, rhsDest)
-        Syntax (Stx _ _ (Vec [Syntax (Stx _ _ (Id "cons")),
-                              car,
-                              cdr])) -> do
+        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "cons")),
+                               car,
+                               cdr])) -> do
           (sc, car', carVar) <- prepareVar car
           (sc', cdr', cdrVar) <- prepareVar cdr
           let rhs' = addScope p (addScope p rhs sc) sc'
@@ -740,8 +764,6 @@ forkExpandDecls _dest _other =
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
 identifierHeaded (Syntax (Stx _ _ (List (h:_))))
-  | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
-identifierHeaded (Syntax (Stx _ _ (Vec (h:_))))
   | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
 identifierHeaded _ = Nothing
 
@@ -883,7 +905,6 @@ expandOneExpression dest stx
             Sig _ -> error "Impossible - signal not ident"
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression dest (addApp List stx xs)
-            Vec xs -> expandOneExpression dest (addApp Vec stx xs)
         EIncompleteMacro transformerName sourceIdent mdest -> do
           forkAwaitingMacro b transformerName sourceIdent mdest dest stx
         EIncompleteDefn x n d ->
@@ -915,11 +936,8 @@ expandOneExpression dest stx
               "No transformer yet created for " ++ shortShow ident ++
               " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
-        EUserMacro _otherVal ->
-          throwError $ InternalError $ "Invalid macro for expressions"
   | otherwise =
     case syntaxE stx of
-      Vec xs -> expandOneExpression dest (addApp Vec stx xs)
       List xs -> expandOneExpression dest (addApp List stx xs)
       Sig s -> expandLiteralSignal dest s
       Bool b -> linkExpr dest (CoreBool b)
@@ -1032,15 +1050,23 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
   id1 <- getIdent v1
   id2 <- getIdent v2
   case how of
-    Free -> do
-      b1 <- resolve id1
-      b2 <- resolve id2
-      return $ Right $ ValueBool $ b1 == b2
-    Bound -> do
+    Free ->
+      compareFree id1 id2
+        `catchError`
+        \case
+          -- Ambiguous bindings should not crash the comparison -
+          -- they're just not free-identifier=?.
+          Ambiguous _ _ _ -> return $ Right $ ValueBool $ False
+          e -> throwError e
+    Bound ->
       return $ Right $ ValueBool $ view stxScopeSet id1 == view stxScopeSet id2
   where
     getIdent (ValueSyntax stx) = mustBeIdent stx
     getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+    compareFree id1 id2 = do
+      b1 <- resolve id1
+      b2 <- resolve id2
+      return $ Right $ ValueBool $ b1 == b2
     opName =
       case how of
         Free  -> "free-identifier=?"
