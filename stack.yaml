@@ -1,6 +1,5 @@
-resolver: lts-13.26
+resolver: lts-14.8
 packages:
 - .
-allow-newer: true
-extra-deps:
- - tasty-hedgehog-1.0.0.1@sha256:cdcf60a29195bd0d819d3018c11db2e0deb7c6e559ad940c49409a5a7a982f83,1766
+
+
