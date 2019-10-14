@@ -1,6 +1,6 @@
 #lang "n-ary-app.kl"
 [import [shift "n-ary-app.kl" 1]]
-[import [shift "quasiquote.kl" 1]]
+
 
 [define fix
   [lambda (fun)
@@ -11,8 +11,8 @@
   ([defun
     [lambda (stx)
       (syntax-case stx
-        [[vec [_ f args body]]
-         [pure `[define ,f (fix [lambda (,f) [lambda ,args ,body]])]]]
+        [[list [_ f args body]]
+         (pure (list-syntax ('define f (list-syntax ('fix (list-syntax ('lambda (list-syntax (f) f) (list-syntax ('lambda args body) stx)) stx)) stx)) stx))]
         [_ (syntax-error '"bad syntax" stx)])]])]
 
 [defun const (x y) x]
@@ -28,3 +28,5 @@
     [_ stx])]
 
 [example (last-stx '(a b c d e f g))]
+
+[export defun]

@@ -127,7 +127,7 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreIdent x) = pp env x
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
-  pp env (CoreVec e) = pp env e
+  pp env (CoreList e) = pp env e
 
 instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
   pp env err =
@@ -149,7 +149,7 @@ instance PrettyBinder VarInfo Pattern where
              annotate (BindingSite va) (text xa) <+>
              annotate (BindingSite vd) (text xd)),
      Env.insert vd idd () $ Env.singleton va ida ())
-  ppBind _env (PatternVec vars) =
+  ppBind _env (PatternList vars) =
     (vec $
      hsep [annotate (BindingSite v) (text x)
           | (Stx _ _ x, v) <- vars
@@ -174,10 +174,10 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedCons core) where
             pp env (view scopedConsTail pair)) <>
     angles (pp env (view scopedConsScope pair))
 
-instance Pretty VarInfo core => Pretty VarInfo (ScopedVec core) where
+instance Pretty VarInfo core => Pretty VarInfo (ScopedList core) where
   pp env xs =
-    vec (hsep $ map (pp env) (view scopedVecElements xs)) <>
-    angles (pp env (view scopedVecScope xs))
+    vec (hsep $ map (pp env) (view scopedListElements xs)) <>
+    angles (pp env (view scopedListScope xs))
 
 instance PrettyBinder VarInfo CompleteDecl where
   ppBind env (CompleteDecl d) = ppBind env d
@@ -267,7 +267,6 @@ instance Pretty VarInfo (ExprF Syntax) where
   pp _   (Sig s)    = viaShow s
   pp _   (Bool b)   = text $ if b then "#true" else "#false"
   pp env (List xs)  = parens (group (vsep (map (pp env . syntaxE) xs)))
-  pp env (Vec xs)   = brackets (group (vsep (map (pp env . syntaxE) xs)))
 
 instance Pretty VarInfo Closure where
   pp _ _ = text "#<closure>"

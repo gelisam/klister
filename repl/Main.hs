@@ -124,26 +124,27 @@ repl ctx startWorld = do
   forever $
     do putStr "> "
        l <- T.getLine
-       tryCommand theWorld l $ \l' -> case readExpr "<repl>" l' of
-         Left err -> T.putStrLn err
-         Right ok ->
-           do putStrLn "Parser output:"
-              T.putStrLn (syntaxText ok)
-              c <- execExpand (expandExpr ok) ctx
-              case c of
-                Left err -> putStr "Expander error: " *>
-                            prettyPrintLn err
-                Right (unsplit -> out) -> do
-                  putStrLn "Expander Output:"
-                  print out
-                  case runPartialCore out of
-                    Nothing -> putStrLn "Expression incomplete, can't evaluate"
-                    Just expr -> do
-                      putStrLn "Complete expression in core:"
-                      prettyPrint expr
-                      putStrLn ""
-                      currentWorld <- readIORef theWorld
-                      runExceptT (runReaderT (runEval (eval expr)) (phaseEnv runtime currentWorld)) >>=
-                        \case
-                          Left evalErr -> print evalErr
-                          Right val -> prettyPrint val >> putStrLn ""
+       tryCommand theWorld l $ \l' ->
+         case readExpr "<repl>" l' of
+           Left err -> T.putStrLn err
+           Right ok ->
+             do putStrLn "Parser output:"
+                T.putStrLn (syntaxText ok)
+                c <- execExpand (expandExpr ok) ctx
+                case c of
+                  Left err -> putStr "Expander error: " *>
+                              prettyPrintLn err
+                  Right (unsplit -> out) -> do
+                    putStrLn "Expander Output:"
+                    print out
+                    case runPartialCore out of
+                      Nothing -> putStrLn "Expression incomplete, can't evaluate"
+                      Just expr -> do
+                        putStrLn "Complete expression in core:"
+                        prettyPrint expr
+                        putStrLn ""
+                        currentWorld <- readIORef theWorld
+                        runExceptT (runReaderT (runEval (eval expr)) (phaseEnv runtime currentWorld)) >>=
+                          \case
+                            Left evalErr -> print evalErr
+                            Right val -> prettyPrint val >> putStrLn ""

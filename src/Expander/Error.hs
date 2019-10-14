@@ -5,6 +5,7 @@ module Expander.Error where
 import Control.Lens
 import Numeric.Natural
 import Data.Text (Text)
+import qualified Data.Text as T
 
 import Core
 import Evaluator
@@ -37,6 +38,7 @@ data ExpansionErr
   | InternalError String
   | NoSuchFile String
   | NotExported Ident Phase
+  | ReaderError Text
   deriving (Show)
 
 instance Pretty VarInfo ExpansionErr where
@@ -70,7 +72,7 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotRightLength len stx) =
     hang 2 $ group $
-    vsep [ text "Expected" <+> viaShow len <+> text "entries between square brackets, but got"
+    vsep [ text "Expected" <+> viaShow len <+> text "entries between parentheses, but got"
          , pp env stx
          ]
   pp env (NotVec stx) =
@@ -106,3 +108,5 @@ instance Pretty VarInfo ExpansionErr where
                           ]
   pp _env (InternalError str) =
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
+  pp _env (ReaderError txt) =
+    vsep (map text (T.lines txt))

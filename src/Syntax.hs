@@ -32,7 +32,6 @@ data ExprF a
   | Sig Signal
   | Bool Bool
   | List [a]
-  | Vec [a]
   deriving (Eq, Functor, Show)
 makePrisms ''ExprF
 
@@ -75,7 +74,6 @@ instance HasScopes Syntax where
       mapRec (Sig s) = Sig s
       mapRec (Bool b) = Bool b
       mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
-      mapRec (Vec xs) = Vec $ map (\stx -> mapScopes f stx) xs
 
 instance Phased (Stx Text) where
   shift i = mapScopes (shift i)
@@ -112,10 +110,6 @@ syntaxText (Syntax (Stx _ _ e)) = go e
     go (Sig s) = T.pack (show s)
     go (Bool b) = if b then "#true" else "#false"
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
-    go (Vec xs) = "[" <> T.intercalate " " (map syntaxText xs) <> "]"
-
-
-
 
 instance AlphaEq a => AlphaEq (Stx a) where
   alphaCheck (Stx scopeSet1 srcLoc1 x1)
@@ -130,9 +124,6 @@ instance AlphaEq a => AlphaEq (ExprF a) where
     alphaCheck x1 x2
   alphaCheck (List xs1)
              (List xs2) = do
-    alphaCheck xs1 xs2
-  alphaCheck (Vec xs1)
-             (Vec xs2) = do
     alphaCheck xs1 xs2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -150,7 +141,6 @@ instance ShortShow a => ShortShow (ExprF a) where
   shortShow (String s) = show s
   shortShow (Bool b) = if b then "#true" else "#false"
   shortShow (List xs) = shortShow xs
-  shortShow (Vec xs) = shortShow xs
   shortShow (Sig s) = shortShow s
 
 instance ShortShow Syntax where

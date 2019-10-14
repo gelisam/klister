@@ -7,7 +7,7 @@
 [define-macros
   ([thingp [lambda [stx]
              (syntax-case stx
-               [[vec [_ x]]
+               [[list [_ x]]
                 [>>= [free-identifier=? [quote thing] x]
                      [lambda [ok]
                        [if ok [pure [quote #true]] [pure [quote #false]]]]]])]])]

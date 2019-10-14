@@ -11,8 +11,8 @@
 [example `[thing]]
 [example `[,thing]]
 
-[example `[vec-syntax [,thing thing] thing]]
+[example `[list-syntax [,thing thing] thing]]
 
-[example `[vec-syntax [,thing thing ()] thing]]
+[example `[list-syntax [,thing thing ()] thing]]
 
 [example `(thing ,thing thing)]

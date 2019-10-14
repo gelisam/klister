@@ -79,7 +79,7 @@
     "ident-syntax"
     "empty-list-syntax"
     "cons-list-syntax"
-    "vec-syntax"
+    "list-syntax"
     "syntax-case"
     "let-syntax"))
 

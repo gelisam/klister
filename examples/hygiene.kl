@@ -16,8 +16,8 @@
   ([should-not-capture
     [lambda (stx)
       (syntax-case stx
-        [[vec [_ body]]
-         [pure `[lambda (fun) ,body]]]
+        [[list [_ body]]
+         [pure `(lambda (fun) ,body)]]
         [_ (syntax-error '"bad syntax" stx)])]])]
 
 [example ([should-not-capture fun] [lambda (x y) x] 'a 'b)]
