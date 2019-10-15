@@ -58,9 +58,10 @@
 
 % patterns
 \newcommand{\patIdent}[1]{\texttt{ident}\;#1}
-\newcommand{\patVec}[1]{\texttt{vec}\;\brackets{#1}}
+\newcommand{\patList}[1]{\texttt{list}\;\brackets{#1}}
 \newcommand{\patCons}[2]{\texttt{cons}\;\brackets{#1\;#2}}
 \newcommand{\patEmpty}{\texttt{empty}}
+\newcommand{\patAny}{\texttt{\_}}
 
 % expressions
 \newcommand{\eLam}[2]{\lambda #1.\;#2}
@@ -209,13 +210,13 @@ identifier $x$ and makes it available on the RHS of the match:
 \begin{code}
     PatternIdentifier _ var -> bindVarIn phase var
 \end{code}
-The pattern $\patVec{x_1\;\ldots\;x_n}$ matches a vector of syntax objects of
+The pattern $\patList{x_1\;\ldots\;x_n}$ matches a vector of syntax objects of
 length $n$:
 \begin{equation*}
-  \frac{}{\pat{\Gamma}{\patVec{x_1\;\ldots\;x_n}}{\Gamma,x_1,\ldots,x_n}}
+  \frac{}{\pat{\Gamma}{\patList{x_1\;\ldots\;x_n}}{\Gamma,x_1,\ldots,x_n}}
 \end{equation*}
 \begin{code}
-    PatternVec pairs -> bindVarsIn phase (map snd pairs)
+    PatternList pairs -> bindVarsIn phase (map snd pairs)
 \end{code}
 The pattern $\patCons{x}{y}$ matches a cons cell of syntax objects:
 \begin{equation*}
@@ -232,6 +233,14 @@ no new variables in the context:
 \end{equation*}
 \begin{code}
     PatternEmpty -> id
+\end{code}
+The wildcard pattern $\patAny$ matches any syntax object, but doesn't provide a
+ binding for it:
+\begin{equation*}
+  \frac{}{\pat{\Gamma}{\patAny}{\Gamma}}
+\end{equation*}
+\begin{code}
+    PatternAny -> id
 \end{code}
 
 \subsection{Well-scoped expressions}
@@ -291,6 +300,7 @@ All other expressions are well-scoped when their subtrees are:
   \wellScopedRecIII{\eIf} \\
 \end{gather*}
 \begin{code}
+      CoreLog e0 -> inSameContext [e0]
       CoreApp e0 e1 -> inSameContext [e0, e1]
       CorePure e0 -> inSameContext [e0]
       CoreBind e0 e1 -> inSameContext [e0, e1]
@@ -310,7 +320,7 @@ All other expressions are well-scoped when their subtrees are:
         inSameContext [e0]
       CoreCons (ScopedCons head tail pos) ->
         inSameContext [head, tail, pos]
-      CoreVec (ScopedVec elements pos) ->
+      CoreList (ScopedList elements pos) ->
         inSameContext (pos : elements)
 \end{code}
 
