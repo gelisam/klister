@@ -102,7 +102,6 @@ import Signals
 import SplitCore
 import Scope
 import ScopeCheck.Evidence
-import Schedule
 import Syntax
 import Value
 import World
@@ -397,17 +396,7 @@ getDecl ptr =
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
 
-instance Schedule Expand where
-  type Todo Expand = PhasedTodo SplitCore
-  schedule pt@(PhasedTodo _ todo) =
-    -- case split to learn that return type is ()... ugly
-    case todo of
-      TodoSplitCore{} -> forkExpanderTask (ScopeCheck pt)
-      TodoPartialCore{} -> forkExpanderTask (ScopeCheck pt)
-      TodoCore{} -> forkExpanderTask (ScopeCheck pt)
-      TodoSplitDecl{} -> forkExpanderTask (ScopeCheck pt)
-
-instance ScopeCheck SplitCore Expand where
+instance ScopeCheck Expand where
   use phase var = do
     st <- getState
     -- TODO(lb): is this the right check?

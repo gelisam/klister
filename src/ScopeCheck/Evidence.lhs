@@ -123,9 +123,7 @@
 
 \begin{code}
 module ScopeCheck.Evidence
-  ( ScopeCheckTodo(..)
-  , PhasedTodo(..)
-  , ScopeCheck(..)
+  ( ScopeCheck(..)
   , ScopeCheckRecurT
   , scopeCheckCore
   ) where
@@ -141,54 +139,29 @@ import           Data.Set (Set)
 import qualified Data.Set as Set
 
 import Core
-import SplitCore
-import Module
-import PartialCore
 import Phase
-import Schedule
 
 \end{code}
 
 \subsection{The scope-checking monad}
 
 In \klister{}, Scope checking is interleaved with macro expansion. As such, it
-avoids a directly recursive style, instead scheduling further scope-checking
-tasks along the way.
+is written in the open recursive style, so that it can be suspended and subtasks
+can be delayed.
 \begin{code}
 
 data ScopeCheckError = ScopeCheckError ()
 
-data ScopeCheckTodo when a where
-  TodoSplitCore :: SplitCorePtr -> ScopeCheckTodo SplitCore ()
-  TodoPartialCore :: PartialCore -> ScopeCheckTodo PartialCore ()
-  TodoCore :: Core -> ScopeCheckTodo Core ()
-  TodoSplitDecl :: DeclPtr -> ScopeCheckTodo SplitCore ()
-
-instance Show (ScopeCheckTodo when a) where
-  show =
-    \case
-      TodoSplitCore ptr -> "TodoSplitCore " ++ show ptr
-      TodoPartialCore part -> "TodoPartialCore " ++ show part
-      TodoCore core -> "TodoCore " ++ show core
-      TodoSplitDecl ptr -> "TodoSplitDecl " ++ show ptr
-
-data PhasedTodo when a =
-  PhasedTodo { ptPhase :: Phase
-             , ptTodo :: ScopeCheckTodo when a
-             }
-  deriving Show
-
 -- | Laws:
 --
 -- * @forall v. bindVarIn v (use v) == pure ()@
-class (Schedule f, Todo f ~ PhasedTodo when) =>
-      ScopeCheck when f where
+class ScopeCheck f where
   -- | Record that this variable was used at this phase
   use :: Phase -> Var -> f ()
   -- | Extend the context with a variable in a subtask
   bindVarIn :: Phase -> Var -> f a -> f a
 
-bindVarsIn :: (ScopeCheck when f, Foldable t) => Phase -> t Var -> f a -> f a
+bindVarsIn :: (ScopeCheck f, Foldable t) => Phase -> t Var -> f a -> f a
 bindVarsIn phase vars subtask =
   foldr (bindVarIn phase) subtask vars
 \end{code}
@@ -198,7 +171,7 @@ bindVarsIn phase vars subtask =
 Patterns may add variables to the context.
 \begin{code}
 -- | Extend the context with variables captured in a pattern
-bindPatternIn :: ScopeCheck when f => Phase -> Pattern -> f a -> f a
+bindPatternIn :: ScopeCheck f => Phase -> Pattern -> f a -> f a
 bindPatternIn phase =
   \case
 \end{code}
@@ -246,9 +219,14 @@ The wildcard pattern $\patAny$ matches any syntax object, but doesn't provide a
 \subsection{Well-scoped expressions}
 
 \begin{code}
-scopeCheckCore :: (Applicative f, ScopeCheck when f) => Phase -> Core -> f ()
-scopeCheckCore phase core =
-  let inSameContext = flip for_ (scopeCheckCore phase)
+scopeCheckCore ::
+  (Applicative f, ScopeCheck f) =>
+  (Phase -> Core -> f ()) ->
+  Phase ->
+  Core ->
+  f ()
+scopeCheckCore recur phase core =
+  let inSameContext = flip for_ (recur phase)
   in
     case unCore core of
 \end{code}
@@ -266,7 +244,7 @@ Lambda expressions extend the context with an additional variable:
 \end{equation*}
 \begin{code}
       CoreLam _ident var body ->
-        bindVarIn phase var (scopeCheckCore phase body)
+        bindVarIn phase var (recur phase body)
 \end{code}
 A \texttt{syntax-case} expression is well-scoped in $\Gamma$ when the RHS of
 each branch is well-scoped in $\Gamma$ extended with the variables bound
@@ -282,7 +260,7 @@ in the pattern in the LHS of that branch:
       CoreCase e0 cases ->
         for_ cases $ \(pat, ei) ->
           inSameContext [e0] *>
-          bindPatternIn phase pat (scopeCheckCore phase ei)
+          bindPatternIn phase pat (recur phase ei)
 \end{code}
 All other expressions are well-scoped when their subtrees are:
 \begin{gather*}
@@ -326,8 +304,9 @@ All other expressions are well-scoped when their subtrees are:
 
 \subsection{An instance of \texttt{ScopeCheck}}
 
-The simplest instance of \texttt{ScopeCheck} simply recurs on the scheduled
-tasks.
+The simplest instance of \texttt{ScopeCheck} simply records the in-scope
+variables in a context and throws an exception when an unknown variable is
+encountered.
 
 \subsubsection{Well-formed contexts}
 
@@ -373,20 +352,13 @@ deriving instance Monad m => MTL.MonadReader Context (ScopeCheckRecurT m)
 
 
 -- TODO: is selective enough here?
-instance Monad m => ScopeCheck Core (ScopeCheckRecurT m) where
+instance Monad m => ScopeCheck (ScopeCheckRecurT m) where
   use phase var = do
     ctx <- MTL.ask
     unless (inContext phase var ctx) $
       MTL.throwError (ScopeCheckError ())
 
   bindVarIn phase var = MTL.local (addToContext phase var)
-
--- TODO: is selective enough here?
-instance Monad m => Schedule (ScopeCheckRecurT m) where
-  type Todo (ScopeCheckRecurT m) = PhasedTodo Core
-  schedule =
-    \case
-      PhasedTodo phase (TodoCore e0) -> scopeCheckCore phase e0
 \end{code}
 
 \end{document}
