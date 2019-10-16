@@ -62,25 +62,10 @@
 [example (compose id id)]
 [example (compose id id id)]
 
-[meta [export import]]
-[export #%module]
-[export #%app]
-[export const]
-[export lambda]
-[export define]
-[export example]
-[export define-macros]
-[export quote]
-[export meta]
-[export import]
-[export >>=]
-[export pure]
-[export if]
-[export syntax-error]
-[export syntax-case]
-[export list-syntax]
-[export cons-list-syntax]
-[export empty-list-syntax]
-[export free-identifier=?]
-[export log]
-[export export]
+(export #%module #%app
+        const lambda define example define-macros quote meta if
+        import export
+        >>= pure syntax-error syntax-case
+        list-syntax cons-list-syntax empty-list-syntax
+        free-identifier=? bound-identifier=? log)
+

@@ -331,9 +331,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [e1, e2, e3, e4, e5, e6, e7, e8, Export _, Export _ ] -> do
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Export _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
-                        other -> assertFailure ("Expected 8 examples and 2 exports: " ++ show other)
+                        other -> assertFailure ("Expected 8 examples and 1 export: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
