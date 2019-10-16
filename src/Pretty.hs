@@ -205,6 +205,30 @@ instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Dec
     (hang 4 $ text "export" <+> pp env x, mempty)
   ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
 
+instance Pretty VarInfo ExportSpec where
+  pp env (ExportIdents ids) =
+    text "{" <> align (vsep [pp env x | (Stx _ _ x) <- ids]) <> text "}"
+  pp env (ExportRenamed spec rens) =
+    align $ hang 2 $ group $
+      pp env spec <> line <>
+      text "renaming" <+> text "{" <>
+      (align $ group $ vsep [text x <+> text "↦" <+> text y
+                            | (x, y) <- rens
+                            ]) <>
+      text "}"
+  pp env (ExportPrefixed spec p) =
+    align $ hang 2 $ group $
+    vsep [ text "(" <> align (group (pp env spec)) <> ")"
+         , text "with" <+> text "prefix"
+         , text p
+         ]
+  pp env (ExportShifted spec i) =
+    align $ hang 2 $ group $
+    vsep [ text "(" <> align (group (pp env spec)) <> ")"
+         , text "shifted" <+> text "by"
+         , viaShow i
+         ]
+
 instance Pretty VarInfo ImportSpec where
   pp env (ImportModule mn) = pp env mn
   pp env (ImportOnly spec ids) = group $ vsep [ text "only"

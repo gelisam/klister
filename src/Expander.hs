@@ -34,6 +34,7 @@ module Expander (
   , addModuleScope
   ) where
 
+import Control.Applicative
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -139,6 +140,22 @@ loadModuleFile modName =
             addExpandedModule m
 
          return (m, es)
+
+getExports :: ExportSpec -> Expand Exports
+getExports (ExportIdents idents) = do
+  p <- currentPhase
+  bs <- for idents $ \x -> do
+    binding <- resolve x
+    return (view stxValue x, binding)
+  return $ foldr (uncurry $ addExport p) noExports bs
+getExports (ExportRenamed spec rens) = mapExportNames rename <$> getExports spec
+  where
+    rename x =
+      case lookup x rens of
+        Nothing -> x
+        Just y -> y
+getExports (ExportPrefixed spec pref) = mapExportNames (pref <>) <$> getExports spec
+getExports (ExportShifted spec i) = inEarlierPhase (getExports spec)
 
 getImports :: ImportSpec -> Expand Exports
 getImports (ImportModule (Stx _ _ mn)) = visit mn
@@ -433,11 +450,11 @@ initializeKernel = do
         )
       , ("export"
         , \_sc dest pdest stx -> do
-            Stx _ _ (_ :: Syntax, ident) <- mustHaveEntries stx
-            exported@(Stx _ _ x) <- mustBeIdent ident
+            Stx _ _ (_, protoSpec) <- mustBeCons stx
+            exported <- exportSpec stx protoSpec
             p <- currentPhase
-            b <- resolve exported
-            modifyState $ over expanderModuleExports $ addExport p x b
+            es <- getExports exported
+            modifyState $ over expanderModuleExports $ (<> es)
             linkDecl dest (Export exported)
             nowValidAt pdest (SpecificPhase p)
         )
@@ -483,6 +500,46 @@ initializeKernel = do
               return (old, new)
         importSpec other = throwError $ NotImportSpec other
 
+        exportSpec :: Syntax -> [Syntax] -> Expand ExportSpec
+        exportSpec blame elts
+          | [Syntax (Stx scs' srcloc'  (List ((getIdent -> Just (Stx _ _ kw)) : args)))] <- elts =
+              case kw of
+                "renaming" ->
+                  case args of
+                    (rens : more) -> do
+                      pairs <- getRenames rens
+                      spec <- exportSpec blame more
+                      return $ ExportRenamed spec pairs
+                    _ -> throwError $ NotExportSpec blame
+                "prefixing" ->
+                  case args of
+                    ((syntaxE -> String pref) : more) -> do
+                      spec <- exportSpec blame more
+                      return $ ExportPrefixed spec pref
+                    _ -> throwError $ NotExportSpec blame
+                "shift" ->
+                  case args of
+                    (Syntax (Stx _ _ (Sig (Signal i))) : more) -> do
+                      spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
+                      if i >= 0
+                        then return $ ExportShifted spec (fromIntegral i)
+                        else throwError $ NotExportSpec blame
+                    _ -> throwError $ NotExportSpec blame
+                _ -> throwError $ NotExportSpec blame
+          | Just xs <- traverse getIdent elts = return (ExportIdents xs)
+          | otherwise = throwError $ NotExportSpec blame
+          where
+            getIdent (Syntax (Stx scs loc (Id x))) = pure (Stx scs loc x)
+            getIdent _ = empty
+            getRenames :: Syntax -> Expand [(Text, Text)]
+            getRenames (syntaxE -> List rens) =
+              for rens $ \stx -> do
+                Stx _ _ (x, y) <- mustHaveEntries stx
+                Stx _ _ x' <- mustBeIdent x
+                Stx _ _ y' <- mustBeIdent y
+                pure (x', y')
+            getRenames _ = throwError $ NotExportSpec blame
+        exportSpec blame _other = throwError $ NotExportSpec blame
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =

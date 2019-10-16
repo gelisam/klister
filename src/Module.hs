@@ -14,6 +14,7 @@ module Module (
   , Imports
   , noImports
   , ImportSpec(..)
+  , ExportSpec(..)
   , Exports
   , getExport
   , addExport
@@ -129,6 +130,13 @@ filterExports ok (Exports es) =
       let out = Map.filterWithKey (\t _ -> ok p t) bs
       in if Map.null out then Nothing else Just out
 
+data ExportSpec
+  = ExportIdents [Ident]
+  | ExportRenamed ExportSpec [(Text, Text)]
+  | ExportPrefixed ExportSpec Text
+  | ExportShifted ExportSpec Natural
+  deriving Show
+
 data Module f a = Module
   { _moduleName :: ModuleName
   , _moduleImports :: !Imports
@@ -174,7 +182,7 @@ data Decl decl expr
   | Meta decl
   | Example expr
   | Import ImportSpec
-  | Export Ident
+  | Export ExportSpec
   deriving (Functor, Show)
 
 instance Bifunctor Decl where
@@ -183,7 +191,7 @@ instance Bifunctor Decl where
   bimap f _g (Meta d) = Meta (f d)
   bimap _f g (Example e) = Example (g e)
   bimap _f _g (Import spec) = Import spec
-  bimap _f _g (Export x) = Export x
+  bimap _f _g (Export spec) = Export spec
 
 instance (Phased decl, Phased expr) => Phased (Decl decl expr) where
   shift i = bimap (shift i) (shift i)

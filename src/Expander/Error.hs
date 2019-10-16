@@ -30,6 +30,7 @@ data ExpansionErr
   | NotRightLength Natural Syntax
   | NotVec Syntax
   | NotImportSpec Syntax
+  | NotExportSpec Syntax
   | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
   | MacroEvaluationError Phase EvalError
@@ -79,6 +80,8 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
   pp env (NotImportSpec stx) =
     hang 2 $ group $ vsep [text "Expected import spec but got", pp env stx]
+  pp env (NotExportSpec stx) =
+    hang 2 $ group $ vsep [text "Expected export spec but got", pp env stx]
   pp env (UnknownPattern stx) =
     hang 2 $ group $ vsep [text "Unknown pattern",  pp env stx]
   pp env (MacroRaisedSyntaxError err) =
