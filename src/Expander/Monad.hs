@@ -54,13 +54,15 @@ module Expander.Monad
   , ExpanderState
   , expanderState
   -- ** Lenses
-  , expanderBindingTable
+  , expanderGlobalBindingTable
   , expanderCompletedCore
   , expanderCompletedModBody
+  , expanderCurrentBindingTable
   , expanderCurrentEnvs
   , expanderCurrentTransformerEnvs
   , expanderDeclPhases
   , expanderExpansionEnv
+  , expanderKernelBindings
   , expanderKernelExports
   , expanderModuleExports
   , expanderModuleImports
@@ -81,6 +83,8 @@ import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
+import Data.Text (Text)
+import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
 
@@ -95,6 +99,7 @@ import Module
 import ModuleName
 import PartialCore
 import Phase
+import ShortShow
 import Signals
 import SplitCore
 import Scope
@@ -163,8 +168,8 @@ mkInitContext mn = do
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
   , _expanderWorld :: !(World Value)
-  , _expanderNextScope :: !Scope
-  , _expanderBindingTable :: !BindingTable
+  , _expanderNextScopeNum :: !Int
+  , _expanderGlobalBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
@@ -175,18 +180,20 @@ data ExpanderState = ExpanderState
   , _expanderModuleExports :: !Exports
   , _expanderPhaseRoots :: !(Map Phase Scope)
   , _expanderModuleRoots :: !(Map ModuleName Scope)
+  , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
+  , _expanderCurrentBindingTable :: !BindingTable
   }
 
 initExpanderState :: ExpanderState
 initExpanderState = ExpanderState
   { _expanderReceivedSignals = Set.empty
   , _expanderWorld = initialWorld
-  , _expanderNextScope = Scope 0
-  , _expanderBindingTable = mempty
+  , _expanderNextScopeNum = 0
+  , _expanderGlobalBindingTable = mempty
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
   , _expanderCompletedCore = Map.empty
@@ -197,10 +204,12 @@ initExpanderState = ExpanderState
   , _expanderModuleExports = noExports
   , _expanderPhaseRoots = Map.empty
   , _expanderModuleRoots = Map.empty
+  , _expanderKernelBindings = mempty
   , _expanderKernelExports = noExports
   , _expanderDeclPhases = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
+  , _expanderCurrentBindingTable = mempty
   }
 
 makeLenses ''ExpanderContext
@@ -219,11 +228,11 @@ modifyState f = do
   st <- view expanderState <$> expanderContext
   liftIO (modifyIORef st f)
 
-freshScope :: Expand Scope
-freshScope = do
-  sc <- view expanderNextScope <$> getState
-  modifyState (\st -> st { _expanderNextScope = nextScope (view expanderNextScope st) })
-  return sc
+freshScope :: Text -> Expand Scope
+freshScope why = do
+  n <- view expanderNextScopeNum <$> getState
+  modifyState $ over expanderNextScopeNum $ (+ 1)
+  return (Scope n why)
 
 
 withLocal :: ExpanderLocal -> Expand a -> Expand a
@@ -250,7 +259,7 @@ moduleScope' mn = do
   case Map.lookup mn mods of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope
+      sc <- freshScope $ T.pack $ "Module root for " ++ shortShow mn
       modifyState $ set (expanderModuleRoots . at mn) (Just sc)
       return sc
 
@@ -262,7 +271,7 @@ phaseRoot = do
   case Map.lookup p roots of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope
+      sc <- freshScope $ T.pack $ "Root for phase " ++ shortShow p
       modifyState $ set (expanderPhaseRoots . at p) (Just sc)
       return sc
 

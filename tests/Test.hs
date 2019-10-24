@@ -68,7 +68,7 @@ operationTests :: TestTree
 operationTests =
   testGroup "Core operations"
   [ testCase "Shifting core expressions" $
-    let sc = Scope 42
+    let sc = Scope 42 "Test suite"
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
         expr = Core (CoreIf (Core (CoreBool True))
@@ -385,6 +385,27 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 [_, _] -> assertFailure $ "Wrong example values: " ++ show exampleVals
                 _ -> assertFailure "Wrong number of examples in file"
           )
+        , ( "examples/fun-exports.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [ValueSignal a, ValueSignal b, ValueSignal c, ValueSignal d] -> do
+                  assertAlphaEq "First example is 1" a (Signal 1)
+                  assertAlphaEq "Second example is 2" b (Signal 2)
+                  assertAlphaEq "Third example is 3" c (Signal 3)
+                  assertAlphaEq "Fourth example is 4" d (Signal 4)
+                _ ->
+                  assertFailure "Expected four signals in example"
+          )
+        , ( "examples/fun-exports-test.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [ValueSignal a, ValueSignal b, ValueSignal c] -> do
+                  assertAlphaEq "First example is 1" a (Signal 1)
+                  assertAlphaEq "Second example is 2" b (Signal 2)
+                  assertAlphaEq "Third example is 3" c (Signal 3)
+                _ ->
+                  assertFailure "Expected three signals in example"
+          )
         ]
       ]
     shouldn'tWork =
@@ -523,7 +544,7 @@ testFile f p = do
             assertFailure "No module found"
           Just (KernelModule _) ->
             assertFailure "Expected user module, got kernel"
-          Just (Expanded m) ->
+          Just (Expanded m _) ->
             case Map.lookup mn (view worldEvaluated w) of
               Nothing -> assertFailure "Module valuees not in its own expansion"
               Just evalResults ->
@@ -556,6 +577,9 @@ assertAlphaEq preface expected actual =
 -- TODO(lb): Should we be accessing size parameters from the Gen monad to decide
 -- these ranges?
 
+range16 :: Range.Range Int
+range16 = Range.linear 0 32
+
 range32 :: Range.Range Int
 range32 = Range.linear 0 32
 
@@ -572,7 +596,7 @@ genPhase =
   in more <$> Gen.int range256 <*> pure runtime
 
 genScope :: MonadGen m => m Scope
-genScope = Scope <$> Gen.int range1024
+genScope = Scope <$> Gen.int range1024 <*> Gen.text range16 Gen.lower
 
 genSetScope :: MonadGen m => m (Set Scope)
 genSetScope = Gen.set range32 genScope

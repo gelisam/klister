@@ -367,7 +367,7 @@ instance Pretty VarInfo a => Pretty VarInfo (Env MacroVar a) where
          ]
 
 instance Pretty VarInfo CompleteModule where
-  pp env (Expanded em) = pp env em
+  pp env (Expanded em _) = pp env em
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
 
 instance Pretty VarInfo Binding where

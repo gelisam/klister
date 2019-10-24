@@ -27,7 +27,8 @@ module Expander (
   , expandEval
   , ExpansionErr(..)
   , ExpanderContext
-  , expanderBindingTable
+  , expanderCurrentBindingTable
+  , expanderGlobalBindingTable
   , expanderWorld
   , getState
   , addRootScope
@@ -40,6 +41,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
 import Data.Foldable
+import Data.List (nub)
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -97,7 +99,9 @@ initializeLanguage (Stx scs loc lang) = do
 
 
 expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
-expandModule thisMod src =
+expandModule thisMod src = do
+  startBindings <- view expanderCurrentBindingTable <$> getState
+  modifyState $ set expanderCurrentBindingTable mempty
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
@@ -113,7 +117,9 @@ expandModule thisMod src =
                            , _moduleBody = body
                            , _moduleExports = noExports
                            }
-    return $ Expanded theModule
+    bs <- view expanderCurrentBindingTable <$> getState
+    modifyState $ set expanderCurrentBindingTable startBindings
+    return $ Expanded theModule bs
 
 
 
@@ -145,7 +151,8 @@ getExports :: ExportSpec -> Expand Exports
 getExports (ExportIdents idents) = do
   p <- currentPhase
   bs <- for idents $ \x -> do
-    binding <- resolve x
+    x' <- addRootScope' x
+    binding <- resolve x'
     return (view stxValue x, binding)
   return $ foldr (uncurry $ addExport p) noExports bs
 getExports (ExportRenamed spec rens) = mapExportNames rename <$> getExports spec
@@ -155,7 +162,10 @@ getExports (ExportRenamed spec rens) = mapExportNames rename <$> getExports spec
         Nothing -> x
         Just y -> y
 getExports (ExportPrefixed spec pref) = mapExportNames (pref <>) <$> getExports spec
-getExports (ExportShifted spec i) = inEarlierPhase (getExports spec)
+getExports (ExportShifted spec i) = do
+  p <- currentPhase
+  inPhase (shift i p) $
+    getExports spec
 
 getImports :: ImportSpec -> Expand Exports
 getImports (ImportModule (Stx _ _ mn)) = visit mn
@@ -189,9 +199,9 @@ visit modName = do
          Just m -> do
            let es = maybe noExports id (view (worldExports . at modName) world)
            return (m, es)
-         Nothing -> do
-           (m, es) <- inPhase runtime $ loadModuleFile modName
-           return (m, es)
+         Nothing ->
+           inPhase runtime $
+             loadModuleFile modName
   p <- currentPhase
   let i = phaseNum p
   visitedp <- Set.member p .
@@ -203,7 +213,11 @@ visit modName = do
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
           (Just evalResults)
+    let bs = getModuleBindings m'
+    modifyState $ over expanderGlobalBindingTable $ (<> bs)
   return (shift i es)
+  where getModuleBindings (Expanded _ bs) = bs
+        getModuleBindings (KernelModule _) = mempty
 
 -- | Evaluate an expanded module at the current expansion phase,
 -- recursively loading its run-time dependencies.
@@ -212,7 +226,7 @@ evalMod (KernelModule _) =
   -- Builtins go here, suitably shifted. There are no built-in values
   -- yet, only built-in syntax, but this may change.
   return []
-evalMod (Expanded em) = snd <$> runWriterT (traverse_ evalDecl (view moduleBody em))
+evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBody em))
   where
     evalDecl (CompleteDecl d) =
       case d of
@@ -287,12 +301,17 @@ expandEval evalAction = do
       throwError $ MacroEvaluationError p err
     Right val -> return val
 
-bindingTable :: Expand BindingTable
-bindingTable = view expanderBindingTable <$> getState
+visibleBindings :: Expand BindingTable
+visibleBindings = do
+  globals <- view expanderGlobalBindingTable <$> getState
+  locals <- view expanderCurrentBindingTable <$> getState
+  return (globals <> locals)
 
+
+-- | Add a binding to the current module's table
 addBinding :: Ident -> Binding -> BindingInfo SrcLoc -> Expand ()
 addBinding (Stx scs _ name) b info = do
-  modifyState $ over (expanderBindingTable . at name) $
+  modifyState $ over (expanderCurrentBindingTable . at name) $
     (Just . ((scs, b, info) :) . fromMaybe [])
 
 addImportBinding :: Ident -> Binding -> Expand ()
@@ -318,9 +337,8 @@ bind b v =
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
 allMatchingBindings x scs = do
-  allBindings <- bindingTable
+  namesMatch <- view (at x . non []) <$> visibleBindings
   p <- currentPhase
-  let namesMatch = view (at x . non []) allBindings
   let scopesMatch =
         [ (scopes, b)
         | (scopes, b, _) <- namesMatch
@@ -334,7 +352,7 @@ checkUnambiguous :: ScopeSet -> [ScopeSet] -> Ident -> Expand ()
 checkUnambiguous best candidates blame =
   do p <- currentPhase
      let bestSize = ScopeSet.size p best
-     let candidateSizes = map (ScopeSet.size p) candidates
+     let candidateSizes = map (ScopeSet.size p) (nub candidates)
      if length (filter (== bestSize) candidateSizes) > 1
        then throwError (Ambiguous p blame candidates)
        else return ()
@@ -344,7 +362,8 @@ resolve stx@(Stx scs srcLoc x) = do
   p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of
-    [] -> throwError (Unknown (Stx scs srcLoc x))
+    [] ->
+      throwError (Unknown (Stx scs srcLoc x))
     candidates ->
       let best = maximumOn (ScopeSet.size p . fst) candidates
       in checkUnambiguous (fst best) (map fst candidates) stx *>
@@ -398,7 +417,7 @@ initializeKernel = do
         , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
-            x <- flip (addScope p) sc <$> mustBeIdent varStx
+            x <- flip addScope' sc <$> mustBeIdent varStx
             b <- freshBinding
             addDefinedBinding x b
             var <- freshVar
@@ -418,9 +437,7 @@ initializeKernel = do
               theName <- flip addScope' sc <$> mustBeIdent mname
               b <- freshBinding
               addDefinedBinding theName b
-              macroDest <- inEarlierPhase $ do
-                psc <- phaseRoot
-                schedule (addScope p (addScope (prior p) mdef psc) sc)
+              macroDest <- inEarlierPhase $ schedule (addScope p mdef sc)
               v <- freshMacroVar
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
@@ -504,14 +521,14 @@ initializeKernel = do
         exportSpec blame elts
           | [Syntax (Stx scs' srcloc'  (List ((getIdent -> Just (Stx _ _ kw)) : args)))] <- elts =
               case kw of
-                "renaming" ->
+                "rename" ->
                   case args of
                     (rens : more) -> do
                       pairs <- getRenames rens
                       spec <- exportSpec blame more
                       return $ ExportRenamed spec pairs
                     _ -> throwError $ NotExportSpec blame
-                "prefixing" ->
+                "prefix" ->
                   case args of
                     ((syntaxE -> String pref) : more) -> do
                       spec <- exportSpec blame more
@@ -539,7 +556,6 @@ initializeKernel = do
                 Stx _ _ y' <- mustBeIdent y
                 pure (x', y')
             getRenames _ = throwError $ NotExportSpec blame
-        exportSpec blame _other = throwError $ NotExportSpec blame
 
     exprPrims :: [(Text, SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
@@ -663,9 +679,9 @@ initializeKernel = do
         )
       , ( "let-syntax"
         , \dest stx -> do
-            Stx _ _ (_ :: Syntax, macro, body) <- mustHaveEntries stx
+            Stx _ loc (_ :: Syntax, macro, body) <- mustHaveEntries stx
             Stx _ _ (mName, mdef) <- mustHaveEntries macro
-            sc <- freshScope
+            sc <- freshScope $ T.pack $ "Scope for let-syntax at " ++ shortShow loc
             m <- mustBeIdent mName
             p <- currentPhase
             -- Here, the binding occurrence of the macro gets the
@@ -729,7 +745,7 @@ initializeKernel = do
 
     prepareVar :: Syntax -> Expand (Scope, Ident, Var)
     prepareVar varStx = do
-      sc <- freshScope
+      sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
       x <- mustBeIdent varStx
       p <- currentPhase
       psc <- phaseRoot
@@ -802,18 +818,19 @@ forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
   modifyState $ over expanderCompletedModBody (<> Map.singleton dest Done)
 forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   -- Create a scope for this new declaration
-  sc <- freshScope
+  sc <- freshScope $ T.pack $ "For declaration at " ++ shortShow (stxLoc d)
   restDest <- liftIO $ newModBodyPtr
   declDest <- liftIO $ newDeclPtr
   declPhase <- newDeclValidityPtr
   modifyState $ over expanderCompletedModBody $
     (<> Map.singleton dest (Decl declDest restDest))
-  p <- currentPhase
   forkExpanderTask $
     ExpandMoreDecls restDest sc
-      (Syntax (Stx scs loc (List (map (flip (addScope p) sc) ds))))
+      (Syntax (Stx scs loc (List ds)))
       declPhase
   forkExpandOneDecl declDest sc declPhase =<< addRootScope d
+  where
+    stxLoc (Syntax (Stx _ srcloc _)) = srcloc
 forkExpandDecls _dest _other =
   error "TODO real error message - malformed module body"
 
@@ -947,7 +964,7 @@ runTask (tid, localData, task) = withLocal localData $ do
 expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression dest stx
   | Just ident <- identifierHeaded stx = do
-      b <- resolve ident
+      b <- resolve =<< addRootScope ident
       v <- getEValue b
       case v of
         EPrimMacro impl -> impl dest stx
@@ -967,7 +984,7 @@ expandOneExpression dest stx
         EIncompleteDefn x n d ->
           forkAwaitingDefn x n b d dest stx
         EUserMacro transformerName -> do
-          stepScope <- freshScope
+          stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
           p <- currentPhase
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
@@ -1012,7 +1029,7 @@ addApp ctor (Syntax (Stx scs loc _)) args =
 expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
 expandOneDeclaration sc dest stx ph
   | Just ident <- identifierHeaded stx = do
-      b <- resolve ident
+      b <- resolve =<< addRootScope ident
       v <- getEValue b
       case v of
         EPrimMacro _ ->
@@ -1026,7 +1043,7 @@ expandOneDeclaration sc dest stx ph
         EIncompleteDefn _ _ _ ->
           throwError $ InternalError "Current context won't accept expressions"
         EUserMacro transformerName -> do
-          stepScope <- freshScope
+          stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
           p <- currentPhase
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
@@ -1114,6 +1131,9 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
           -- Ambiguous bindings should not crash the comparison -
           -- they're just not free-identifier=?.
           Ambiguous _ _ _ -> return $ Right $ ValueBool $ False
+          -- Similarly, things that are not yet bound are just not
+          -- free-identifier=?
+          Unknown _ -> return $ Right $ ValueBool $ False
           e -> throwError e
     Bound ->
       return $ Right $ ValueBool $ view stxScopeSet id1 == view stxScopeSet id2

@@ -3,11 +3,10 @@ module Scope where
 
 import Control.Lens
 
+import Data.Text (Text)
 
 -- Int should be enough for now - consider bumping to something like int64
-newtype Scope = Scope Int
+data Scope = Scope { scopeNum :: Int, scopePurpose :: Text }
   deriving (Eq, Ord, Show)
-makePrisms ''Scope
+makeLenses ''Scope
 
-nextScope :: Scope -> Scope
-nextScope (Scope i) = Scope (i + 1)
