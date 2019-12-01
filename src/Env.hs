@@ -2,7 +2,17 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList, named) where
+module Env
+  ( Env
+  , empty
+  , insert
+  , singleton
+  , lookup
+  , lookupIdent
+  , lookupVal
+  , toList
+  , named
+  ) where
 
 import Prelude hiding (lookup)
 
