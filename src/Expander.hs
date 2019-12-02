@@ -878,6 +878,7 @@ runTask (tid, localData, task) = withLocal localData $ do
               \case
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
+    ScopeCheck _ -> undefined
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal

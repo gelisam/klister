@@ -79,6 +79,7 @@ module Expander.Monad
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
+import Control.Monad.Writer
 import Data.IORef
 import Data.Map (Map)
 import Data.Maybe (isJust)
@@ -396,11 +397,25 @@ getDecl ptr =
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
 
-instance ScopeCheck Expand where
-  use phase var = do
-    st <- getState
-    -- TODO(lb): is this the right check?
-    unless (isJust (view (expanderCurrentEnvs . at phase . non Env.empty . at var) st)) $
-      fail $ "Var out of scope: " ++ show var -- TODO(lb)
+type ScopeCheckTask = ()
 
-  bindVarIn _ _ _ = undefined -- TODO(lb)
+scopeCheckExpand :: Core -> Expand [ScopeCheckTask]
+scopeCheckExpand core = do
+  phase <- currentPhase
+  st <- getState
+  let
+    globalEnv :: Map Phase (Set.Set Var)
+    globalEnv =
+      Set.fromList . Env.keys <$> view expanderCurrentEnvs st
+  -- TODO: This should return something in a Writer monad, with the writee being
+  -- the free/list monoid over scope-checking tasks
+  let
+    recursiveCase :: Phase -> Core -> ScopeCheckT (Writer [ScopeCheckTask]) ()
+    recursiveCase phase core = _
+  let errorOr =
+        runWriter $
+          runScopeCheckT globalEnv $
+            scopeCheckCore recursiveCase phase core
+  case errorOr of
+    (Left err, _) -> fail "TODO(lb)"
+    (Right _, tasks) -> pure ()

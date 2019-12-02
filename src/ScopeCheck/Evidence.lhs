@@ -28,15 +28,16 @@
                % for our purposes:
                {emptyContext}{{$\cdot$}}1
                {ctx}{{$\Gamma$}}1
-               {var}{{$x_0$}}2
-               {var1}{{$x_1$}}2
-               {var2}{{$x_2$}}2
-               {pat}{{$p_i$}}2
                {e0}{{$e_0$}}2
                {e1}{{$e_1$}}2
                {e2}{{$e_2$}}2
                {ei}{{$e_i$}}2
     }
+% These match in the middle of comments, which is unfortunate.
+%               {pat}{{$p_i$}}2
+%               {var}{{$x_0$}}2
+%               {var1}{{$x_1$}}2
+%               {var2}{{$x_2$}}2
 
 % optionally automatically resized paired delimiters
 \makeatletter % https://goo.gl/osSmHV
@@ -124,8 +125,10 @@
 \begin{code}
 module ScopeCheck.Evidence
   ( ScopeCheck(..)
-  , ScopeCheckRecurT
+  , ScopeCheckT
+  , runScopeCheckT
   , scopeCheckCore
+  , Context(..)
   ) where
 
 import           Prelude hiding (head, tail)
@@ -262,7 +265,8 @@ in the pattern in the LHS of that branch:
           inSameContext [e0] *>
           bindPatternIn phase pat (recur phase ei)
 \end{code}
-All other expressions are well-scoped when their subtrees are:
+All other expressions bind no variables, so they are well-scoped when their
+subtrees are:
 \begin{gather*}
   \wellScopedRecII{\eApp} \\
   \wellScopedRecI{\ePure} \\
@@ -343,22 +347,52 @@ inContext phase var (Context ctx) =
 \subsubsection{The Monad}
 
 \begin{code}
-newtype ScopeCheckRecurT m a =
-  ScopeCheckRecurT (MTL.ReaderT Context (MTL.ExceptT ScopeCheckError m) a)
+newtype ScopeCheckT m a =
+  ScopeCheckT
+    { getScopeCheckT ::
+       MTL.ReaderT Context (MTL.ExceptT ScopeCheckError m) a
+    }
   deriving (Applicative, Functor, Monad)
 
-deriving instance Monad m => MTL.MonadError ScopeCheckError (ScopeCheckRecurT m)
-deriving instance Monad m => MTL.MonadReader Context (ScopeCheckRecurT m)
+deriving instance Monad m => MTL.MonadError ScopeCheckError (ScopeCheckT m)
+deriving instance Monad m => MTL.MonadReader Context (ScopeCheckT m)
 
 
 -- TODO: is selective enough here?
-instance Monad m => ScopeCheck (ScopeCheckRecurT m) where
+instance Monad m => ScopeCheck (ScopeCheckT m) where
   use phase var = do
     ctx <- MTL.ask
     unless (inContext phase var ctx) $
       MTL.throwError (ScopeCheckError ())
 
   bindVarIn phase var = MTL.local (addToContext phase var)
+
+runScopeCheckT ::
+  Monad m =>
+  Map Phase (Set Var) ->
+  ScopeCheckT m a ->
+  m (Either ScopeCheckError a)
+runScopeCheckT ctxt (ScopeCheckT computation) =
+  MTL.runExceptT $ MTL.runReaderT computation (Context ctxt)
 \end{code}
+
+\subsubsection{Recursion}
+
+With the above instance in hand, we can write a straightforward recursive scope
+checker.
+
+\begin{code}
+scopeCheckRec ::
+  Monad m =>
+  Phase ->
+  Core ->
+  ScopeCheckT m ()
+scopeCheckRec = scopeCheckCore scopeCheckRec
+\end{code}
+
+\subsection{Another instance of \texttt{ScopeCheck}}
+
+TODO(lb): Add an instance that collects all non-locally bound variables in a
+ Writer
 
 \end{document}
