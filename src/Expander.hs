@@ -26,7 +26,6 @@ module Expander (
   , currentPhase
   , expandEval
   , ExpansionErr(..)
-  , ExpanderContext
   , expanderBindingTable
   , expanderWorld
   , getState
@@ -34,7 +33,7 @@ module Expander (
   , addModuleScope
   ) where
 
-import Control.Lens hiding (List, children)
+import Control.Lens hiding (Context(..), List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.Writer
@@ -64,6 +63,7 @@ import Parser
 import Phase
 import Pretty
 import Scope
+import ScopeCheck
 import ScopeSet (ScopeSet)
 import Signals
 import ShortShow
@@ -878,6 +878,7 @@ runTask (tid, localData, task) = withLocal localData $ do
               \case
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
+    ScopeCheckTask splitCore -> scopeCheckExpand localData splitCore
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -1074,3 +1075,36 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
+
+type NewScopeCheckTask = (Context, SplitCore)
+
+scopeCheckExpand :: ExpanderLocal -> SplitCore -> Expand ()
+scopeCheckExpand localState splitCore = do
+  phase <- currentPhase
+  let ctx = view expanderContext localState
+  root <-
+    case getRoot splitCore of
+      Nothing -> fail "internal error"
+      Just rt -> pure rt
+  let
+    recursiveCase ::
+      Phase ->
+      SplitCorePtr ->
+      ScopeCheckT (Writer [NewScopeCheckTask]) ()
+    recursiveCase _ splitCorePtr = do
+      env <- ask -- possibly-expanded
+      case subtree splitCore splitCorePtr of
+        Nothing -> fail "Malformed splitcore!"
+        Just splitCoreSubtree -> lift $ tell [(env, splitCoreSubtree)]
+  let errorOr =
+        runWriter $
+          runScopeCheckT ctx $
+            scopeCheckCoreF recursiveCase phase root
+  case errorOr of
+    (Left _, _) -> fail "Scope check error!"
+    (Right _, tasks) ->
+      forM_ tasks $ \(newCtxt, splitCoreSubtree) ->
+        -- Add newly-bound variables to the new task
+        localForkExpanderTask
+          (localState & expanderContext %~ (<> newCtxt))
+          (ScopeCheckTask splitCoreSubtree)

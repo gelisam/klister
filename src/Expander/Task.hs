@@ -35,6 +35,7 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
+  | ScopeCheckTask SplitCore
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -62,6 +63,7 @@ instance ShortShow ExpanderTask where
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
+  shortShow (ScopeCheckTask _splitCore) = "(ScopeCheckTask)"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)

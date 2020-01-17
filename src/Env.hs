@@ -2,7 +2,18 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList, named) where
+module Env
+  ( Env
+  , empty
+  , insert
+  , singleton
+  , lookup
+  , lookupIdent
+  , lookupVal
+  , toList
+  , named
+  , keys
+  ) where
 
 import Prelude hiding (lookup)
 
@@ -39,6 +50,9 @@ lookupIdent x env = fst <$> lookup x env
 
 named :: Text -> Env v a -> [(v, a)]
 named n (Env xs) = [(x, a) | (x, (Stx _ _ n', a)) <- Map.toList xs, n == n']
+
+keys :: Env v a -> [v]
+keys (Env e) = Map.keys e
 
 type instance Index (Env v a) = v
 type instance IxValue (Env v a) = (Ident, a)
