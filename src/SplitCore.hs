@@ -9,6 +9,7 @@ import Control.Lens hiding (children)
 import Control.Monad.Except
 import Control.Monad.Writer
 
+import Data.Functor (($>))
 import Data.Unique
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -29,6 +30,7 @@ data SplitCore = SplitCore
   { _splitCoreRoot        :: SplitCorePtr
   , _splitCoreDescendants :: Map SplitCorePtr (CoreF SplitCorePtr)
   }
+  deriving Show
 makeLenses ''SplitCore
 
 unsplit :: SplitCore -> PartialCore
@@ -55,3 +57,13 @@ split partialCore = do
         go here (unPartialCore p)
         pure here
       tell $ Map.singleton place children
+
+getRoot :: SplitCore -> Maybe (CoreF SplitCorePtr)
+getRoot splitCore =
+  Map.lookup (_splitCoreRoot splitCore) (_splitCoreDescendants splitCore)
+
+subtree :: SplitCore -> SplitCorePtr -> Maybe SplitCore
+subtree splitCore splitCorePtr =
+  let descendants = _splitCoreDescendants splitCore
+  in Map.lookup splitCorePtr descendants $>
+       SplitCore splitCorePtr (Map.delete (_splitCoreRoot splitCore) descendants)

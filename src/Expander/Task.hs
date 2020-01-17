@@ -10,7 +10,6 @@ import Binding
 import Core
 import Expander.DeclScope
 import Module
-import PartialCore
 import Phase
 import Pretty
 import Scope
@@ -38,7 +37,7 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
-  | ScopeCheck (ScopeCheckTodo SplitCore ())
+  | ScopeCheckTask SplitCore
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -66,20 +65,7 @@ instance ShortShow ExpanderTask where
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
+  shortShow (ScopeCheckTask _splitCore) = "(ScopeCheckTask)"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)
-
-data ScopeCheckTodo when a where
-  TodoSplitCore :: SplitCorePtr -> ScopeCheckTodo SplitCore ()
-  TodoPartialCore :: PartialCore -> ScopeCheckTodo PartialCore ()
-  TodoCore :: Core -> ScopeCheckTodo Core ()
-  TodoSplitDecl :: DeclPtr -> ScopeCheckTodo SplitCore ()
-
-instance Show (ScopeCheckTodo when a) where
-  show =
-    \case
-      TodoSplitCore ptr -> "TodoSplitCore " ++ show ptr
-      TodoPartialCore part -> "TodoPartialCore " ++ show part
-      TodoCore core -> "TodoCore " ++ show core
-      TodoSplitDecl ptr -> "TodoSplitDecl " ++ show ptr

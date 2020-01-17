@@ -127,8 +127,10 @@ module ScopeCheck.Evidence
   ( ScopeCheck(..)
   , ScopeCheckT
   , runScopeCheckT
-  , scopeCheckCore
+  , scopeCheckCoreF
   , Context(..)
+  , newContext
+  , scopeCheckRec
   ) where
 
 import           Prelude hiding (head, tail)
@@ -222,16 +224,16 @@ The wildcard pattern $\patAny$ matches any syntax object, but doesn't provide a
 \subsection{Well-scoped expressions}
 
 \begin{code}
-scopeCheckCore ::
+scopeCheckCoreF ::
   (Applicative f, ScopeCheck f) =>
-  (Phase -> Core -> f ()) ->
+  (Phase -> a -> f ()) ->
   Phase ->
-  Core ->
+  CoreF a ->
   f ()
-scopeCheckCore recur phase core =
+scopeCheckCoreF recur phase coreF =
   let inSameContext = flip for_ (recur phase)
   in
-    case unCore core of
+    case coreF of
 \end{code}
 Variables are well-scoped in environments that contain them:
 \begin{equation*}
@@ -330,6 +332,9 @@ well-formed.
 \begin{code}
 newtype Context = Context { _getContext :: Map Phase (Set Var) }
 
+newContext :: Context
+newContext  = Context Map.empty
+
 modifyContext :: Phase -> (Set Var -> Set Var) -> Context -> Context
 modifyContext phase f (Context ctx) =
   Context $ Map.alter (Just . maybe Set.empty f) phase ctx
@@ -342,6 +347,11 @@ inContext phase var (Context ctx) =
   case Map.lookup phase ctx of
     Nothing -> False
     Just vars -> Set.member var vars
+
+instance Semigroup Context where
+  (Context ctxt1) <> (Context ctxt2) =
+    Context $ Map.unionWith Set.union ctxt1 ctxt2
+
 \end{code}
 
 \subsubsection{The Monad}
@@ -349,13 +359,16 @@ inContext phase var (Context ctx) =
 \begin{code}
 newtype ScopeCheckT m a =
   ScopeCheckT
-    { getScopeCheckT ::
+    { _getScopeCheckT ::
        MTL.ReaderT Context (MTL.ExceptT ScopeCheckError m) a
     }
   deriving (Applicative, Functor, Monad)
 
 deriving instance Monad m => MTL.MonadError ScopeCheckError (ScopeCheckT m)
 deriving instance Monad m => MTL.MonadReader Context (ScopeCheckT m)
+
+instance MTL.MonadTrans ScopeCheckT where
+  lift = MTL.lift
 
 
 -- TODO: is selective enough here?
@@ -369,11 +382,11 @@ instance Monad m => ScopeCheck (ScopeCheckT m) where
 
 runScopeCheckT ::
   Monad m =>
-  Map Phase (Set Var) ->
+  Context ->
   ScopeCheckT m a ->
   m (Either ScopeCheckError a)
 runScopeCheckT ctxt (ScopeCheckT computation) =
-  MTL.runExceptT $ MTL.runReaderT computation (Context ctxt)
+  MTL.runExceptT $ MTL.runReaderT computation ctxt
 \end{code}
 
 \subsubsection{Recursion}
@@ -387,7 +400,7 @@ scopeCheckRec ::
   Phase ->
   Core ->
   ScopeCheckT m ()
-scopeCheckRec = scopeCheckCore scopeCheckRec
+scopeCheckRec ph = scopeCheckCoreF scopeCheckRec ph . unCore
 \end{code}
 
 \subsection{Another instance of \texttt{ScopeCheck}}

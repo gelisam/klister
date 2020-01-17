@@ -30,7 +30,7 @@ module Expander.Monad
   , phaseRoot
   , withLocal
   -- ** Context
-  , ExpanderContext
+  , ExpanderLocalAndState
   , mkInitContext
   -- ** Tasks
   , module Expander.Task
@@ -40,6 +40,7 @@ module Expander.Monad
   , forkAwaitingSignal
   , forkContinueMacroAction
   , forkExpandSyntax
+  , localForkExpanderTask
   , forkExpanderTask
   , forkInterpretMacroAction
   , stillStuck
@@ -50,6 +51,7 @@ module Expander.Monad
   -- * Expander reader effects
   , ExpanderLocal
   , expanderLocal
+  , expanderContext
   -- ** Lenses
   , expanderPhase
   -- * Expander state
@@ -76,13 +78,12 @@ module Expander.Monad
   , newTaskID
   ) where
 
-import Control.Lens
+
+import Control.Lens hiding (Context(..))
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.Writer
 import Data.IORef
 import Data.Map (Map)
-import Data.Maybe (isJust)
 import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Traversable
@@ -102,17 +103,17 @@ import Phase
 import Signals
 import SplitCore
 import Scope
-import ScopeCheck.Evidence
+import ScopeCheck.Evidence (Context, newContext)
 import Syntax
 import Value
 import World
 
 newtype Expand a = Expand
-  { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
+  { runExpand :: ReaderT ExpanderLocalAndState (ExceptT ExpansionErr IO) a
   }
-  deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO, MonadReader ExpanderContext)
+  deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO, MonadReader ExpanderLocalAndState)
 
-execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
+execExpand :: Expand a -> ExpanderLocalAndState -> IO (Either ExpansionErr a)
 execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
 
 newtype TaskID = TaskID Unique
@@ -143,8 +144,7 @@ data EValue
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
-
-data ExpanderContext = ExpanderContext
+data ExpanderLocalAndState = ExpanderLocalAndState
   { _expanderLocal :: !ExpanderLocal
   , _expanderState :: IORef ExpanderState
   }
@@ -152,17 +152,19 @@ data ExpanderContext = ExpanderContext
 data ExpanderLocal = ExpanderLocal
   { _expanderModuleName :: !ModuleName
   , _expanderPhase :: !Phase
+  , _expanderContext :: !Context
   }
 
-mkInitContext :: ModuleName -> IO ExpanderContext
+mkInitContext :: ModuleName -> IO ExpanderLocalAndState
 mkInitContext mn = do
   st <- newIORef initExpanderState
-  return $ ExpanderContext { _expanderState = st
-                           , _expanderLocal = ExpanderLocal
-                             { _expanderModuleName = mn
-                             , _expanderPhase = runtime
-                             }
-                           }
+  return $ ExpanderLocalAndState { _expanderState = st
+                                 , _expanderLocal = ExpanderLocal
+                                   { _expanderModuleName = mn
+                                   , _expanderPhase = runtime
+                                   , _expanderContext = newContext
+                                   }
+                                 }
 
 data ExpanderState = ExpanderState
   { _expanderReceivedSignals :: !(Set.Set Signal)
@@ -207,20 +209,20 @@ initExpanderState = ExpanderState
   , _expanderCurrentTransformerEnvs = Map.empty
   }
 
-makeLenses ''ExpanderContext
+makeLenses ''ExpanderLocalAndState
 makeLenses ''ExpanderLocal
 makeLenses ''ExpanderState
 
-expanderContext :: Expand ExpanderContext
-expanderContext = Expand ask
+expanderLocalAndState :: Expand ExpanderLocalAndState
+expanderLocalAndState = Expand ask
 
 
 getState :: Expand ExpanderState
-getState = view expanderState <$> expanderContext >>= liftIO . readIORef
+getState = view expanderState <$> expanderLocalAndState >>= liftIO . readIORef
 
 modifyState :: (ExpanderState -> ExpanderState) -> Expand ()
 modifyState f = do
-  st <- view expanderState <$> expanderContext
+  st <- view expanderState <$> expanderLocalAndState
   liftIO (modifyIORef st f)
 
 freshScope :: Expand Scope
@@ -306,11 +308,15 @@ stillStuck tid task = do
   localState <- view expanderLocal
   overIORef expanderState expanderTasks ((tid, localState, task) :)
 
+localForkExpanderTask :: ExpanderLocal -> ExpanderTask -> Expand ()
+localForkExpanderTask localState task = do
+  tid <- newTaskID
+  overIORef expanderState expanderTasks ((tid, localState, task) :)
+
 forkExpanderTask :: ExpanderTask -> Expand ()
 forkExpanderTask task = do
-  tid <- newTaskID
   localState <- view expanderLocal
-  overIORef expanderState expanderTasks ((tid, localState, task) :)
+  localForkExpanderTask localState task
 
 forkExpandSyntax :: MacroDest -> Syntax -> Expand ()
 forkExpandSyntax dest stx =
@@ -396,26 +402,3 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Example e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
-
-type ScopeCheckTask = ()
-
-scopeCheckExpand :: Core -> Expand [ScopeCheckTask]
-scopeCheckExpand core = do
-  phase <- currentPhase
-  st <- getState
-  let
-    globalEnv :: Map Phase (Set.Set Var)
-    globalEnv =
-      Set.fromList . Env.keys <$> view expanderCurrentEnvs st
-  -- TODO: This should return something in a Writer monad, with the writee being
-  -- the free/list monoid over scope-checking tasks
-  let
-    recursiveCase :: Phase -> Core -> ScopeCheckT (Writer [ScopeCheckTask]) ()
-    recursiveCase phase core = _
-  let errorOr =
-        runWriter $
-          runScopeCheckT globalEnv $
-            scopeCheckCore recursiveCase phase core
-  case errorOr of
-    (Left err, _) -> fail "TODO(lb)"
-    (Right _, tasks) -> pure ()
