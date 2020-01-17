@@ -123,7 +123,7 @@
 \end{code}
 
 \begin{code}
-module ScopeCheck.Evidence
+module ScopeCheck
   ( ScopeCheck(..)
   , ScopeCheckT
   , runScopeCheckT

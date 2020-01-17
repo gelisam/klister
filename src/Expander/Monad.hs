@@ -103,7 +103,7 @@ import Phase
 import Signals
 import SplitCore
 import Scope
-import ScopeCheck.Evidence (Context, newContext)
+import ScopeCheck (Context, newContext)
 import Syntax
 import Value
 import World

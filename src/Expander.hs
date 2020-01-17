@@ -63,7 +63,7 @@ import Parser
 import Phase
 import Pretty
 import Scope
-import ScopeCheck.Evidence
+import ScopeCheck
 import ScopeSet (ScopeSet)
 import Signals
 import ShortShow
