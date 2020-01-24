@@ -22,6 +22,7 @@ import System.IO
 
 import Evaluator
 import Expander
+import Expander.Monad (ExpanderLocalAndState)
 import ModuleName
 import Parser
 import Parser.Command
@@ -118,7 +119,7 @@ tryCommand w l nonCommand =
     Left err | T.isPrefixOf (T.pack ":") l -> T.putStrLn err
              | otherwise -> nonCommand l
 
-repl :: ExpanderContext -> World Value -> IO ()
+repl :: ExpanderLocalAndState -> World Value -> IO ()
 repl ctx startWorld = do
   theWorld <- newIORef startWorld
   forever $

@@ -13,6 +13,7 @@ import Expander.Task
 import Phase
 import Pretty
 
+import ScopeCheck
 import ScopeSet
 import Syntax
 import Value
@@ -39,6 +40,7 @@ data ExpansionErr
   | NoSuchFile String
   | NotExported Ident Phase
   | ReaderError Text
+  | ScopeCheckError ScopeCheckError
   deriving (Show)
 
 instance Pretty VarInfo ExpansionErr where
@@ -110,3 +112,5 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
+  pp _env (ScopeCheckError txt) =
+    vsep (map text (T.lines (T.pack (show txt)))) -- TODO better printing

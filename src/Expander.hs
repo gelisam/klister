@@ -1084,7 +1084,7 @@ scopeCheckExpand localState splitCore = do
   let ctx = view expanderContext localState
   root <-
     case getRoot splitCore of
-      Nothing -> fail "internal error"
+      Nothing -> throwError $ InternalError "Term root not found during scope check"
       Just rt -> pure rt
   let
     recursiveCase ::
@@ -1094,14 +1094,14 @@ scopeCheckExpand localState splitCore = do
     recursiveCase _ splitCorePtr = do
       env <- ask -- possibly-expanded
       case subtree splitCore splitCorePtr of
-        Nothing -> fail "Malformed splitcore!"
+        Nothing -> throwError $ ScopeCheckInternalError "Malformed splitcore!"
         Just splitCoreSubtree -> lift $ tell [(env, splitCoreSubtree)]
   let errorOr =
         runWriter $
           runScopeCheckT ctx $
             scopeCheckCoreF recursiveCase phase root
   case errorOr of
-    (Left _, _) -> fail "Scope check error!"
+    (Left err, _) -> throwError $ ScopeCheckError err
     (Right _, tasks) ->
       forM_ tasks $ \(newCtxt, splitCoreSubtree) ->
         -- Add newly-bound variables to the new task

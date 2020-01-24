@@ -117,6 +117,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE StandaloneDeriving #-}
@@ -131,6 +132,7 @@ module ScopeCheck
   , Context(..)
   , newContext
   , scopeCheckRec
+  , ScopeCheckError(..)
   ) where
 
 import           Prelude hiding (head, tail)
@@ -142,6 +144,8 @@ import           Data.Map (Map)
 import qualified Data.Map as Map
 import           Data.Set (Set)
 import qualified Data.Set as Set
+import           Data.Text (Text)
+import qualified Data.Text as T
 
 import Core
 import Phase
@@ -155,7 +159,10 @@ is written in the open recursive style, so that it can be suspended and subtasks
 can be delayed.
 \begin{code}
 
-data ScopeCheckError = ScopeCheckError ()
+data ScopeCheckError
+  = ScopeCheckErrorMessage Text
+  | ScopeCheckInternalError Text
+  deriving Show
 
 -- | Laws:
 --
@@ -376,7 +383,7 @@ instance Monad m => ScopeCheck (ScopeCheckT m) where
   use phase var = do
     ctx <- MTL.ask
     unless (inContext phase var ctx) $
-      MTL.throwError (ScopeCheckError ())
+      MTL.throwError (ScopeCheckErrorMessage $ "Variable not found:" <> T.pack (show var))
 
   bindVarIn phase var = MTL.local (addToContext phase var)
 
