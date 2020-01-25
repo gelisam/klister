@@ -35,7 +35,7 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
-  | ScopeCheckTask SplitCore
+  | ScopeCheckTask SplitCorePtr
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro

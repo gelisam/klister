@@ -878,7 +878,12 @@ runTask (tid, localData, task) = withLocal localData $ do
               \case
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
-    ScopeCheckTask splitCore -> scopeCheckExpand localData splitCore
+    ScopeCheckTask splitCore ->
+      linkStatus splitCore >>=
+      \case
+        Nothing -> stillStuck tid task
+        Just root -> scopeCheckExpand root
+
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -1076,26 +1081,20 @@ interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
 
-type NewScopeCheckTask = (Context, SplitCore)
+type NewScopeCheckTask = (Context, SplitCorePtr)
 
-scopeCheckExpand :: ExpanderLocal -> SplitCore -> Expand ()
-scopeCheckExpand localState splitCore = do
+scopeCheckExpand :: CoreF SplitCorePtr -> Expand ()
+scopeCheckExpand root = do
   phase <- currentPhase
-  let ctx = view expanderContext localState
-  root <-
-    case getRoot splitCore of
-      Nothing -> throwError $ InternalError "Term root not found during scope check"
-      Just rt -> pure rt
+  ctx <- view (expanderLocal . expanderContext) <$> ask
   let
     recursiveCase ::
       Phase ->
       SplitCorePtr ->
       ScopeCheckT (Writer [NewScopeCheckTask]) ()
     recursiveCase _ splitCorePtr = do
-      env <- ask -- possibly-expanded
-      case subtree splitCore splitCorePtr of
-        Nothing -> throwError $ ScopeCheckInternalError "Malformed splitcore!"
-        Just splitCoreSubtree -> lift $ tell [(env, splitCoreSubtree)]
+      env <- ask
+      lift $ tell [(env, splitCorePtr)]
   let errorOr =
         runWriter $
           runScopeCheckT ctx $
@@ -1103,8 +1102,9 @@ scopeCheckExpand localState splitCore = do
   case errorOr of
     (Left err, _) -> throwError $ ScopeCheckError err
     (Right _, tasks) ->
-      forM_ tasks $ \(newCtxt, splitCoreSubtree) ->
+      forM_ tasks $ \(newCtxt, splitCoreSubtree) -> do
+        localState <- view expanderLocal <$> ask
         -- Add newly-bound variables to the new task
         localForkExpanderTask
-          (localState & expanderContext %~ (<> newCtxt))
+          (over expanderContext (<> newCtxt) localState)
           (ScopeCheckTask splitCoreSubtree)

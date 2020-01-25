@@ -24,6 +24,7 @@ module Expander.Monad
   , linkedCore
   , linkDecl
   , linkExpr
+  , linkStatus
   , modifyState
   , moduleScope
   , newDeclValidityPtr
@@ -43,6 +44,7 @@ module Expander.Monad
   , localForkExpanderTask
   , forkExpanderTask
   , forkInterpretMacroAction
+  , forkScopeCheck
   , stillStuck
   -- * Implementation parts
   , SyntacticCategory(..)
@@ -333,7 +335,7 @@ forkAwaitingMacro b v x mdest dest stx =
 
 forkAwaitingDeclMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
-forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
+forkAwaitingDeclMacro b v x mdest dest sc ph stx =
   forkExpanderTask $ AwaitingMacro (DeclDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
@@ -345,13 +347,16 @@ forkAwaitingDefn x n b defn dest stx =
 
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
-forkInterpretMacroAction dest act kont = do
+forkInterpretMacroAction dest act kont =
   forkExpanderTask $ InterpretMacroAction dest act kont
 
 forkContinueMacroAction :: MacroDest -> Value -> [Closure] -> Expand ()
-forkContinueMacroAction dest value kont = do
+forkContinueMacroAction dest value kont =
   forkExpanderTask $ ContinueMacroAction dest value kont
 
+forkScopeCheck :: SplitCorePtr -> Expand ()
+forkScopeCheck dest =
+  forkExpanderTask $ ScopeCheckTask dest
 
 -- | Compute the dependencies of a particular slot. The dependencies
 -- are the un-linked child slots. If there are no dependencies, then

@@ -129,10 +129,10 @@ filterExports ok (Exports es) =
       let out = Map.filterWithKey (\t _ -> ok p t) bs
       in if Map.null out then Nothing else Just out
 
-data Module f a = Module
+data Module body a = Module
   { _moduleName :: ModuleName
   , _moduleImports :: !Imports
-  , _moduleBody :: f a
+  , _moduleBody :: body a
   , _moduleExports :: !Exports
   }
   deriving (Functor, Show)

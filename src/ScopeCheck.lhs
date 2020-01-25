@@ -338,6 +338,7 @@ well-formed.
 
 \begin{code}
 newtype Context = Context { _getContext :: Map Phase (Set Var) }
+  deriving (Eq, Show)
 
 newContext :: Context
 newContext  = Context Map.empty
