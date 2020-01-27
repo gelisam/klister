@@ -21,6 +21,16 @@ instance (ShortShow a, ShortShow b) => ShortShow (a, b) where
    ++ ", "
    ++ shortShow y
    ++ ")"
+instance (ShortShow a, ShortShow b, ShortShow c) => ShortShow (a, b, c) where
+  shortShow (x, y, z)
+    = "("
+   ++ shortShow x
+   ++ ", "
+   ++ shortShow y
+   ++ ", "
+   ++ shortShow z
+   ++ ")"
+
 instance ShortShow a => ShortShow [a] where
   shortShow xs
     = "["

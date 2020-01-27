@@ -1,0 +1,8 @@
+#lang "n-ary-app.kl"
+(import (shift "n-ary-app.kl" 1))
+(import (shift "n-ary-app.kl" 2))
+(import "fun-exports.kl")
+
+(example a)
+(meta (example b))
+(meta (meta (example the-a)))

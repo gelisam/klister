@@ -73,5 +73,5 @@
 
 [example [quasiquote (thing [unquote thing] thing)]]
 
-[export quasiquote]
-[export unquote]
+[export quasiquote unquote]
+

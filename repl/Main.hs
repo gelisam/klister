@@ -83,7 +83,7 @@ mainWithOptions opts =
       when showWorld $
         prettyPrint $ view expanderWorld result
       when dumpBindings $
-        prettyPrint $ view expanderBindingTable result
+        prettyPrint $ view expanderGlobalBindingTable result
       case Map.lookup mn (view worldEvaluated (view expanderWorld result)) of
         Nothing -> fail "Internal error: module not evaluated"
         Just results -> do

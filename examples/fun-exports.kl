@@ -1,0 +1,29 @@
+#lang kernel
+(import (shift kernel 1))
+(import (shift kernel 2))
+(import (shift kernel 3))
+
+
+
+
+(meta (define a 2))
+
+(meta (meta (define a 3)))
+
+(meta (meta (meta (define a 4))))
+
+(define a 1)
+
+(define b a)
+(meta (define b a))
+(meta (meta (define b a)))
+(meta (meta (meta (define b a))))
+
+(example b)
+(meta (example b))
+(meta (meta (example b)))
+(meta (meta (meta (example b))))
+
+(export a)
+(export (rename ([a b]) (shift 1 a)))
+(export (shift 2 (prefix "the-" a)))
