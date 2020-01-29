@@ -128,12 +128,16 @@ generalizeType ty = do
   pure $ Scheme n body
 
   where
-    genTyVars :: [MetaPtr] -> Ty -> StateT (Natural, Map MetaPtr Natural) Expand Ty
+    genTyVars ::
+      [MetaPtr] -> Ty ->
+      StateT (Natural, Map MetaPtr Natural) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
       Ty <$> genVars vars t'
 
-    genVars :: [MetaPtr] -> TyF Ty -> StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
+    genVars ::
+      [MetaPtr] -> TyF Ty ->
+      StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
     genVars _ TUnit = pure TUnit
     genVars _ TBool = pure TBool
     genVars _ TSyntax = pure TSyntax
@@ -143,7 +147,8 @@ generalizeType ty = do
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
     genVars vars (TMacro a) = TMacro <$> genTyVars vars a
     genVars vars (TList a) = TList <$> genTyVars vars a
-    genVars _ (TSchemaVar _) = throwError $ InternalError "Can't generalize in schema"
+    genVars _ (TSchemaVar _) =
+      throwError $ InternalError "Can't generalize in schema"
     genVars vars (TMetaVar v)
       | v `elem` vars = do
           (i, indices) <- get
