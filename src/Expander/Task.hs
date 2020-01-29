@@ -21,6 +21,7 @@ import Value
 
 data MacroDest
   = ExprDest SplitCorePtr
+  | TypeDest SplitTypePtr
   | DeclDest DeclPtr Scope DeclValidityPtr
   deriving Show
 
@@ -31,7 +32,6 @@ data TypeSpec
 
 data ExpanderTask
   = ExpandSyntax MacroDest Syntax
-  | ExpandType SplitTypePtr Syntax
   | AwaitingSignal MacroDest Signal [Closure]
   | AwaitingMacro MacroDest TaskAwaitMacro
   | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
@@ -62,7 +62,6 @@ instance ShortShow TaskAwaitMacro where
 
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
-  shortShow (ExpandType _dest stx) = "(ExpandType " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
   shortShow (AwaitingDefn _x n _b _defn _dest stx) =
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"

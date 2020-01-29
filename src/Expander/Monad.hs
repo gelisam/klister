@@ -357,7 +357,7 @@ forkExpandSyntax dest stx =
 
 forkExpandType :: SplitTypePtr -> Syntax -> Expand ()
 forkExpandType dest stx =
-  forkExpanderTask $ ExpandType dest stx
+  forkExpanderTask $ ExpandSyntax (TypeDest dest) stx
 
 forkCompleteTypeCheck :: SplitCorePtr -> Ty -> Expand ()
 forkCompleteTypeCheck eDest ty =

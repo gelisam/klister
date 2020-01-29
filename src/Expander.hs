@@ -938,8 +938,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression d stx
         DeclDest d sc ph ->
           expandOneDeclaration sc d stx ph
-    ExpandType dest stx ->
-      expandOneType dest stx
+        TypeDest d -> expandOneType d stx
     AwaitingSignal dest signal kont -> do
       signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
@@ -1033,9 +1032,9 @@ runTask (tid, localData, task) = withLocal localData $ do
         Nothing -> stillStuck tid task
         Just e ->
           case ty of
-            IncompleteType tDest -> do
-              ty <- linkedType tDest
-              case ty of
+            IncompleteType tDest ->
+              linkedType tDest >>=
+              \case
                 Nothing -> stillStuck tid task
                 Just t -> typeCheckLayer e t
             CompleteType t -> typeCheckLayer e t
@@ -1056,7 +1055,38 @@ expandOneType dest stx
         EPrimMacro _ -> throwError $ InternalError "Context expects a type"
         EPrimDeclMacro _ -> throwError $ InternalError "Context expects a type"
         EVarMacro _ -> throwError $ InternalError "Context expects a type, but got a program variable"
-
+        EPrimModuleMacro _ -> throwError $ InternalError "Context expects a type, not a module"
+        EIncompleteMacro _ _ _ ->
+          throwError $ InternalError "Context expects a type"
+        EIncompleteDefn _ _ _ ->
+          throwError $ InternalError "Context expects a type"
+        EUserMacro transformerName -> do
+          stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
+          p <- currentPhase
+          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
+          case implV of
+            Just (ValueClosure macroImpl) -> do
+              macroVal <- inEarlierPhase $ expandEval $
+                          apply macroImpl $
+                          ValueSyntax $ addScope p stx stepScope
+              case macroVal of
+                ValueMacroAction act -> do
+                  res <- interpretMacroAction act
+                  case res of
+                    Left (sig, kont) -> do
+                      forkAwaitingSignal (TypeDest dest) sig kont
+                    Right expanded ->
+                      case expanded of
+                        ValueSyntax expansionResult ->
+                          forkExpandSyntax (TypeDest dest) (flipScope p expansionResult stepScope)
+                        other -> throwError $ ValueNotSyntax other
+                other ->
+                  throwError $ ValueNotMacro other
+            Nothing ->
+              throwError $ InternalError $
+              "No transformer yet created for " ++ shortShow ident ++
+              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
+            Just other -> throwError $ ValueNotMacro other
   | otherwise = throwError $ NotValidType stx
 
 
