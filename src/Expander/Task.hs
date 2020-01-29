@@ -14,7 +14,9 @@ import Scope
 import ShortShow
 import Signals
 import SplitCore
+import SplitType
 import Syntax
+import Type
 import Value
 
 data MacroDest
@@ -22,8 +24,14 @@ data MacroDest
   | DeclDest DeclPtr Scope DeclValidityPtr
   deriving Show
 
+data TypeSpec
+  = CompleteType Ty
+  | IncompleteType SplitTypePtr
+  deriving Show
+
 data ExpanderTask
   = ExpandSyntax MacroDest Syntax
+  | ExpandType SplitTypePtr Syntax
   | AwaitingSignal MacroDest Signal [Closure]
   | AwaitingMacro MacroDest TaskAwaitMacro
   | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
@@ -35,6 +43,7 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
+  | TypeCheck SplitCorePtr TypeSpec
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -53,6 +62,7 @@ instance ShortShow TaskAwaitMacro where
 
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
+  shortShow (ExpandType _dest stx) = "(ExpandType " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
   shortShow (AwaitingDefn _x n _b _defn _dest stx) =
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
@@ -62,6 +72,7 @@ instance ShortShow ExpanderTask where
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
+  shortShow (TypeCheck _ _) = "(TypeCheck _ _)"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)

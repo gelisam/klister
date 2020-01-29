@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -61,6 +62,7 @@ import Evaluator
 import Expander.DeclScope
 import Expander.Syntax
 import Expander.Monad
+import Expander.TC
 import Module
 import ModuleName
 import Parser
@@ -71,8 +73,10 @@ import ScopeSet (ScopeSet)
 import Signals
 import ShortShow
 import SplitCore
+import SplitType
 import Syntax
 import Syntax.SrcLoc
+import Type
 import Value
 import World
 import qualified ScopeSet
@@ -386,8 +390,57 @@ initializeKernel = do
   traverse_ (uncurry addExprPrimitive) exprPrims
   traverse_ (uncurry addModulePrimitive) modPrims
   traverse_ (uncurry addDeclPrimitive) declPrims
+  traverse_ (uncurry addTypePrimitive) typePrims
 
   where
+    typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
+    typePrims =
+      [ ( "Bool"
+        , \ dest stx -> do
+            _actualName <- mustBeIdent stx
+            linkType dest TBool
+        )
+      , ( "Unit"
+        , \ dest stx -> do
+            _actualName <- mustBeIdent stx
+            linkType dest TUnit
+        )
+      , ( "Syntax"
+        , \ dest stx -> do
+            _actualName <- mustBeIdent stx
+            linkType dest TSyntax
+        )
+      , ( "Ident"
+        , \ dest stx -> do
+            _actualName <- mustBeIdent stx
+            linkType dest TIdent
+        )
+      , ( "Signal"
+        , \ dest stx -> do
+            _actualName <- mustBeIdent stx
+            linkType dest TSignal
+        )
+      , ( "->"
+        , \ dest stx -> do
+            Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+            argDest <- scheduleType arg
+            retDest <- scheduleType ret
+            linkType dest (TFun argDest retDest)
+        )
+      , ( "Macro"
+        , \ dest stx -> do
+            Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
+            tDest <- scheduleType t
+            linkType dest (TMacro tDest)
+        )
+      , ( "List"
+        , \ dest stx -> do
+            Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
+            entryTypeDest <- scheduleType e
+            linkType dest (TList entryTypeDest)
+        )
+      ]
+
     modPrims :: [(Text, Syntax -> Expand ())]
     modPrims =
       [ ( "#%module"
@@ -561,6 +614,14 @@ initializeKernel = do
     exprPrims =
       [ ( "oops"
         , \ _ stx -> throwError (InternalError $ "oops" ++ show stx)
+        )
+      , ( "the"
+        , \ dest stx -> do
+            Stx _ _ (_, ty, expr) <- mustHaveEntries stx
+            tyDest <- scheduleType ty
+            -- TODO add type to elaborated program? Or not?
+            forkExpandSyntax (ExprDest dest) expr
+            forkTypeCheck dest tyDest
         )
       , ( "lambda"
         , \ dest stx -> do
@@ -756,6 +817,11 @@ initializeKernel = do
       bind b (EVarMacro var)
       return (sc, x', var)
 
+    scheduleType :: Syntax -> Expand SplitTypePtr
+    scheduleType stx = do
+      dest <- liftIO newSplitTypePtr
+      forkExpandType dest stx
+      return dest
 
     schedule :: Syntax -> Expand SplitCorePtr
     schedule stx = do
@@ -781,6 +847,12 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
+    addTypePrimitive :: Text -> (SplitTypePtr -> Syntax -> Expand ()) -> Expand ()
+    addTypePrimitive name impl = do
+      let val = EPrimTypeMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
 
     addExprPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addExprPrimitive name impl = do
@@ -866,6 +938,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression d stx
         DeclDest d sc ph ->
           expandOneDeclaration sc d stx ph
+    ExpandType dest stx ->
+      expandOneType dest stx
     AwaitingSignal dest signal kont -> do
       signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
@@ -952,6 +1026,19 @@ runTask (tid, localData, task) = withLocal localData $ do
               \case
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
+    TypeCheck eDest ty -> do
+      st <- getState
+      let eTop = view (expanderCompletedCore . at eDest) st
+      case eTop of
+        Nothing -> stillStuck tid task
+        Just e ->
+          case ty of
+            IncompleteType tDest -> do
+              ty <- linkedType tDest
+              case ty of
+                Nothing -> stillStuck tid task
+                Just t -> typeCheckLayer e t
+            CompleteType t -> typeCheckLayer e t
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -959,6 +1046,18 @@ runTask (tid, localData, task) = withLocal localData $ do
         over expanderTasks $
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
 
+expandOneType :: SplitTypePtr -> Syntax -> Expand ()
+expandOneType dest stx
+  | Just ident <- identifierHeaded stx = do
+      b <- resolve =<< addRootScope ident
+      v <- getEValue b
+      case v of
+        EPrimTypeMacro impl -> impl dest stx
+        EPrimMacro _ -> throwError $ InternalError "Context expects a type"
+        EPrimDeclMacro _ -> throwError $ InternalError "Context expects a type"
+        EVarMacro _ -> throwError $ InternalError "Context expects a type, but got a program variable"
+
+  | otherwise = throwError $ NotValidType stx
 
 
 expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
@@ -968,6 +1067,7 @@ expandOneExpression dest stx
       v <- getEValue b
       case v of
         EPrimMacro impl -> impl dest stx
+        EPrimTypeMacro _ -> throwError $ InternalError "Current context won't accept types"
         EPrimModuleMacro _ ->
           throwError $ InternalError "Current context won't accept modules"
         EPrimDeclMacro _ ->
@@ -1038,6 +1138,8 @@ expandOneDeclaration sc dest stx ph
           throwError $ InternalError "Current context won't accept modules"
         EPrimDeclMacro impl ->
           impl sc dest ph stx
+        EPrimTypeMacro _ ->
+          throwError $ InternalError "Current context won't accept types"
         EVarMacro _ ->
           throwError $ InternalError "Current context won't accept expressions"
         EIncompleteDefn _ _ _ ->
@@ -1151,3 +1253,47 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
+
+typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
+typeCheckLayer (CorePure e) t = do
+  innerT <- Ty . TMetaVar <$> freshMeta
+  unify (Ty (TMacro innerT)) t
+  forkCompleteTypeCheck e innerT
+typeCheckLayer (CoreBool _) t =
+  unify (Ty TBool) t
+typeCheckLayer (CoreSyntax _) t =
+  unify (Ty TSyntax) t
+
+
+-- The expected type is first, the received is second
+unify :: Ty -> Ty -> Expand ()
+unify t1 t2 = do
+  t1' <- normType t1
+  t2' <- normType t2
+  unify' (unTy t1') (unTy t2')
+
+  where
+    -- Rigid-rigid
+    unify' TBool TBool = pure ()
+    unify' TUnit TUnit = pure ()
+    unify' TSyntax TSyntax = pure ()
+    unify' TIdent TIdent = pure ()
+    unify' TSignal TSignal = pure ()
+    unify' (TFun a c) (TFun b d) = unify b a >> unify c d
+    unify' (TMacro a) (TMacro b) = unify a b
+    unify' (TList a) (TList b) = unify a b
+
+    -- Flex-flex
+    unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
+      l1 <- view varLevel <$> derefType ptr1
+      l2 <- view varLevel <$> derefType ptr2
+      if | ptr1 == ptr2 -> pure ()
+         | l1 < l2 -> linkToType ptr1 t2
+         | otherwise -> linkToType ptr2 t1
+
+    -- Flex-rigid
+    unify' (TMetaVar ptr1) _ = linkToType ptr1 t2
+    unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
+
+    -- Mismatch
+    unify' expected received = throwError $ TypeMismatch (show expected) (show received) -- TODO structured repr

@@ -40,6 +40,9 @@ data ExpansionErr
   | NoSuchFile String
   | NotExported Ident Phase
   | ReaderError Text
+  | NotValidType Syntax
+  | TypeMismatch String String -- TODO structured representation
+  | OccursCheckFailed
   deriving (Show)
 
 instance Pretty VarInfo ExpansionErr where
@@ -113,3 +116,5 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
+  pp env (NotValidType stx) =
+    hang 2 $ group $ vsep [text "Not a type:", pp env stx]

@@ -3,12 +3,15 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 module Expander.Monad
   ( module Expander.Error
   , module Expander.DeclScope
   -- * The expander monad
   , Expand(..)
   , currentPhase
+  , currentBindingLevel
+  , inTypeBinder
   , dependencies
   , execExpand
   , freshScope
@@ -20,8 +23,10 @@ module Expander.Monad
   , inEarlierPhase
   , inPhase
   , linkedCore
+  , linkedType
   , linkDecl
   , linkExpr
+  , linkType
   , modifyState
   , moduleScope
   , newDeclValidityPtr
@@ -38,6 +43,9 @@ module Expander.Monad
   , forkAwaitingSignal
   , forkContinueMacroAction
   , forkExpandSyntax
+  , forkExpandType
+  , forkTypeCheck
+  , forkCompleteTypeCheck
   , forkExpanderTask
   , forkInterpretMacroAction
   , stillStuck
@@ -56,10 +64,12 @@ module Expander.Monad
   -- ** Lenses
   , expanderGlobalBindingTable
   , expanderCompletedCore
+  , expanderCompletedTypes
   , expanderCompletedModBody
   , expanderCurrentBindingTable
   , expanderCurrentEnvs
   , expanderCurrentTransformerEnvs
+  , expanderTypeStore
   , expanderDeclPhases
   , expanderExpansionEnv
   , expanderKernelBindings
@@ -98,12 +108,15 @@ import Expander.Task
 import Module
 import ModuleName
 import PartialCore
+import PartialType
 import Phase
 import ShortShow
 import Signals
 import SplitCore
+import SplitType
 import Scope
 import Syntax
+import Type
 import Value
 import World
 
@@ -135,6 +148,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 
 data EValue
   = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
+  | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
@@ -153,6 +167,7 @@ data ExpanderContext = ExpanderContext
 data ExpanderLocal = ExpanderLocal
   { _expanderModuleName :: !ModuleName
   , _expanderPhase :: !Phase
+  , _expanderBindingLevels :: !(Map Phase BindingLevel)
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -162,6 +177,7 @@ mkInitContext mn = do
                            , _expanderLocal = ExpanderLocal
                              { _expanderModuleName = mn
                              , _expanderPhase = runtime
+                             , _expanderBindingLevels = Map.empty
                              }
                            }
 
@@ -173,6 +189,7 @@ data ExpanderState = ExpanderState
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl DeclPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
@@ -186,6 +203,7 @@ data ExpanderState = ExpanderState
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentBindingTable :: !BindingTable
+  , _expanderTypeStore :: !(TypeStore Ty)
   }
 
 initExpanderState :: ExpanderState
@@ -197,6 +215,7 @@ initExpanderState = ExpanderState
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
   , _expanderCompletedCore = Map.empty
+  , _expanderCompletedTypes = Map.empty
   , _expanderCompletedModBody = Map.empty
   , _expanderCompletedDecls = Map.empty
   , _expanderModuleTop = Nothing
@@ -210,6 +229,7 @@ initExpanderState = ExpanderState
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
   , _expanderCurrentBindingTable = mempty
+  , _expanderTypeStore = mempty
   }
 
 makeLenses ''ExpanderContext
@@ -290,6 +310,10 @@ linkDecl :: DeclPtr -> Decl DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
+linkType :: SplitTypePtr -> TyF SplitTypePtr -> Expand ()
+linkType dest ty =
+  modifyState $ over expanderCompletedTypes (<> Map.singleton dest ty)
+
 linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
 linkStatus slot = do
   complete <- view expanderCompletedCore <$> getState
@@ -298,6 +322,11 @@ linkStatus slot = do
 linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
   runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
+  getState
+
+linkedType :: SplitTypePtr -> Expand (Maybe Ty)
+linkedType slot =
+  runPartialType . unsplitType . SplitType slot . view expanderCompletedTypes <$>
   getState
 
 freshVar :: Expand Var
@@ -320,6 +349,18 @@ forkExpanderTask task = do
 forkExpandSyntax :: MacroDest -> Syntax -> Expand ()
 forkExpandSyntax dest stx =
   forkExpanderTask $ ExpandSyntax dest stx
+
+forkExpandType :: SplitTypePtr -> Syntax -> Expand ()
+forkExpandType dest stx =
+  forkExpanderTask $ ExpandType dest stx
+
+forkCompleteTypeCheck :: SplitCorePtr -> Ty -> Expand ()
+forkCompleteTypeCheck eDest ty =
+  forkExpanderTask $ TypeCheck eDest (CompleteType ty)
+
+forkTypeCheck :: SplitCorePtr -> SplitTypePtr -> Expand ()
+forkTypeCheck eDest ty =
+  forkExpanderTask $ TypeCheck eDest (IncompleteType ty)
 
 forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont =
@@ -401,3 +442,25 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Example e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
+
+currentBindingLevel :: Expand BindingLevel
+currentBindingLevel = do
+  ph <- currentPhase
+  view (expanderLocal .
+        expanderBindingLevels .
+        at ph .
+        non topmost)
+
+topmost :: BindingLevel
+topmost = BindingLevel 0
+
+inTypeBinder :: Expand a -> Expand a
+inTypeBinder act = do
+  ph <- currentPhase
+  Expand $
+    local (over (expanderLocal .
+                 expanderBindingLevels .
+                 at ph . non topmost) bump) $
+    runExpand act
+  where
+    bump (BindingLevel n) = BindingLevel (n + 1)
