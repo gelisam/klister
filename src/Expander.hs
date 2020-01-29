@@ -1312,7 +1312,27 @@ typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
 typeCheckLayer (CoreVar x) t = do
   sch <- varType x
   specialize sch >>= unify t
-
+typeCheckLayer (CoreLet x ident def body) t = do
+  defTy <-
+    inTypeBinder do
+      xt <- Ty . TMetaVar <$> freshMeta
+      forkCompleteTypeCheck def xt
+      pure xt
+  σ <- generalizeType defTy
+  withLocalVarType x ident σ $
+    forkCompleteTypeCheck body t
+typeCheckLayer (CoreLetFun f fident x xident def body) t = do
+  ft <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  xt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  rt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  inTypeBinder $
+    withLocalVarType f fident (Scheme 0 ft) $
+      withLocalVarType x xident (Scheme 0 xt) $
+        forkCompleteTypeCheck def rt
+  unify ft (Ty (TFun xt rt))
+  sch <- generalizeType ft
+  withLocalVarType f fident sch $
+    forkCompleteTypeCheck body t
 typeCheckLayer (CoreLam x ident body) t = do
   argT <- Ty . TMetaVar <$> freshMeta
   retT <- Ty . TMetaVar <$> freshMeta

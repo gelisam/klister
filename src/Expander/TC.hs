@@ -2,9 +2,13 @@
 {-# LANGUAGE ViewPatterns #-}
 module Expander.TC where
 
-import Control.Lens
+import Control.Lens hiding (indices)
 import Control.Monad.Except
+import Control.Monad.State
 import Data.Foldable
+import Data.Map (Map)
+import qualified Data.Map as Map
+import Numeric.Natural
 
 import Expander.Monad
 import Core
@@ -110,3 +114,42 @@ varType x = do
   case view (at x) γ of
     Nothing -> error "TODO error message"
     Just (_, ty) -> pure ty
+
+notFreeInCtx :: MetaPtr -> Expand Bool
+notFreeInCtx var = do
+  lvl <- currentBindingLevel
+  (> lvl) . view varLevel <$> derefType var
+
+generalizeType :: Ty -> Expand (Scheme Ty)
+generalizeType ty = do
+  canGeneralize <- filterM notFreeInCtx =<< metas ty
+  (body, (n, _)) <- flip runStateT (0, Map.empty) $
+    genTyVars canGeneralize ty
+  pure $ Scheme n body
+
+  where
+    genTyVars :: [MetaPtr] -> Ty -> StateT (Natural, Map MetaPtr Natural) Expand Ty
+    genTyVars vars t = do
+      (Ty t') <- lift $ normType t
+      Ty <$> genVars vars t'
+
+    genVars :: [MetaPtr] -> TyF Ty -> StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
+    genVars _ TUnit = pure TUnit
+    genVars _ TBool = pure TBool
+    genVars _ TSyntax = pure TSyntax
+    genVars _ TIdent = pure TIdent
+    genVars _ TSignal = pure TSignal
+    genVars vars (TFun dom ran) =
+      TFun <$> genTyVars vars dom <*> genTyVars vars ran
+    genVars vars (TMacro a) = TMacro <$> genTyVars vars a
+    genVars vars (TList a) = TList <$> genTyVars vars a
+    genVars _ (TSchemaVar _) = throwError $ InternalError "Can't generalize in schema"
+    genVars vars (TMetaVar v)
+      | v `elem` vars = do
+          (i, indices) <- get
+          case Map.lookup v indices of
+            Nothing -> do
+              put (i + 1, Map.insert v i indices)
+              pure $ TSchemaVar i
+            Just j -> pure $ TSchemaVar j
+      | otherwise = pure $ TMetaVar v
