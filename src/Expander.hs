@@ -1258,6 +1258,16 @@ typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
 typeCheckLayer (CoreVar x) t = do
   sch <- varType x
   specialize sch >>= unify t
+typeCheckLayer (CoreLam x ident body) t = do
+  argT <- Ty . TMetaVar <$> freshMeta
+  retT <- Ty . TMetaVar <$> freshMeta
+  unify t (Ty (TFun argT retT))
+  withLocalVarType x ident (Scheme 0 argT) $
+    forkCompleteTypeCheck body retT
+typeCheckLayer (CoreApp fun arg) t = do
+  argT <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck fun (Ty (TFun argT t))
+  forkCompleteTypeCheck arg argT
 typeCheckLayer (CorePure e) t = do
   innerT <- Ty . TMetaVar <$> freshMeta
   unify (Ty (TMacro innerT)) t
@@ -1268,11 +1278,66 @@ typeCheckLayer (CoreBind e1 e2) t = do
   b <- Ty . TMetaVar <$> freshMeta
   forkCompleteTypeCheck e2 (Ty (TFun a (Ty (TMacro b))))
   unify t (Ty (TMacro b))
-typeCheckLayer (CoreBool _) t =
-  unify (Ty TBool) t
+typeCheckLayer (CoreSyntaxError (SyntaxError locs msg)) t = do
+  for_ locs (flip forkCompleteTypeCheck (Ty TSyntax))
+  forkCompleteTypeCheck msg (Ty TSyntax)
+  a <- Ty . TMetaVar <$> freshMeta
+  unify t (Ty (TMacro a))
+typeCheckLayer (CoreSendSignal s) t = do
+  forkCompleteTypeCheck s (Ty TSignal)
+  unify t (Ty (TMacro (Ty TUnit)))
+typeCheckLayer (CoreWaitSignal s) t = do
+  forkCompleteTypeCheck s (Ty TSignal)
+  unify t (Ty (TMacro (Ty TUnit)))
+typeCheckLayer (CoreIdentEq _ e1 e2) t = do
+  forkCompleteTypeCheck e1 (Ty TSyntax)
+  forkCompleteTypeCheck e2 (Ty TSyntax)
+  unify t (Ty (TMacro (Ty TBool)))
+typeCheckLayer (CoreLog msg) t = do
+  forkCompleteTypeCheck msg (Ty TSyntax)
+  unify t (Ty (TMacro (Ty TUnit)))
 typeCheckLayer (CoreSyntax _) t =
   unify (Ty TSyntax) t
-
+typeCheckLayer (CoreCase scrutinee cases) t = do
+  forkCompleteTypeCheck scrutinee (Ty TSyntax)
+  for_ cases $ \ (pat, expr) -> do
+    bindVars pat $ forkCompleteTypeCheck expr t
+  where
+    bindVars (PatternIdentifier ident x) =
+      withLocalVarType ident x (Scheme 0 (Ty TIdent))
+    bindVars PatternEmpty = id
+    bindVars (PatternCons identA a identD d) =
+      withLocalVarType identA a (Scheme 0 (Ty TSyntax)) .
+      withLocalVarType identD d (Scheme 0 (Ty (TList (Ty TSyntax))))
+    bindVars (PatternList []) = id
+    bindVars (PatternList ((ident, x) : more)) =
+      withLocalVarType ident x (Scheme 0 (Ty TSyntax)) .
+      bindVars (PatternList more)
+    bindVars PatternAny = id
+typeCheckLayer (CoreIdentifier _ident) t = unify t (Ty (TIdent))
+typeCheckLayer (CoreSignal _s) t = unify t (Ty (TSignal))
+typeCheckLayer (CoreBool _) t =
+  unify (Ty TBool) t
+typeCheckLayer (CoreIf b e1 e2) t = do
+  forkCompleteTypeCheck b (Ty TBool)
+  forkCompleteTypeCheck e1 t
+  forkCompleteTypeCheck e2 t
+typeCheckLayer (CoreIdent (ScopedIdent ident srcloc)) t = do
+  forkCompleteTypeCheck ident (Ty TIdent)
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify t (Ty TIdent)
+typeCheckLayer (CoreEmpty (ScopedEmpty srcloc)) t = do
+  unify t (Ty TSyntax)
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+typeCheckLayer (CoreCons (ScopedCons hd tl srcloc)) t = do
+  forkCompleteTypeCheck hd (Ty TSyntax)
+  forkCompleteTypeCheck tl (Ty (TList (Ty TSyntax)))
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify t (Ty TSyntax)
+typeCheckLayer (CoreList (ScopedList elts srcloc)) t = do
+  for_ elts $ \e -> forkCompleteTypeCheck e t
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify t (Ty TSyntax)
 
 -- The expected type is first, the received is second
 unify :: Ty -> Ty -> Expand ()

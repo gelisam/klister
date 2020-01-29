@@ -118,3 +118,11 @@ instance Pretty VarInfo ExpansionErr where
     vsep (map text (T.lines txt))
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
+  pp _env (TypeMismatch expected got) =
+    hang 2 $ group $ vsep [ text "Type mismatch. Expected"
+                          , text (T.pack expected)
+                          , "but got"
+                          , text (T.pack got)
+                          ]
+
+  pp _env OccursCheckFailed = text "Occurs check failed"

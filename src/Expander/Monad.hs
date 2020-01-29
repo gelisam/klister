@@ -32,6 +32,7 @@ module Expander.Monad
   , newDeclValidityPtr
   , phaseRoot
   , withLocal
+  , withLocalVarType
   -- ** Context
   , ExpanderContext
   , mkInitContext
@@ -468,3 +469,13 @@ inTypeBinder act = do
     runExpand act
   where
     bump (BindingLevel n) = BindingLevel (n + 1)
+
+withLocalVarType :: Ident -> Var -> Scheme Ty -> Expand a -> Expand a
+withLocalVarType ident x sch act = do
+  ph <- currentPhase
+  Expand $
+    local (over (expanderLocal . expanderVarTypes . at ph) addVar) $
+    runExpand act
+  where
+    addVar Nothing = Just $ Env.singleton x ident sch
+    addVar (Just γ) = Just $ Env.insert x ident sch γ
