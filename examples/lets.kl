@@ -2,6 +2,6 @@
 
 (example (the Syntax (let (x 'foo) x)))
 
-(example (flet (f x (if x 'a 'b)) (f #true)))
+(example (flet (f (x) (if x 'a 'b)) (f #true)))
 
-(example (the Syntax (flet (f x 'a) (list-syntax ((f #true) (f 4)) 'here))))
+(example (the Syntax (flet (f (x) 'a) (list-syntax ((f #true) (f 4)) 'here))))

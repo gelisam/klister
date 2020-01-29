@@ -637,7 +637,8 @@ initializeKernel = do
       , ( "flet"
         , \ dest stx -> do
             Stx _ _ (_, b, body) <- mustHaveEntries stx
-            Stx _ _ (f, x, def) <- mustHaveEntries b
+            Stx _ _ (f, args, def) <- mustHaveEntries b
+            Stx _ _ x <- mustHaveEntries args
             (fsc, f', coreF) <- prepareVar f
             (xsc, x', coreX) <- prepareVar x
             p <- currentPhase
