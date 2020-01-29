@@ -623,6 +623,30 @@ initializeKernel = do
             forkExpandSyntax (ExprDest dest) expr
             forkTypeCheck dest tyDest
         )
+      , ( "let"
+        , \ dest stx -> do
+            Stx _ _ (_, b, body) <- mustHaveEntries stx
+            Stx _ _ (x, def) <- mustHaveEntries b
+            (sc, x', coreX) <- prepareVar x
+            p <- currentPhase
+            psc <- phaseRoot
+            defDest <- schedule def
+            bodyDest <- schedule $ addScope p (addScope p body sc) psc
+            linkExpr dest $ CoreLet x' coreX defDest bodyDest
+        )
+      , ( "flet"
+        , \ dest stx -> do
+            Stx _ _ (_, b, body) <- mustHaveEntries stx
+            Stx _ _ (f, x, def) <- mustHaveEntries b
+            (fsc, f', coreF) <- prepareVar f
+            (xsc, x', coreX) <- prepareVar x
+            p <- currentPhase
+            psc <- phaseRoot
+            defDest <- schedule $
+                       addScope p (addScope p (addScope p def fsc) xsc) psc
+            bodyDest <- schedule $ addScope p (addScope p body fsc) psc
+            linkExpr dest $ CoreLetFun f' coreF x' coreX defDest bodyDest
+        )
       , ( "lambda"
         , \ dest stx -> do
             Stx _ _ (_, arg, body) <- mustHaveEntries stx
@@ -1288,6 +1312,7 @@ typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
 typeCheckLayer (CoreVar x) t = do
   sch <- varType x
   specialize sch >>= unify t
+
 typeCheckLayer (CoreLam x ident body) t = do
   argT <- Ty . TMetaVar <$> freshMeta
   retT <- Ty . TMetaVar <$> freshMeta

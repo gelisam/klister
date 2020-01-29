@@ -81,6 +81,20 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     case Env.lookupIdent v env of
       Nothing -> string ("!!" ++ show v ++ "!!")
       Just (Stx _ _ x) -> text x
+  pp env (CoreLet x@(Stx _ _ y) v def body) =
+    hang 2 $ group $
+    vsep [ text "let" <+> hang 2 (group (vsep [pp env y <+> text "=", pp env def])) <+> text "in"
+         , pp (env <> Env.singleton v x ()) body
+         ]
+  pp env (CoreLetFun f@(Stx _ _ g) fv x@(Stx _ _ y) v def body) =
+    hang 2 $ group $
+    vsep [ text "flet" <+>
+           hang 2 (group (vsep [ pp env g <+> pp env y <+> text "="
+                               , pp (env <> Env.singleton fv f () <> Env.singleton v x ()) def
+                               ])) <+>
+           text "in"
+         , pp (env <> Env.singleton v x ()) body
+         ]
   pp env (CoreLam n@(Stx _ _ x) v body) =
     hang 2 $ group $
     text "λ" <> annotate (BindingSite v) (text x) <> "." <> line <>
