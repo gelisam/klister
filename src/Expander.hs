@@ -1255,10 +1255,19 @@ interpretMacroAction (MacroActionLog stx) = do
   pure $ Right (ValueBool False) -- TODO unit type
 
 typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
+typeCheckLayer (CoreVar x) t = do
+  sch <- varType x
+  specialize sch >>= unify t
 typeCheckLayer (CorePure e) t = do
   innerT <- Ty . TMetaVar <$> freshMeta
   unify (Ty (TMacro innerT)) t
   forkCompleteTypeCheck e innerT
+typeCheckLayer (CoreBind e1 e2) t = do
+  a <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck e1 (Ty (TMacro a))
+  b <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck e2 (Ty (TFun a (Ty (TMacro b))))
+  unify t (Ty (TMacro b))
 typeCheckLayer (CoreBool _) t =
   unify (Ty TBool) t
 typeCheckLayer (CoreSyntax _) t =

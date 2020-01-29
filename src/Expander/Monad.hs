@@ -79,6 +79,7 @@ module Expander.Monad
   , expanderModuleName
   , expanderModuleTop
   , expanderReceivedSignals
+  , expanderVarTypes
   , expanderTasks
   , expanderWorld
   -- * Tasks
@@ -117,6 +118,7 @@ import SplitType
 import Scope
 import Syntax
 import Type
+import Type.Context
 import Value
 import World
 
@@ -168,6 +170,7 @@ data ExpanderLocal = ExpanderLocal
   { _expanderModuleName :: !ModuleName
   , _expanderPhase :: !Phase
   , _expanderBindingLevels :: !(Map Phase BindingLevel)
+  , _expanderVarTypes :: TypeContext Var (Scheme Ty)
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -178,6 +181,7 @@ mkInitContext mn = do
                              { _expanderModuleName = mn
                              , _expanderPhase = runtime
                              , _expanderBindingLevels = Map.empty
+                             , _expanderVarTypes = mempty
                              }
                            }
 

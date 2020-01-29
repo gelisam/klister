@@ -4,7 +4,7 @@
 (example (the Bool #false))
 (example (the Syntax 'foo))
 (example (the (Macro Syntax) (pure 'foo)))
-
+-- >>=
 
 
 

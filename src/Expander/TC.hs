@@ -7,6 +7,7 @@ import Control.Monad.Except
 import Data.Foldable
 
 import Expander.Monad
+import Core
 import Type
 
 
@@ -77,3 +78,35 @@ freshMeta = do
   ptr <- liftIO $ newMetaPtr
   modifyState (set (expanderTypeStore . at ptr) (Just (TVar NoLink lvl)))
   return ptr
+
+inst :: Scheme Ty -> [Ty] -> Expand Ty
+inst (Scheme n ty) ts
+  | length ts /= fromIntegral n = throwError $ InternalError "Mismatch in number of type vars"
+  | otherwise = instNorm ty
+  where
+    instNorm t = do
+      t' <- normType t
+      Ty <$> inst' (unTy t')
+
+    inst' (TFun a b) = TFun <$> instNorm a <*> instNorm b
+    inst' (TMacro a) = TMacro <$> instNorm a
+    inst' (TList a) = TList <$> instNorm a
+    inst' (TSchemaVar i) = pure . unTy $ ts !! fromIntegral i
+    inst' otherTy = pure otherTy
+
+
+specialize :: Scheme Ty -> Expand Ty
+specialize sch@(Scheme n _) = do
+  freshVars <- replicateM (fromIntegral n) $ Ty . TMetaVar <$> freshMeta
+  inst sch freshVars
+
+varType :: Var -> Expand (Scheme Ty)
+varType x = do
+  ph <- currentPhase
+  now <- view (expanderLocal . expanderVarTypes . at ph)
+  let γ = case now of
+            Nothing -> mempty
+            Just γ' -> γ'
+  case view (at x) γ of
+    Nothing -> error "TODO error message"
+    Just (_, ty) -> pure ty
