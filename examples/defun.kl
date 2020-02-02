@@ -8,6 +8,13 @@
      [lambda (rec) (fun [lambda (x) (rec rec x)])])]]
 
 [define-macros
+  -- (defun f (x y z)
+  --   (... (f foo bar baz) ...))
+  -- =>
+  -- (define f
+  --   (fix (lambda (f)
+  --          (lambda (x y z)
+  --            ... (f foo bar baz) ...))))
   ([defun
     [lambda (stx)
       (syntax-case stx
@@ -19,6 +26,7 @@
 
 [example (const 'a 'b)]
 
+-- (last-stx foo bar baz) => baz
 [defun last-stx (stx)
   (syntax-case stx
     [[cons a d]

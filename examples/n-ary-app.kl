@@ -5,6 +5,7 @@
 
 
 [define-macros
+  -- (my-app f foo bar baz) => (((f foo) bar) baz)
   ([my-app
     [lambda [stx]
       (syntax-case stx
@@ -22,6 +23,12 @@
                     more-args
                     stx]
                   stx]]])])])]]
+   -- (my-lam (x y z) ...)
+   -- =>
+   -- (lambda (x)
+   --   (lambda (y)
+   --     (lambda (z)
+   --       ...)))
    [my-lam
     [lambda [stx]
      (syntax-case stx
@@ -37,6 +44,7 @@
            [pure [list-syntax [[quote lambda] args body] stx]]])])]])]
 
 [define-macros
+  -- (f foo bar baz) => (my-app foo bar baz)
   ([#%app
     [lambda [stx]
      (syntax-case stx
@@ -44,6 +52,7 @@
        [pure [cons-list-syntax [quote my-app] args stx]]])]])]
 
 [define-macros
+  -- (lambda (x y z) ...) => (my-lam (x y z) ...)
   ([lambda
     [lambda [stx]
      (syntax-case stx
