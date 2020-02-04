@@ -104,16 +104,18 @@ specialize sch@(Scheme n _) = do
   freshVars <- replicateM (fromIntegral n) $ Ty . TMetaVar <$> freshMeta
   inst sch freshVars
 
-varType :: Var -> Expand (Scheme Ty)
+varType :: Var -> Expand (Maybe (Scheme Ty))
 varType x = do
   ph <- currentPhase
-  now <- view (expanderLocal . expanderVarTypes . at ph)
+  globals <- view expanderDefTypes <$> getState
+  locals <- view (expanderLocal . expanderVarTypes)
+  let now = view (at ph) (globals <> locals)
   let γ = case now of
             Nothing -> mempty
             Just γ' -> γ'
   case view (at x) γ of
     Nothing -> error "TODO error message"
-    Just (_, ty) -> pure ty
+    Just (_, ptr) -> linkedScheme ptr
 
 notFreeInCtx :: MetaPtr -> Expand Bool
 notFreeInCtx var = do

@@ -5,3 +5,10 @@
 (example (flet (f (x) (if x 'a 'b)) (f #true)))
 
 (example (the Syntax (flet (f (x) 'a) (list-syntax ((f #true) (f 4)) 'here))))
+
+(example (the Syntax (let (f (lambda (x) 'a)) (list-syntax ((f #true) (f 4)) 'here))))
+
+(define id (lambda (x) x))
+
+(example (the Syntax (id 'foo)))
+(example (the Signal (id 45)))

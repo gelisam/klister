@@ -44,6 +44,11 @@ data ExpanderTask
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
   | TypeCheck SplitCorePtr TypeSpec
+  | TypeCheckDecl DeclPtr
+  | GeneralizeType SplitCorePtr Ty SchemePtr
+    -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
+  | TypeCheckVar SplitCorePtr Ty
+    -- ^ The variable expression and the expected type
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -72,6 +77,7 @@ instance ShortShow ExpanderTask where
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
   shortShow (TypeCheck _ _) = "(TypeCheck _ _)"
+  shortShow (TypeCheckDecl _) = "(TypeCheckDecl _ )"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)

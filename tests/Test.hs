@@ -269,7 +269,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Define _fn fv fbody, Example e] -> do
+                [Define _fn fv _t fbody, Example e] -> do
                   fspec <- lam \_x -> lam \ y -> lam \_z -> y
                   assertAlphaEq "definition of f" fbody fspec
                   case e of
@@ -300,7 +300,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _,
-                 Meta (view completeDecl -> Define _ _ _),
+                 Meta (view completeDecl -> Define _ _ _ _),
                  DefineMacros [(_, _, _)],
                  Example ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
@@ -318,7 +318,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Define _ _ e, DefineMacros [(_, _, _)]] -> do
+                [Import _, Define _ _ _ e, DefineMacros [(_, _, _)]] -> do
                   spec <- lam \_x -> lam \y -> lam \_z -> y
                   assertAlphaEq "Definition is λx y z . y" e spec
                 _ -> assertFailure "Expected an import, a definition, and a macro"
@@ -327,7 +327,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : Define _ _ thingDef : examples) -> do
+                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
@@ -341,7 +341,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Define _ _ thingDef : examples) -> do
+                (Import _ : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
@@ -355,7 +355,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, Define _ fun1 firstFun, DefineMacros [_], Define _ fun2 secondFun,
+                [Import _, Import _, Define _ fun1 _ firstFun, DefineMacros [_], Define _ fun2 _ secondFun,
                  Example e1, Example e2, DefineMacros [_], Example e3] -> do
                   spec1 <- lam \x -> lam \_y -> x
                   spec2 <- lam \_x -> lam \y -> y
@@ -428,7 +428,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
-testQuasiquoteExamples :: Show decl => [Decl decl Core] -> IO ()
+testQuasiquoteExamples :: (Show sch, Show decl) => [Decl sch decl Core] -> IO ()
 testQuasiquoteExamples examples =
   case examples of
     [ Example e1, Example e2, Example e3, Example e4,

@@ -49,3 +49,11 @@ splitType partialType = do
         go here (unPartialType p)
         pure here
       tell $ Map.singleton place children
+
+newtype SchemePtr = SchemePtr Unique deriving (Eq, Ord)
+
+newSchemePtr :: IO SchemePtr
+newSchemePtr = SchemePtr <$> newUnique
+
+instance Show SchemePtr where
+  show (SchemePtr ptr) =  "(SchemePtr " ++ show (hashUnique ptr) ++ ")"

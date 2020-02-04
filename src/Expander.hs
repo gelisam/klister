@@ -234,9 +234,10 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
   where
     evalDecl (CompleteDecl d) =
       case d of
-        Define x n e -> do
+        Define x n sch e -> do
           val <- lift $ expandEval (eval e)
           p <- lift currentPhase
+          -- TODO save sch here
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
@@ -476,8 +477,10 @@ initializeKernel = do
             var <- freshVar
             exprDest <- liftIO $ newSplitCorePtr
             bind b (EIncompleteDefn var x exprDest)
-            linkDecl dest (Define x var exprDest)
+            schPtr <- liftIO $ newSchemePtr
+            linkDecl dest (Define x var schPtr exprDest)
             forkExpandSyntax (ExprDest exprDest) expr
+            forkCheckDecl dest
             nowValidAt pdest (SpecificPhase p)
         )
       ,("define-macros"
@@ -1061,8 +1064,40 @@ runTask (tid, localData, task) = withLocal localData $ do
               linkedType tDest >>=
               \case
                 Nothing -> stillStuck tid task
-                Just t -> typeCheckLayer e t
-            CompleteType t -> typeCheckLayer e t
+                Just t ->
+                  typeCheckLayer eDest e t
+            CompleteType t ->
+              typeCheckLayer eDest e t
+    TypeCheckDecl dest -> do
+      st <- getState
+      case view (expanderCompletedDecls . at dest) st of
+        Nothing -> stillStuck tid task
+        Just d -> typeCheckDecl d
+    GeneralizeType edest ty schdest -> do
+      ready <- isExprChecked edest
+      if ready
+        then do
+          st <- getState
+          case view (expanderExpressionTypes . at edest) st of
+            Nothing -> throwError $ InternalError "Type not found during generalization"
+            Just _ -> do
+              sch <- generalizeType ty
+              linkScheme schdest sch
+        else stillStuck tid task
+    TypeCheckVar eDest ty ->
+      linkedCore eDest >>=
+      \case
+        Nothing -> stillStuck tid task
+        Just (Core (CoreVar x)) ->
+          varType x >>=
+          \case
+            Nothing -> stillStuck tid task
+            Just sch -> do
+              specialize sch >>= unify ty
+              saveExprType eDest ty
+        Just _ ->
+          throwError $ InternalError "Not a variable when specializing"
+
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -1309,111 +1344,163 @@ interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
 
-typeCheckLayer :: CoreF SplitCorePtr -> Ty -> Expand ()
-typeCheckLayer (CoreVar x) t = do
-  sch <- varType x
-  specialize sch >>= unify t
-typeCheckLayer (CoreLet x ident def body) t = do
-  defTy <-
-    inTypeBinder do
-      xt <- Ty . TMetaVar <$> freshMeta
-      forkCompleteTypeCheck def xt
-      pure xt
-  σ <- generalizeType defTy
-  withLocalVarType x ident σ $
+-- | Invariant: the SplitCorePtr points at the CoreF in question
+typeCheckLayer :: SplitCorePtr -> CoreF SplitCorePtr -> Ty -> Expand ()
+typeCheckLayer dest (CoreVar _) t =
+  forkCheckVar dest t
+typeCheckLayer dest (CoreLet x ident def body) t = do
+  xTy <- inTypeBinder do
+    xt <- Ty . TMetaVar <$> freshMeta
+    forkCompleteTypeCheck def xt
+    return xt
+  sch <- liftIO $ newSchemePtr
+  forkGeneralizeType def xTy sch
+  withLocalVarType x ident sch $
     forkCompleteTypeCheck body t
-typeCheckLayer (CoreLetFun f fident x xident def body) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreLetFun f fident x xident def body) t = do
   ft <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
   xt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
   rt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  fsch <- trivialScheme ft
+  xsch <- trivialScheme xt
   inTypeBinder $
-    withLocalVarType f fident (Scheme 0 ft) $
-      withLocalVarType x xident (Scheme 0 xt) $
+    withLocalVarType f fident fsch $
+      withLocalVarType x xident xsch $
         forkCompleteTypeCheck def rt
   unify ft (Ty (TFun xt rt))
-  sch <- generalizeType ft
+  sch <- liftIO newSchemePtr
+  forkGeneralizeType def ft sch
   withLocalVarType f fident sch $
     forkCompleteTypeCheck body t
-typeCheckLayer (CoreLam x ident body) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreLam x ident body) t = do
   argT <- Ty . TMetaVar <$> freshMeta
   retT <- Ty . TMetaVar <$> freshMeta
   unify t (Ty (TFun argT retT))
-  withLocalVarType x ident (Scheme 0 argT) $
+  sch <- trivialScheme argT
+  withLocalVarType x ident sch $
     forkCompleteTypeCheck body retT
-typeCheckLayer (CoreApp fun arg) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreApp fun arg) t = do
   argT <- Ty . TMetaVar <$> freshMeta
   forkCompleteTypeCheck fun (Ty (TFun argT t))
   forkCompleteTypeCheck arg argT
-typeCheckLayer (CorePure e) t = do
+  saveExprType dest t
+typeCheckLayer dest (CorePure e) t = do
   innerT <- Ty . TMetaVar <$> freshMeta
   unify (Ty (TMacro innerT)) t
   forkCompleteTypeCheck e innerT
-typeCheckLayer (CoreBind e1 e2) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreBind e1 e2) t = do
   a <- Ty . TMetaVar <$> freshMeta
   forkCompleteTypeCheck e1 (Ty (TMacro a))
   b <- Ty . TMetaVar <$> freshMeta
   forkCompleteTypeCheck e2 (Ty (TFun a (Ty (TMacro b))))
   unify t (Ty (TMacro b))
-typeCheckLayer (CoreSyntaxError (SyntaxError locs msg)) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreSyntaxError (SyntaxError locs msg)) t = do
   for_ locs (flip forkCompleteTypeCheck (Ty TSyntax))
   forkCompleteTypeCheck msg (Ty TSyntax)
   a <- Ty . TMetaVar <$> freshMeta
   unify t (Ty (TMacro a))
-typeCheckLayer (CoreSendSignal s) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreSendSignal s) t = do
   forkCompleteTypeCheck s (Ty TSignal)
   unify t (Ty (TMacro (Ty TUnit)))
-typeCheckLayer (CoreWaitSignal s) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreWaitSignal s) t = do
   forkCompleteTypeCheck s (Ty TSignal)
   unify t (Ty (TMacro (Ty TUnit)))
-typeCheckLayer (CoreIdentEq _ e1 e2) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreIdentEq _ e1 e2) t = do
   forkCompleteTypeCheck e1 (Ty TSyntax)
   forkCompleteTypeCheck e2 (Ty TSyntax)
   unify t (Ty (TMacro (Ty TBool)))
-typeCheckLayer (CoreLog msg) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreLog msg) t = do
   forkCompleteTypeCheck msg (Ty TSyntax)
   unify t (Ty (TMacro (Ty TUnit)))
-typeCheckLayer (CoreSyntax _) t =
+  saveExprType dest t
+typeCheckLayer dest (CoreSyntax _) t = do
   unify (Ty TSyntax) t
-typeCheckLayer (CoreCase scrutinee cases) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreCase scrutinee cases) t = do
   forkCompleteTypeCheck scrutinee (Ty TSyntax)
-  for_ cases $ \ (pat, expr) -> do
+  for_ cases $ \ (pat, expr) ->
     bindVars pat $ forkCompleteTypeCheck expr t
+  saveExprType dest t
   where
-    bindVars (PatternIdentifier ident x) =
-      withLocalVarType ident x (Scheme 0 (Ty TIdent))
-    bindVars PatternEmpty = id
-    bindVars (PatternCons identA a identD d) =
-      withLocalVarType identA a (Scheme 0 (Ty TSyntax)) .
-      withLocalVarType identD d (Scheme 0 (Ty (TList (Ty TSyntax))))
-    bindVars (PatternList []) = id
-    bindVars (PatternList ((ident, x) : more)) =
-      withLocalVarType ident x (Scheme 0 (Ty TSyntax)) .
-      bindVars (PatternList more)
-    bindVars PatternAny = id
-typeCheckLayer (CoreIdentifier _ident) t = unify t (Ty (TIdent))
-typeCheckLayer (CoreSignal _s) t = unify t (Ty (TSignal))
-typeCheckLayer (CoreBool _) t =
+    bindVars (PatternIdentifier ident x) act = do
+      sch <- trivialScheme (Ty TIdent)
+      withLocalVarType ident x sch act
+    bindVars PatternEmpty act = act
+    bindVars (PatternCons identA a identD d) act = do
+      stxT <- trivialScheme (Ty TSyntax)
+      lstT <- trivialScheme (Ty (TList (Ty TSyntax)))
+      withLocalVarType identA a stxT $
+        withLocalVarType identD d lstT $
+          act
+    bindVars (PatternList []) act = act
+    bindVars (PatternList ((ident, x) : more)) act = do
+      sch <- trivialScheme (Ty TSyntax)
+      withLocalVarType ident x sch $
+        bindVars (PatternList more) act
+    bindVars PatternAny act = act
+typeCheckLayer dest (CoreIdentifier _ident) t = do
+  unify t (Ty (TIdent))
+  saveExprType dest t
+typeCheckLayer dest (CoreSignal _s) t = do
+  unify t (Ty (TSignal))
+  saveExprType dest t
+typeCheckLayer dest (CoreBool _) t = do
   unify (Ty TBool) t
-typeCheckLayer (CoreIf b e1 e2) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreIf b e1 e2) t = do
   forkCompleteTypeCheck b (Ty TBool)
   forkCompleteTypeCheck e1 t
   forkCompleteTypeCheck e2 t
-typeCheckLayer (CoreIdent (ScopedIdent ident srcloc)) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreIdent (ScopedIdent ident srcloc)) t = do
   forkCompleteTypeCheck ident (Ty TIdent)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   unify t (Ty TIdent)
-typeCheckLayer (CoreEmpty (ScopedEmpty srcloc)) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreEmpty (ScopedEmpty srcloc)) t = do
   unify t (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
-typeCheckLayer (CoreCons (ScopedCons hd tl srcloc)) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreCons (ScopedCons hd tl srcloc)) t = do
   forkCompleteTypeCheck hd (Ty TSyntax)
   forkCompleteTypeCheck tl (Ty (TList (Ty TSyntax)))
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   unify t (Ty TSyntax)
-typeCheckLayer (CoreList (ScopedList elts srcloc)) t = do
+  saveExprType dest t
+typeCheckLayer dest (CoreList (ScopedList elts srcloc)) t = do
   for_ elts $ \e -> forkCompleteTypeCheck e t
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   unify t (Ty TSyntax)
+  saveExprType dest t
+
+typeCheckDecl :: Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()
+typeCheckDecl (Define x v sch e) = do
+  ty <- inTypeBinder do
+    tdest <- liftIO newSplitTypePtr
+    meta <- freshMeta
+    linkType tdest (TMetaVar meta)
+    forkTypeCheck e tdest
+    return (TMetaVar meta)
+  ph <- currentPhase
+  modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
+    Env.insert v x sch
+  forkGeneralizeType e (Ty ty) sch
+
+typeCheckDecl (DefineMacros macros) = error "TODO"
+typeCheckDecl (Meta d) = inEarlierPhase $ forkCheckDecl d
+typeCheckDecl (Example e) = error "TODO"
+typeCheckDecl (Import _) = pure ()
+typeCheckDecl (Export _) = pure ()
+
 
 -- The expected type is first, the received is second
 unify :: Ty -> Ty -> Expand ()
