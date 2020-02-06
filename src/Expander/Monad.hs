@@ -45,6 +45,7 @@ module Expander.Monad
   , module Expander.Task
   , forkAwaitingDefn
   , forkAwaitingMacro
+  , forkAwaitingMacroType
   , forkAwaitingDeclMacro
   , forkAwaitingSignal
   , forkContinueMacroAction
@@ -416,6 +417,11 @@ forkAwaitingMacro ::
 forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro (ExprDest dest) (TaskAwaitMacro b v x [mdest] mdest stx)
 
+forkAwaitingMacroType ::
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()
+forkAwaitingMacroType b v x mdest dest stx =
+  forkExpanderTask $ AwaitingMacroType dest (TaskAwaitMacroType b v x mdest stx)
+
 forkAwaitingDeclMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
 forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
@@ -492,11 +498,15 @@ getDecl ptr =
           Just e' -> pure $ (x, v, e')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
-    flattenDecl (Example e) =
+    flattenDecl (Example schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ CompleteDecl $ Example e'
+        Just e' ->
+          linkedScheme schPtr >>=
+          \case
+            Nothing -> throwError $ InternalError "Missing example scheme after expansion"
+            Just sch -> pure $ CompleteDecl $ Example sch e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
 

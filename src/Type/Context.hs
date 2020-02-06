@@ -10,6 +10,7 @@ import Env
 import Phase
 
 newtype TypeContext v t = TypeContext (Map Phase (Env v t))
+  deriving Show
 
 instance Ord v => Semigroup (TypeContext v t) where
   TypeContext γ1 <> TypeContext γ2 = TypeContext (Map.unionWith (<>) γ1 γ2)
@@ -25,3 +26,6 @@ instance Ord v => Ixed (TypeContext v a) where
 
 instance Ord v => At (TypeContext v a) where
   at x f (TypeContext env) = TypeContext <$> at x f env
+
+instance Phased (TypeContext v t) where
+  shift i (TypeContext γ) = TypeContext (Map.mapKeys (shift i) γ)

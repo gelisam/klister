@@ -13,7 +13,7 @@ import Numeric.Natural
 import Expander.Monad
 import Core
 import Type
-
+import World
 
 derefType :: MetaPtr -> Expand (TVar Ty)
 derefType ptr =
@@ -107,14 +107,15 @@ specialize sch@(Scheme n _) = do
 varType :: Var -> Expand (Maybe (Scheme Ty))
 varType x = do
   ph <- currentPhase
-  globals <- view expanderDefTypes <$> getState
+  globals <- view (expanderWorld . worldTypeContexts) <$> getState
+  thisMod <- view expanderDefTypes <$> getState
   locals <- view (expanderLocal . expanderVarTypes)
-  let now = view (at ph) (globals <> locals)
+  let now = view (at ph) (globals <> thisMod <> locals)
   let γ = case now of
             Nothing -> mempty
             Just γ' -> γ'
   case view (at x) γ of
-    Nothing -> error "TODO error message"
+    Nothing -> pure Nothing
     Just (_, ptr) -> linkedScheme ptr
 
 notFreeInCtx :: MetaPtr -> Expand Bool

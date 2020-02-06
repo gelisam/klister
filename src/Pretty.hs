@@ -85,7 +85,9 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
       Just (Stx _ _ x) -> text x
   pp env (CoreLet x@(Stx _ _ y) v def body) =
     hang 2 $ group $
-    vsep [ text "let" <+> hang 2 (group (vsep [pp env y <+> text "=", pp env def])) <+> text "in"
+    vsep [ text "let" <+> hang 2 (group (vsep [ pp env y <+> text "="
+                                              , pp env def
+                                              ])) <+> text "in"
          , pp (env <> Env.singleton v x ()) body
          ]
   pp env (CoreLetFun f@(Stx _ _ g) fv x@(Stx _ _ y) v def body) =
@@ -95,7 +97,7 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
                                , pp (env <> Env.singleton fv f () <> Env.singleton v x ()) def
                                ])) <+>
            text "in"
-         , pp (env <> Env.singleton v x ()) body
+         , pp (env <> Env.singleton fv f ()) body
          ]
   pp env (CoreLam n@(Stx _ _ x) v body) =
     hang 2 $ group $
@@ -262,7 +264,13 @@ instance (Pretty VarInfo t, PrettyBinder VarInfo a, Pretty VarInfo b) =>
     (hang 4 $ text "import" <+> pp env spec, mempty)
   ppBind env (Export x) =
     (hang 4 $ text "export" <+> pp env x, mempty)
-  ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
+  ppBind env (Example t e) =
+    (hang 4 $
+     text "example" <+>
+     align (group (vsep [ group (pp env e) <+> text ":"
+                        , pp env t
+                        ])),
+     mempty)
 
 instance Pretty VarInfo ExportSpec where
   pp env (ExportIdents ids) =
@@ -426,7 +434,7 @@ instance Pretty VarInfo a => Pretty VarInfo (Env MacroVar a) where
          ]
 
 instance Pretty VarInfo CompleteModule where
-  pp env (Expanded em _) = pp env em
+  pp env (Expanded em _ ) = pp env em
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
 
 instance Pretty VarInfo Binding where

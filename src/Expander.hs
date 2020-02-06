@@ -235,13 +235,17 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
     evalDecl (CompleteDecl d) =
       case d of
         Define x n sch e -> do
+          ptr <- liftIO newSchemePtr
+          lift $ linkScheme ptr sch
           val <- lift $ expandEval (eval e)
           p <- lift currentPhase
-          -- TODO save sch here
+          lift $ modifyState $
+            over (expanderWorld . worldTypeContexts . at p . non Env.empty) $
+            Env.insert n x ptr
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Example expr -> do
+        Example _sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
           tell $ [EvalResult { resultEnv = env
@@ -498,6 +502,7 @@ initializeKernel = do
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
             linkDecl dest $ DefineMacros macros
+            forkCheckDecl dest
             nowValidAt pdest (SpecificPhase p)
         )
       , ("example"
@@ -505,7 +510,9 @@ initializeKernel = do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
-            linkDecl dest (Example exprDest)
+            sch <- liftIO newSchemePtr
+            linkDecl dest (Example sch exprDest)
+            forkCheckDecl dest
             forkExpandSyntax (ExprDest exprDest) (addScope p expr sc)
             nowValidAt pdest (SpecificPhase p)
         )
@@ -983,7 +990,17 @@ runTask (tid, localData, task) = withLocal localData $ do
                     then return tid
                     else newTaskID
           laterMacro tid' b v x dest newDeps mdest stx
-        [] ->
+        [] -> do
+          inEarlierPhase $
+            forkCompleteTypeCheck mdest $
+              Ty (TFun (Ty TSyntax)
+                       (Ty (TMacro (Ty TSyntax))))
+          forkAwaitingMacroType b v x mdest dest stx
+    AwaitingMacroType dest (TaskAwaitMacroType b v x mdest stx) ->
+      isExprChecked mdest >>=
+      \case
+        False -> stillStuck tid task
+        True ->
           linkedCore mdest >>=
           \case
             Nothing -> error "Internal error - macro body not fully expanded"
@@ -1432,12 +1449,12 @@ typeCheckLayer dest (CoreCase scrutinee cases) t = do
   saveExprType dest t
   where
     bindVars (PatternIdentifier ident x) act = do
-      sch <- trivialScheme (Ty TIdent)
+      sch <- trivialScheme (Ty TSyntax)
       withLocalVarType ident x sch act
     bindVars PatternEmpty act = act
     bindVars (PatternCons identA a identD d) act = do
       stxT <- trivialScheme (Ty TSyntax)
-      lstT <- trivialScheme (Ty (TList (Ty TSyntax)))
+      lstT <- trivialScheme (Ty TSyntax)
       withLocalVarType identA a stxT $
         withLocalVarType identD d lstT $
           act
@@ -1448,7 +1465,7 @@ typeCheckLayer dest (CoreCase scrutinee cases) t = do
         bindVars (PatternList more) act
     bindVars PatternAny act = act
 typeCheckLayer dest (CoreIdentifier _ident) t = do
-  unify t (Ty (TIdent))
+  unify t (Ty (TSyntax))
   saveExprType dest t
 typeCheckLayer dest (CoreSignal _s) t = do
   unify t (Ty (TSignal))
@@ -1462,9 +1479,9 @@ typeCheckLayer dest (CoreIf b e1 e2) t = do
   forkCompleteTypeCheck e2 t
   saveExprType dest t
 typeCheckLayer dest (CoreIdent (ScopedIdent ident srcloc)) t = do
-  forkCompleteTypeCheck ident (Ty TIdent)
+  forkCompleteTypeCheck ident (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
-  unify t (Ty TIdent)
+  unify t (Ty TSyntax)
   saveExprType dest t
 typeCheckLayer dest (CoreEmpty (ScopedEmpty srcloc)) t = do
   unify t (Ty TSyntax)
@@ -1472,7 +1489,7 @@ typeCheckLayer dest (CoreEmpty (ScopedEmpty srcloc)) t = do
   saveExprType dest t
 typeCheckLayer dest (CoreCons (ScopedCons hd tl srcloc)) t = do
   forkCompleteTypeCheck hd (Ty TSyntax)
-  forkCompleteTypeCheck tl (Ty (TList (Ty TSyntax)))
+  forkCompleteTypeCheck tl (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   unify t (Ty TSyntax)
   saveExprType dest t
@@ -1495,9 +1512,22 @@ typeCheckDecl (Define x v sch e) = do
     Env.insert v x sch
   forkGeneralizeType e (Ty ty) sch
 
-typeCheckDecl (DefineMacros macros) = error "TODO"
+typeCheckDecl (DefineMacros macros) =
+  let macroType = Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax))))
+  in for_ macros $ \ (_, _, def) -> do
+       inEarlierPhase $ forkCompleteTypeCheck def macroType
 typeCheckDecl (Meta d) = inEarlierPhase $ forkCheckDecl d
-typeCheckDecl (Example e) = error "TODO"
+typeCheckDecl (Example sch e) = do
+  -- TODO Consider whether we should be generalizing examples' types.
+  -- In favor: they're basically anonymous top-level lets. Against: they don't define anything.
+  -- For now, generalizing.
+  ty <- inTypeBinder do
+    tdest <- liftIO newSplitTypePtr
+    meta <- freshMeta
+    linkType tdest (TMetaVar meta)
+    forkTypeCheck e tdest
+    return (TMetaVar meta)
+  forkGeneralizeType e (Ty ty) sch
 typeCheckDecl (Import _) = pure ()
 typeCheckDecl (Export _) = pure ()
 

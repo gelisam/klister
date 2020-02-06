@@ -48,8 +48,11 @@ import Binding
 import Core
 import ModuleName
 import Phase
+import SplitType
 import Syntax
 import Type
+import Type.Context
+
 
 newtype ModulePtr = ModulePtr Unique
   deriving (Eq, Ord)
@@ -154,7 +157,9 @@ newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl (Scheme Ty) Complete
 instance Phased CompleteDecl where
   shift i (CompleteDecl d) = CompleteDecl (shift i d)
 
-data CompleteModule = Expanded !(Module [] CompleteDecl) !BindingTable | KernelModule !Phase
+data CompleteModule
+  = Expanded !(Module [] CompleteDecl) !BindingTable
+  | KernelModule !Phase
   deriving Show
 
 instance Phased CompleteModule where
@@ -181,7 +186,7 @@ data Decl ty decl expr
   = Define Ident Var ty expr
   | DefineMacros [(Ident, MacroVar, expr)]
   | Meta decl
-  | Example expr
+  | Example ty expr
   | Import ImportSpec
   | Export ExportSpec
   deriving (Functor, Show)
@@ -190,7 +195,7 @@ instance Bifunctor (Decl ty) where
   bimap _f g (Define x v t e) = Define x v t (g e)
   bimap _f g (DefineMacros ms) = DefineMacros [(x, v, g e) | (x, v, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
-  bimap _f g (Example e) = Example (g e)
+  bimap _f g (Example t e) = Example t (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
 
