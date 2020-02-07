@@ -98,6 +98,7 @@ data CoreF core
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
+  | CoreReplaceLoc core core
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 
@@ -347,6 +348,10 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(List "
    ++ shortShow scopedVec
    ++ ")"
+  shortShow (CoreReplaceLoc loc stx)
+    = "(ReplaceLoc "
+   ++ shortShow loc ++ " "
+   ++ shortShow stx ++ ")"
 
 instance ShortShow Core where
   shortShow (Core x) = shortShow x

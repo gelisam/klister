@@ -213,6 +213,10 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
+eval (Core (CoreReplaceLoc loc stx)) = do
+  Syntax (Stx _ newLoc _) <- evalAsSyntax loc
+  Syntax (Stx scs _ contents) <- evalAsSyntax stx
+  return $ ValueSyntax $ Syntax $ Stx scs newLoc contents
 
 evalErrorType :: Text -> Value -> Eval a
 evalErrorType expected got =

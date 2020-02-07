@@ -48,10 +48,8 @@ import Binding
 import Core
 import ModuleName
 import Phase
-import SplitType
 import Syntax
 import Type
-import Type.Context
 
 
 newtype ModulePtr = ModulePtr Unique

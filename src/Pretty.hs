@@ -146,6 +146,11 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
   pp env (CoreList e) = pp env e
+  pp env (CoreReplaceLoc loc stx) =
+    group $ hang 2 $ vsep [ text "replace-loc"
+                          , pp env loc
+                          , pp env stx
+                          ]
 
 instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
   pp env err =

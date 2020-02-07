@@ -765,6 +765,13 @@ initializeKernel = do
             sourceDest <- schedule source
             linkExpr dest $ CoreList $ ScopedList listDests sourceDest
         )
+      , ( "replace-loc"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, loc, valStx) <- mustHaveEntries stx
+            locDest <- schedule loc
+            valStxDest <- schedule valStx
+            linkExpr dest $ CoreReplaceLoc locDest valStxDest
+        )
       , ( "syntax-case"
         , \dest stx -> do
             Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
@@ -1497,6 +1504,11 @@ typeCheckLayer dest (CoreList (ScopedList elts srcloc)) t = do
   for_ elts $ \e -> forkCompleteTypeCheck e t
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   unify t (Ty TSyntax)
+  saveExprType dest t
+typeCheckLayer dest (CoreReplaceLoc loc stx) t = do
+  unify t (Ty TSyntax)
+  forkCompleteTypeCheck loc (Ty TSyntax)
+  forkCompleteTypeCheck stx (Ty TSyntax)
   saveExprType dest t
 
 typeCheckDecl :: Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()

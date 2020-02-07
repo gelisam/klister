@@ -327,13 +327,13 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : Define _ _ _ thingDef : examples) -> do
+                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : DefineMacros [_] : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [e1, e2, e3, e4, e5, e6, e7, e8, Export _] -> do
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _, Export _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
-                        other -> assertFailure ("Expected 8 examples and 1 export: " ++ show other)
+                        other -> assertFailure ("Expected 8 tested examples, 1 untested, and 1 export: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
@@ -405,6 +405,23 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   assertAlphaEq "Third example is 3" c (Signal 3)
                 _ ->
                   assertFailure "Expected three signals in example"
+          )
+        , ( "examples/syntax-loc.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [ValueSyntax (Syntax (Stx _ loc1 (Id "here"))), ValueSyntax (Syntax (Stx _ loc2 (Id "here")))] -> do
+                  let SrcLoc _ (SrcPos l1 c1) (SrcPos l2 c2) = loc1
+                      SrcLoc _ (SrcPos l1' c1') (SrcPos l2' c2') = loc2
+                  l1  @?= 3
+                  c1  @?= 15
+                  l2  @?= 3
+                  c2  @?= 19
+                  l1' @?= 5
+                  c1' @?= 16
+                  l2' @?= 5
+                  c2' @?= 21
+                _ ->
+                  assertFailure "Expected two identifiers in example"
           )
         ]
       ]
