@@ -35,6 +35,7 @@ module Expander.Monad
   , newDeclValidityPtr
   , phaseRoot
   , saveExprType
+  , saveOrigin
   , trivialScheme
   , withLocal
   , withLocalVarType
@@ -92,6 +93,7 @@ module Expander.Monad
   , expanderModuleImports
   , expanderModuleName
   , expanderModuleTop
+  , expanderOriginLocations
   , expanderReceivedSignals
   , expanderVarTypes
   , expanderTasks
@@ -133,6 +135,7 @@ import SplitCore
 import SplitType
 import Scope
 import Syntax
+import Syntax.SrcLoc
 import Type
 import Type.Context
 import Value
@@ -208,6 +211,7 @@ data ExpanderState = ExpanderState
   , _expanderGlobalBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
+  , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
@@ -237,6 +241,7 @@ initExpanderState = ExpanderState
   , _expanderGlobalBindingTable = mempty
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
+  , _expanderOriginLocations = Map.empty
   , _expanderCompletedCore = Map.empty
   , _expanderCompletedTypes = Map.empty
   , _expanderCompletedModBody = Map.empty
@@ -557,3 +562,7 @@ isExprChecked dest = do
       case view (expanderExpressionTypes . at dest) st of
         Nothing -> return False
         Just _ -> getAll . fold <$> traverse (fmap All . isExprChecked) layer
+
+saveOrigin :: SplitCorePtr -> SrcLoc -> Expand ()
+saveOrigin ptr loc =
+  modifyState $ set (expanderOriginLocations . at ptr) (Just loc)

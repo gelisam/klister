@@ -439,6 +439,11 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               NotExported (Stx _ _ "magic") p -> p == runtime
               _ -> False
           )
+        , ( "examples/non-examples/type-errors.kl"
+          , \case
+              TypeMismatch (Just _) _ _ -> True
+              _ -> False
+          )
         ]
       ]
 

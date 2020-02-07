@@ -1,0 +1,4 @@
+#lang kernel
+
+(example ((lambda (x) (syntax-case x [() 'a])) 34))
+

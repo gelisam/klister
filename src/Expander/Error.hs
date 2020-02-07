@@ -15,6 +15,8 @@ import Pretty
 
 import ScopeSet
 import Syntax
+import Syntax.SrcLoc
+import Type
 import Value
 
 data ExpansionErr
@@ -41,7 +43,7 @@ data ExpansionErr
   | NotExported Ident Phase
   | ReaderError Text
   | NotValidType Syntax
-  | TypeMismatch String String -- TODO structured representation
+  | TypeMismatch (Maybe SrcLoc) Ty Ty -- TODO structured representation
   | OccursCheckFailed
   deriving (Show)
 
@@ -118,11 +120,17 @@ instance Pretty VarInfo ExpansionErr where
     vsep (map text (T.lines txt))
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
-  pp _env (TypeMismatch expected got) =
-    hang 2 $ group $ vsep [ text "Type mismatch. Expected"
-                          , text (T.pack expected)
-                          , "but got"
-                          , text (T.pack got)
-                          ]
+  pp env (TypeMismatch loc expected got) =
+    group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
+                                         , maybe (text "unkown location") (pp env) loc <> text "."
+                                         ]
+                 , group $ vsep [ group $ hang 2 $ vsep [ text "Expected"
+                                                        , pp env expected
+                                                        ]
+                                , group $ hang 2 $ vsep [ text "but got"
+                                                        , pp env got
+                                                        ]
+                                ]
+                 ]
 
   pp _env OccursCheckFailed = text "Occurs check failed"

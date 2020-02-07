@@ -866,8 +866,9 @@ initializeKernel = do
       return dest
 
     schedule :: Syntax -> Expand SplitCorePtr
-    schedule stx = do
+    schedule stx@(Syntax (Stx _ loc _)) = do
       dest <- liftIO newSplitCorePtr
+      saveOrigin dest loc
       forkExpandSyntax (ExprDest dest) stx
       return dest
 
@@ -1117,7 +1118,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           \case
             Nothing -> stillStuck tid task
             Just sch -> do
-              specialize sch >>= unify ty
+              specialize sch >>= unify eDest ty
               saveExprType eDest ty
         Just _ ->
           throwError $ InternalError "Not a variable when specializing"
@@ -1392,7 +1393,7 @@ typeCheckLayer dest (CoreLetFun f fident x xident def body) t = do
     withLocalVarType f fident fsch $
       withLocalVarType x xident xsch $
         forkCompleteTypeCheck def rt
-  unify ft (Ty (TFun xt rt))
+  unify dest ft (Ty (TFun xt rt))
   sch <- liftIO newSchemePtr
   forkGeneralizeType def ft sch
   withLocalVarType f fident sch $
@@ -1401,7 +1402,7 @@ typeCheckLayer dest (CoreLetFun f fident x xident def body) t = do
 typeCheckLayer dest (CoreLam x ident body) t = do
   argT <- Ty . TMetaVar <$> freshMeta
   retT <- Ty . TMetaVar <$> freshMeta
-  unify t (Ty (TFun argT retT))
+  unify dest t (Ty (TFun argT retT))
   sch <- trivialScheme argT
   withLocalVarType x ident sch $
     forkCompleteTypeCheck body retT
@@ -1413,7 +1414,7 @@ typeCheckLayer dest (CoreApp fun arg) t = do
   saveExprType dest t
 typeCheckLayer dest (CorePure e) t = do
   innerT <- Ty . TMetaVar <$> freshMeta
-  unify (Ty (TMacro innerT)) t
+  unify dest (Ty (TMacro innerT)) t
   forkCompleteTypeCheck e innerT
   saveExprType dest t
 typeCheckLayer dest (CoreBind e1 e2) t = do
@@ -1421,33 +1422,33 @@ typeCheckLayer dest (CoreBind e1 e2) t = do
   forkCompleteTypeCheck e1 (Ty (TMacro a))
   b <- Ty . TMetaVar <$> freshMeta
   forkCompleteTypeCheck e2 (Ty (TFun a (Ty (TMacro b))))
-  unify t (Ty (TMacro b))
+  unify dest t (Ty (TMacro b))
   saveExprType dest t
 typeCheckLayer dest (CoreSyntaxError (SyntaxError locs msg)) t = do
   for_ locs (flip forkCompleteTypeCheck (Ty TSyntax))
   forkCompleteTypeCheck msg (Ty TSyntax)
   a <- Ty . TMetaVar <$> freshMeta
-  unify t (Ty (TMacro a))
+  unify dest t (Ty (TMacro a))
   saveExprType dest t
 typeCheckLayer dest (CoreSendSignal s) t = do
   forkCompleteTypeCheck s (Ty TSignal)
-  unify t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (Ty TUnit)))
   saveExprType dest t
 typeCheckLayer dest (CoreWaitSignal s) t = do
   forkCompleteTypeCheck s (Ty TSignal)
-  unify t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (Ty TUnit)))
   saveExprType dest t
 typeCheckLayer dest (CoreIdentEq _ e1 e2) t = do
   forkCompleteTypeCheck e1 (Ty TSyntax)
   forkCompleteTypeCheck e2 (Ty TSyntax)
-  unify t (Ty (TMacro (Ty TBool)))
+  unify dest t (Ty (TMacro (Ty TBool)))
   saveExprType dest t
 typeCheckLayer dest (CoreLog msg) t = do
   forkCompleteTypeCheck msg (Ty TSyntax)
-  unify t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (Ty TUnit)))
   saveExprType dest t
 typeCheckLayer dest (CoreSyntax _) t = do
-  unify (Ty TSyntax) t
+  unify dest (Ty TSyntax) t
   saveExprType dest t
 typeCheckLayer dest (CoreCase scrutinee cases) t = do
   forkCompleteTypeCheck scrutinee (Ty TSyntax)
@@ -1472,13 +1473,13 @@ typeCheckLayer dest (CoreCase scrutinee cases) t = do
         bindVars (PatternList more) act
     bindVars PatternAny act = act
 typeCheckLayer dest (CoreIdentifier _ident) t = do
-  unify t (Ty (TSyntax))
+  unify dest t (Ty (TSyntax))
   saveExprType dest t
 typeCheckLayer dest (CoreSignal _s) t = do
-  unify t (Ty (TSignal))
+  unify dest t (Ty (TSignal))
   saveExprType dest t
 typeCheckLayer dest (CoreBool _) t = do
-  unify (Ty TBool) t
+  unify dest (Ty TBool) t
   saveExprType dest t
 typeCheckLayer dest (CoreIf b e1 e2) t = do
   forkCompleteTypeCheck b (Ty TBool)
@@ -1488,25 +1489,25 @@ typeCheckLayer dest (CoreIf b e1 e2) t = do
 typeCheckLayer dest (CoreIdent (ScopedIdent ident srcloc)) t = do
   forkCompleteTypeCheck ident (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
-  unify t (Ty TSyntax)
+  unify dest t (Ty TSyntax)
   saveExprType dest t
 typeCheckLayer dest (CoreEmpty (ScopedEmpty srcloc)) t = do
-  unify t (Ty TSyntax)
+  unify dest t (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
   saveExprType dest t
 typeCheckLayer dest (CoreCons (ScopedCons hd tl srcloc)) t = do
   forkCompleteTypeCheck hd (Ty TSyntax)
   forkCompleteTypeCheck tl (Ty TSyntax)
   forkCompleteTypeCheck srcloc (Ty TSyntax)
-  unify t (Ty TSyntax)
+  unify dest t (Ty TSyntax)
   saveExprType dest t
 typeCheckLayer dest (CoreList (ScopedList elts srcloc)) t = do
   for_ elts $ \e -> forkCompleteTypeCheck e t
   forkCompleteTypeCheck srcloc (Ty TSyntax)
-  unify t (Ty TSyntax)
+  unify dest t (Ty TSyntax)
   saveExprType dest t
 typeCheckLayer dest (CoreReplaceLoc loc stx) t = do
-  unify t (Ty TSyntax)
+  unify dest t (Ty TSyntax)
   forkCompleteTypeCheck loc (Ty TSyntax)
   forkCompleteTypeCheck stx (Ty TSyntax)
   saveExprType dest t
@@ -1545,22 +1546,23 @@ typeCheckDecl (Export _) = pure ()
 
 
 -- The expected type is first, the received is second
-unify :: Ty -> Ty -> Expand ()
-unify t1 t2 = do
+unify :: SplitCorePtr -> Ty -> Ty -> Expand ()
+unify blame t1 t2 = do
   t1' <- normType t1
   t2' <- normType t2
   unify' (unTy t1') (unTy t2')
 
   where
+    unify' :: TyF Ty -> TyF Ty -> Expand ()
     -- Rigid-rigid
     unify' TBool TBool = pure ()
     unify' TUnit TUnit = pure ()
     unify' TSyntax TSyntax = pure ()
     unify' TIdent TIdent = pure ()
     unify' TSignal TSignal = pure ()
-    unify' (TFun a c) (TFun b d) = unify b a >> unify c d
-    unify' (TMacro a) (TMacro b) = unify a b
-    unify' (TList a) (TList b) = unify a b
+    unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
+    unify' (TMacro a) (TMacro b) = unify blame a b
+    unify' (TList a) (TList b) = unify blame a b
 
     -- Flex-flex
     unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
@@ -1575,4 +1577,6 @@ unify t1 t2 = do
     unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
 
     -- Mismatch
-    unify' expected received = throwError $ TypeMismatch (show expected) (show received) -- TODO structured repr
+    unify' expected received = do
+      loc <- view (expanderOriginLocations . at blame) <$> getState
+      throwError $ TypeMismatch loc (Ty expected) (Ty received)
