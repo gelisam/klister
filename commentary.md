@@ -124,9 +124,9 @@ The macro monad includes operations to compare the binding information of identi
 
 #### Macro monad effects
 
- * `bound-identifier=? : Syntax -> Syntax -> Macro Bool` determines whether its arguments are identifiers such that each would bind the other at the current phase. In practice, this means that their scope sets are identical. If either argument is not an identifier, fails.
- 
  * `free-identifier=? : Syntax -> Syntax -> Macro Bool` determines whether its arguments are identifiers that refer to the same binding in the current context. If either argument is not an identifier, fails.
+ 
+ * `bound-identifier=? : Syntax -> Syntax -> Bool` is not a monadic effect, but is documented here because it is so similar to `free-identifier=?`. It determines whether its arguments are identifiers such that each would bind the other at the current phase. In practice, this means that their scope sets are identical. If either argument is not an identifier, fails.
  
  * `syntax-error : ∀α. Syntax -> Syntax * -> Macro α` fails, using its first argument as the reason for failure and the remaining arguments as source locations involved in the failure. This should probably be rewritten to take a list instead of being variable arity, once we have lists in the language.
  

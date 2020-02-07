@@ -97,13 +97,10 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     group $ text "send-signal" <+> pp env arg
   pp env (CoreWaitSignal arg) =
     group $ text "wait-signal" <+> pp env arg
-  pp env (CoreIdentEq how e1 e2) =
-    group $ text opName <+> pp env e1 <+> pp env e2
-    where
-      opName =
-        case how of
-          Free -> "free-identifier=?"
-          Bound -> "bound-identifier=?"
+  pp env (CoreFreeIdentEq e1 e2) =
+    group $ text "free-identifier=?" <+> pp env e1 <+> pp env e2
+  pp env (CoreBoundIdentEq e1 e2) =
+    group $ text "bound-identifier=?" <+> pp env e1 <+> pp env e2
   pp env (CoreLog msg) =
     group (hang 2 (vsep ["log", pp env msg]))
   pp env (CoreSyntax stx) =
@@ -313,13 +310,8 @@ instance Pretty VarInfo MacroAction where
     text "send-signal" <+> viaShow s
   pp _env (MacroActionWaitSignal s) =
     text "wait-signal" <+> viaShow s
-  pp env (MacroActionIdentEq how v1 v2) =
-    group $ parens $ vsep [text opName, pp env v1, pp env v2]
-    where
-      opName =
-        case how of
-          Free  -> "free-identifier=?"
-          Bound -> "bound-identifier=?"
+  pp env (MacroActionFreeIdentEq v1 v2) =
+    group $ parens $ vsep [text "free-identifier=?", pp env v1, pp env v2]
   pp env (MacroActionLog stx) =
     hang 2 $ group $ vsep [text "log", pp env stx]
 

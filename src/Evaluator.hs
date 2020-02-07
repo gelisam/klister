@@ -14,6 +14,7 @@ import qualified Data.Text as T
 
 import Core
 import Env
+import ScopeSet (ScopeSet)
 import Signals
 import Syntax
 import Value
@@ -114,8 +115,12 @@ eval (Core (CoreWaitSignal signalExpr)) = do
   theSignal <- evalAsSignal signalExpr
   pure $ ValueMacroAction
        $ MacroActionWaitSignal theSignal
-eval (Core (CoreIdentEq how e1 e2)) =
-  ValueMacroAction <$> (MacroActionIdentEq how <$> eval e1 <*> eval e2)
+eval (Core (CoreFreeIdentEq e1 e2)) =
+  ValueMacroAction <$> (MacroActionFreeIdentEq <$> eval e1 <*> eval e2)
+eval (Core (CoreBoundIdentEq e1 e2)) = do
+  id1 <- evalAsIdentifier e1
+  id2 <- evalAsIdentifier e2
+  pure $ ValueBool (id1 == id2)
 eval (Core (CoreLog msg)) = do
   msgVal <- evalAsSyntax msg
   return $ ValueMacroAction (MacroActionLog msgVal)
@@ -133,69 +138,17 @@ eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
        $ Id name
 eval (Core (CoreBool b)) = pure $ ValueBool b
 eval (Core (CoreIf b t f)) =
-  eval b >>=
-  \case
-    ValueBool True -> eval t
-    ValueBool False -> eval f
-    other ->
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "boolean"
-        , _typeErrorActual   = describeVal other
-        }
+  evalAsBool b >>= \case
+    True -> eval t
+    False -> eval f
 eval (Core (CoreIdent (ScopedIdent ident scope))) = do
-  identSyntax <- evalAsSyntax ident
-  case identSyntax of
-    Syntax (Stx _ _ expr) ->
-      case expr of
-        Sig _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "signal"
-            }
-        String _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "string"
-            }
-        Bool _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "boolean"
-            }
-        List _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "list"
-            }
-        Id name -> withScopeOf scope $ Id name
+  (_, name) <- evalAsIdentifier ident
+  withScopeOf scope $ Id name
 eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
 eval (Core (CoreCons (ScopedCons hd tl scope))) = do
   hdSyntax <- evalAsSyntax hd
-  tlSyntax <- evalAsSyntax tl
-  case tlSyntax of
-    Syntax (Stx _ _ expr) ->
-      case expr of
-        List vs -> withScopeOf scope $ List $ hdSyntax : vs
-        String _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "string"
-            }
-        Bool _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "boolean"
-            }
-        Id _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "id"
-            }
-        Sig _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "signal"
-            }
+  list <- evalAsList tl
+  withScopeOf scope $ List $ hdSyntax : list
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
@@ -207,6 +160,17 @@ evalErrorType expected got =
     , _typeErrorActual   = describeVal got
     }
 
+evalAsBool :: Core -> Eval Bool
+evalAsBool core = do
+  value <- eval core
+  case value of
+    ValueBool b -> pure b
+    other ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "boolean"
+        , _typeErrorActual   = describeVal other
+        }
+
 evalAsClosure :: Core -> Eval Closure
 evalAsClosure core = do
   value <- eval core
@@ -214,6 +178,60 @@ evalAsClosure core = do
     ValueClosure closure -> do
       pure closure
     other -> evalErrorType "function" other
+
+evalAsIdentifier :: Core -> Eval (ScopeSet, Text)
+evalAsIdentifier core = do
+  Syntax (Stx scopeSet _ expr) <- evalAsSyntax core
+  case expr of
+    Sig _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "id"
+        , _typeErrorActual   = "signal"
+        }
+    String _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "id"
+        , _typeErrorActual   = "string"
+        }
+    Bool _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "id"
+        , _typeErrorActual   = "boolean"
+        }
+    List _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "id"
+        , _typeErrorActual   = "list"
+        }
+    Id name ->
+      pure (scopeSet, name)
+
+evalAsList :: Core -> Eval [Syntax]
+evalAsList core = do
+  Syntax (Stx _ _ expr) <- evalAsSyntax core
+  case expr of
+    List list ->
+      pure list
+    String _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "list"
+        , _typeErrorActual   = "string"
+        }
+    Bool _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "list"
+        , _typeErrorActual   = "boolean"
+        }
+    Id _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "list"
+        , _typeErrorActual   = "id"
+        }
+    Sig _ ->
+      throwError $ EvalErrorType $ TypeError
+        { _typeErrorExpected = "list"
+        , _typeErrorActual   = "signal"
+        }
 
 evalAsSignal :: Core -> Eval Signal
 evalAsSignal core = do

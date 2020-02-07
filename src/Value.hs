@@ -20,7 +20,7 @@ data MacroAction
   | MacroActionSyntaxError (SyntaxError Syntax)
   | MacroActionSendSignal Signal
   | MacroActionWaitSignal Signal
-  | MacroActionIdentEq HowEq Value Value
+  | MacroActionFreeIdentEq Value Value
   | MacroActionLog Syntax
   deriving (Eq, Show)
 

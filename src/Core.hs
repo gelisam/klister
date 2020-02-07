@@ -72,9 +72,6 @@ data ScopedList core = ScopedList
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedList
 
-data HowEq = Free | Bound
-  deriving (Eq, Show)
-
 data CoreF core
   = CoreVar Var
   | CoreLam Ident Var core
@@ -84,7 +81,8 @@ data CoreF core
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreSendSignal core                 -- :: Signal -> Macro ()
   | CoreWaitSignal core                 -- :: Signal -> Macro ()
-  | CoreIdentEq HowEq core core
+  | CoreFreeIdentEq core core           -- :: Syntax -> Syntax -> Macro Bool
+  | CoreBoundIdentEq core core          -- :: Syntax -> Syntax -> Bool
   | CoreLog core
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
@@ -147,9 +145,12 @@ instance AlphaEq core => AlphaEq (CoreF core) where
   alphaCheck (CoreWaitSignal signal1)
              (CoreWaitSignal signal2) = do
     alphaCheck signal1 signal2
-  alphaCheck (CoreIdentEq how1 e1 g1)
-             (CoreIdentEq how2 e2 g2) = do
-    guard $ how1 == how2
+  alphaCheck (CoreFreeIdentEq e1 g1)
+             (CoreFreeIdentEq e2 g2) = do
+    alphaCheck e1 e2
+    alphaCheck g1 g2
+  alphaCheck (CoreBoundIdentEq e1 g1)
+             (CoreBoundIdentEq e2 g2) = do
     alphaCheck e1 e2
     alphaCheck g1 g2
   alphaCheck (CoreSyntax syntax1)
@@ -283,8 +284,12 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(WaitSignal "
    ++ shortShow signal
    ++ ")"
-  shortShow (CoreIdentEq how e1 e2)
-    = "(CoreIdentEq " ++ show how
+  shortShow (CoreFreeIdentEq e1 e2)
+    = "(CoreFreeIdentEq "
+    ++ " " ++ shortShow e1
+    ++ " " ++ shortShow e2 ++ ")"
+  shortShow (CoreBoundIdentEq e1 e2)
+    = "(CoreBoundIdentEq "
     ++ " " ++ shortShow e1
     ++ " " ++ shortShow e2 ++ ")"
   shortShow (CoreLog msg)

@@ -6,9 +6,9 @@
   ((m (lambda (stx)
         (syntax-case stx
           ((list (_ x y))
-           (>>= (bound-identifier=? x y)
-                (lambda (bool)
-                  (pure (if bool ''t ''f))))))))))
+           (pure (if (bound-identifier=? x y)
+                     ''t
+                     ''f))))))))
 
 (example (m x x))
 (example (m x y))

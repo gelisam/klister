@@ -615,13 +615,13 @@ initializeKernel = do
       , ( "bound-identifier=?"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
-            newE <- CoreIdentEq Bound <$> schedule id1 <*> schedule id2
+            newE <- CoreBoundIdentEq <$> schedule id1 <*> schedule id2
             linkExpr dest newE
         )
       , ( "free-identifier=?"
         , \dest stx -> do
             Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
-            newE <- CoreIdentEq Free <$> schedule id1 <*> schedule id2
+            newE <- CoreFreeIdentEq <$> schedule id1 <*> schedule id2
             linkExpr dest newE
         )
       , ( "quote"
@@ -1120,36 +1120,26 @@ interpretMacroAction (MacroActionSendSignal signal) = do
   pure $ Right $ ValueSignal signal  -- TODO: return unit instead
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
-interpretMacroAction (MacroActionIdentEq how v1 v2) = do
+interpretMacroAction (MacroActionFreeIdentEq v1 v2) = do
   id1 <- getIdent v1
   id2 <- getIdent v2
-  case how of
-    Free ->
-      compareFree id1 id2
-        `catchError`
-        \case
-          -- Ambiguous bindings should not crash the comparison -
-          -- they're just not free-identifier=?.
-          Ambiguous _ _ _ -> return $ Right $ ValueBool $ False
-          -- Similarly, things that are not yet bound are just not
-          -- free-identifier=?
-          Unknown _ -> return $ Right $ ValueBool $ False
-          e -> throwError e
-    Bound ->
-      return $ Right $ ValueBool $
-        view stxValue id1 == view stxValue id2 &&
-        view stxScopeSet id1 == view stxScopeSet id2
+  compareFree id1 id2
+    `catchError`
+    \case
+      -- Ambiguous bindings should not crash the comparison -
+      -- they're just not free-identifier=?.
+      Ambiguous _ _ _ -> return $ Right $ ValueBool $ False
+      -- Similarly, things that are not yet bound are just not
+      -- free-identifier=?
+      Unknown _ -> return $ Right $ ValueBool $ False
+      e -> throwError e
   where
     getIdent (ValueSyntax stx) = mustBeIdent stx
-    getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+    getIdent _other = throwError $ InternalError $ "Not a syntax object in free-identifier=?"
     compareFree id1 id2 = do
       b1 <- resolve id1
       b2 <- resolve id2
       return $ Right $ ValueBool $ b1 == b2
-    opName =
-      case how of
-        Free  -> "free-identifier=?"
-        Bound -> "bound-identifier=?"
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
