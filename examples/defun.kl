@@ -1,6 +1,7 @@
 #lang "n-ary-app.kl"
 [import [shift "n-ary-app.kl" 1]]
 
+
 (define-macros
   ([defun
     [lambda (stx)
@@ -21,7 +22,8 @@
     [[cons a d]
      (syntax-case d
        [() a]
-       [_ (last-stx d)])]
+       [_ (last-stx d)])]  -- note that this is a recursive call to last-stx, whereas earlier (e.g. in n-ary-app.kl)
+                           -- we'd have to return the syntax of a macro call to last-stx.
     [_ stx])]
 
 [example (last-stx '(a b c d e f g))]

@@ -423,6 +423,15 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ ->
                   assertFailure "Expected two identifiers in example"
           )
+        , ( "examples/bound-identifier.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [ValueSyntax (Syntax (Stx _ _ (Id a))), ValueSyntax (Syntax (Stx _ _ (Id b)))] -> do
+                  assertAlphaEq "First example is true" a "t"
+                  assertAlphaEq "Second example is false" b "f"
+                _ ->
+                  assertFailure "Expected two symbols in example"
+          )
         ]
       ]
     shouldn'tWork =
@@ -570,7 +579,7 @@ testFile f p = do
             case Map.lookup mn (view worldEvaluated w) of
               Nothing -> assertFailure "Module valuees not in its own expansion"
               Just evalResults ->
-                p m [val | EvalResult _ _ val <- evalResults]
+                p m [val | EvalResult _ _ _ val <- evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
