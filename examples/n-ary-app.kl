@@ -5,6 +5,7 @@
 
 
 [define-macros
+  -- (my-app f foo bar baz) => (((f foo) bar) baz)
   ([my-app
     [lambda [stx]
       (syntax-case stx
@@ -16,12 +17,18 @@
               [[cons arg0 more-args]
                [pure
                 [cons-list-syntax
-                  [quote my-app]
+                  'my-app
                   [cons-list-syntax
-                    [list-syntax [[quote #%app] fun arg0] stx]
+                    [list-syntax ['#%app fun arg0] stx]
                     more-args
                     stx]
                   stx]]])])])]]
+   -- (my-lam (x y z) body
+   -- =>
+   -- (lambda (x)
+   --   (lambda (y)
+   --     (lambda (z)
+   --       body)))
    [my-lam
     [lambda [stx]
      (syntax-case stx
@@ -29,32 +36,34 @@
         (syntax-case args
           [() [pure body]]
           [[cons arg0 more-args]
-           [pure [list-syntax [[quote lambda]
+           [pure [list-syntax ['lambda
                                [list-syntax [arg0] arg0]
-                               [list-syntax [[quote my-lam] more-args body] stx]]
+                               [list-syntax ['my-lam more-args body] stx]]
                            stx]]]
           [[list [arg]]
-           [pure [list-syntax [[quote lambda] args body] stx]]])])]])]
+           [pure [list-syntax ['lambda args body] stx]]])])]])]
 
 [define-macros
+  -- (f foo bar baz) => (my-app foo bar baz)
   ([#%app
     [lambda [stx]
      (syntax-case stx
       [[cons _ args]
-       [pure [cons-list-syntax [quote my-app] args stx]]])]])]
+       [pure [cons-list-syntax 'my-app args stx]]])]])]
 
 [define-macros
+  -- (lambda (x y z) ...) => (my-lam (x y z) ...)
   ([lambda
     [lambda [stx]
      (syntax-case stx
       [[list [_ args body]]
-       [pure [list-syntax [[quote my-lam] args body] stx]]])]])]
+       [pure [list-syntax ['my-lam args body] stx]]])]])]
 
 [define id [lambda (x) x]]
 
 [define const [lambda (x y) x]]
 
-[example (const [quote a] [quote b])]
+[example (const 'a 'b)]
 
 [define compose [lambda (f g x) (f (g x))]]
 

@@ -8,6 +8,13 @@
      [lambda (rec) (fun [lambda (x) (rec rec x)])])]]
 
 [define-macros
+  -- (defun f (x y z)
+  --   (... (f foo bar baz) ...))
+  -- =>
+  -- (define f
+  --   (fix (lambda (f)
+  --          (lambda (x y z)
+  --            ... (f foo bar baz) ...))))
   ([defun
     [lambda (stx)
       (syntax-case stx
@@ -24,7 +31,8 @@
     [[cons a d]
      (syntax-case d
        [() a]
-       [_ (last-stx d)])]
+       [_ (last-stx d)])]  -- note that this is a recursive call to last-stx, whereas earlier (e.g. in n-ary-app.kl)
+                           -- we'd have to return the syntax of a macro call to last-stx.
     [_ stx])]
 
 [example (last-stx '(a b c d e f g))]
