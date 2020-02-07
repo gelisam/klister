@@ -28,12 +28,5 @@
 
 [example (last-stx '(a b c d e f g))]
 
-(defun map-syntax (f stx)
-  (syntax-case stx
-    [() stx]
-    [(cons a d)
-     (cons-list-syntax (f a) (map-syntax f d) stx)]
-    [_ stx]))
-
 [export defun]
 
