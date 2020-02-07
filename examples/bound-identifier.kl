@@ -10,5 +10,7 @@
                      ''t
                      ''f))))))))
 
+(example (bound-identifier=? 'x 'x))
+(example (bound-identifier=? 'x 'y))
 (example (m x x))
 (example (m x y))

@@ -409,11 +409,10 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/bound-identifier.kl"
           , \_m exampleVals ->
               case exampleVals of
-                [ValueSyntax (Syntax (Stx _ _ (Id a))), ValueSyntax (Syntax (Stx _ _ (Id b)))] -> do
-                  assertAlphaEq "First example is true" a "t"
-                  assertAlphaEq "Second example is false" b "f"
-                _ ->
-                  assertFailure "Expected two symbols in example"
+                [ValueBool True, ValueBool False, ValueSyntax (Syntax (Stx _ _ (Id "t"))), ValueSyntax (Syntax (Stx _ _ (Id "f")))] -> do
+                  pure ()
+                [_,_,_,_] -> assertFailure $ "Wrong example values: " ++ show exampleVals
+                _ -> assertFailure "Wrong number of examples in file"
           )
         ]
       ]
