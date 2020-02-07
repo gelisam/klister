@@ -1,6 +1,6 @@
 #lang kernel
 
-[import [shift (only kernel lambda syntax-case cons-list-syntax vec-syntax pure) 1]]
+[import [shift (only kernel lambda syntax-case cons-list-syntax list-syntax pure) 1]]
 [import [shift (only "quasiquote.kl" quasiquote unquote) 1]]
 
 -- Let for a single variable
@@ -10,9 +10,9 @@
      [lambda
        [stx]
        (syntax-case stx
-         [[vec [_ pair body]]
+         [[list [_ pair body]]
           (syntax-case pair
-            [[vec [idt expr]]
+            [[list [idt expr]]
              [pure `[[lambda [,idt] ,body] ,expr]]])])]])]
 
 [define id [lambda [x] x]]
