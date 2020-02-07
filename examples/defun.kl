@@ -26,7 +26,6 @@
 
 [example (const 'a 'b)]
 
--- (last-stx foo bar baz) => baz
 [defun last-stx (stx)
   (syntax-case stx
     [[cons a d]

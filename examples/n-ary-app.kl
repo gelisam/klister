@@ -23,12 +23,12 @@
                     more-args
                     stx]
                   stx]]])])])]]
-   -- (my-lam (x y z) ...)
+   -- (my-lam (x y z) body
    -- =>
    -- (lambda (x)
    --   (lambda (y)
    --     (lambda (z)
-   --       ...)))
+   --       body)))
    [my-lam
     [lambda [stx]
      (syntax-case stx

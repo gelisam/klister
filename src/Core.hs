@@ -84,7 +84,8 @@ data CoreF core
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreSendSignal core                 -- :: Signal -> Macro ()
   | CoreWaitSignal core                 -- :: Signal -> Macro ()
-  | CoreIdentEq HowEq core core         -- :: HowEq -> Syntax -> Syntax -> Macro Bool
+  | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
+                                        -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
   | CoreSyntax Syntax
   | CoreCase core [(Pattern, core)]
