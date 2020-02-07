@@ -1,0 +1,14 @@
+#lang kernel
+
+(import (shift kernel 1))
+
+(define-macros
+  ((m (lambda (stx)
+        (syntax-case stx
+          ((list (_ x y))
+           (>>= (bound-identifier=? x y)
+                (lambda (bool)
+                  (pure (if bool ''t ''f))))))))))
+
+(example (m x x))
+(example (m x y))

@@ -1136,7 +1136,9 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
           Unknown _ -> return $ Right $ ValueBool $ False
           e -> throwError e
     Bound ->
-      return $ Right $ ValueBool $ view stxScopeSet id1 == view stxScopeSet id2
+      return $ Right $ ValueBool $
+        view stxValue id1 == view stxValue id2 &&
+        view stxScopeSet id1 == view stxScopeSet id2
   where
     getIdent (ValueSyntax stx) = mustBeIdent stx
     getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
