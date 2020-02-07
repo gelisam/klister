@@ -247,11 +247,12 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Example _sch expr -> do
+        Example sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
           tell $ [EvalResult { resultEnv = env
                              , resultExpr = expr
+                             , resultType = sch
                              , resultValue = value
                              }]
 

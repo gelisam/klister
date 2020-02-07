@@ -16,6 +16,7 @@ import Core
 import Env
 import Signals
 import Syntax
+import Type
 import Value
 
 -- TODO: more precise representation
@@ -62,6 +63,7 @@ withManyExtendedEnv exts act = local (inserter exts) act
 data EvalResult =
   EvalResult { resultEnv :: VEnv
              , resultExpr :: Core
+             , resultType :: Scheme Ty
              , resultValue :: Value
              }
   deriving (Eq, Show)

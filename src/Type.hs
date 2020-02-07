@@ -60,7 +60,7 @@ instance Ixed (TypeStore t) where
 instance At (TypeStore t) where
   at x f (TypeStore env) = TypeStore <$> at x f env
 
-data Scheme t = Scheme Natural t deriving Show
+data Scheme t = Scheme Natural t deriving (Eq, Show)
 makeLenses ''Scheme
 
 newtype Ty = Ty
