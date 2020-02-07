@@ -106,6 +106,7 @@ expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
 expandModule thisMod src = do
   startBindings <- view expanderCurrentBindingTable <$> getState
   modifyState $ set expanderCurrentBindingTable mempty
+  startDefTypes <- view expanderDefTypes <$> getState
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
@@ -123,6 +124,7 @@ expandModule thisMod src = do
                            }
     bs <- view expanderCurrentBindingTable <$> getState
     modifyState $ set expanderCurrentBindingTable startBindings
+    modifyState $ set expanderDefTypes startDefTypes
     return $ Expanded theModule bs
 
 
