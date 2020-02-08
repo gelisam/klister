@@ -1,0 +1,28 @@
+#lang "n-ary-app.kl"
+
+(import "defun.kl")
+
+
+(define car
+  (lambda (stx)
+    (syntax-case stx
+      ((cons a _)
+       a))))
+
+(define cdr
+  (lambda (stx)
+    (syntax-case stx
+      ((cons _ d)
+       d))))
+
+(defun map (f stx)
+  (syntax-case stx
+    (() stx)
+    ((cons a d)
+     (cons-list-syntax (f a) (map f d) stx))))
+
+(example (car '(1 2 3)))
+(example (cdr '(1 2 3)))
+(example (map car '((x 1) (y 2) (z 3))))
+
+(export car cdr map)
