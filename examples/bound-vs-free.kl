@@ -1,0 +1,27 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+(import (shift "do.kl" 1))
+(import (shift "bool.kl" 1))
+
+(define-macros
+  ((_ (lambda (stx)
+        (syntax-error '(underscore used outside parameter list))))
+   (lambda2 (lambda (stx)
+              (syntax-case stx
+                ((list (_ var1 var2 body))
+                 (do (var1=_ <- (free-identifier=? '_ var1))
+                     (var2=_ <- (free-identifier=? '_ var2))
+                     (var1=var2 <- (bound-identifier=? var1 var2))
+                     (if (and (not var1=_)
+                                (not var2=_)
+                                var1=var2)
+                       (syntax-error '"variables must be distinct")
+                       (pure `(lambda (,var1 ,var2) ,body))))))))))
+
+(example ((lambda2 _ _ 'result) 1 2))
+(example ((lambda2 _ y 'result) 1 2))
+(example ((lambda2 x _ 'result) 1 2))
+(example ((lambda2 x y 'result) 1 2))
+--(example ((lambda2 x x 'result) 1 2))  -- variables must be distinct
