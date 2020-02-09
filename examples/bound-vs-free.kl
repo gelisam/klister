@@ -15,8 +15,8 @@
                      (var2=_ <- (free-identifier=? '_ var2))
                      (var1=var2 <- (bound-identifier=? var1 var2))
                      (if (and (not var1=_)
-                                (not var2=_)
-                                var1=var2)
+                              (not var2=_)
+                              var1=var2)
                        (syntax-error '"variables must be distinct")
                        (pure `(lambda (,var1 ,var2) ,body))))))))))
 
