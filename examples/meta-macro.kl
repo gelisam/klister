@@ -1,0 +1,30 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define x 'foo)
+
+(define-macros
+  ((meta-macro1 (lambda (stx)
+                  (syntax-case stx
+                    ((list (_ macro-name var-name value))
+                     (pure `(define-macros
+                              ((,macro-name (lambda (stx)
+                                              (pure (list-syntax ('define ',var-name ',value) stx)))))))))))
+   (meta-macro2 (lambda (stx)
+                  (syntax-case stx
+                    ((list (_ macro-name))
+                     (pure `(define-macros
+                              ((,macro-name (lambda (stx)
+                                              (syntax-case stx
+                                                ((list (_ var-name value))
+                                                 (pure (list-syntax ('define var-name value) stx)))))))))))))))
+
+(meta-macro1 my-macro1 x 'bar)
+(my-macro1)
+(example x)  -- 'foo
+
+(meta-macro2 my-macro2)
+(my-macro2 x 'baz)
+(example x)  -- 'baz
