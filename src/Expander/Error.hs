@@ -42,10 +42,13 @@ data ExpansionErr
   | NoSuchFile String
   | NotExported Ident Phase
   | ReaderError Text
+  | WrongMacroContext Syntax MacroContext MacroContext
   | NotValidType Syntax
   | TypeMismatch (Maybe SrcLoc) Ty Ty
   | OccursCheckFailed
   deriving (Show)
+
+data MacroContext = ExpressionCtx | TypeCtx | ModuleCtx | DeclarationCtx deriving Show
 
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
@@ -118,6 +121,19 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
+  pp env (WrongMacroContext stx expected actual) =
+    hang 2 $ group $
+    vsep [ pp env stx <> text ":"
+         , group $ vsep [ group $ hang 2 $
+                          vsep [ text "Used in a position expecting"
+                               , pp env expected
+                               ]
+                        , group $ hang 2 $
+                          vsep [ text "but is valid in a position expecting"
+                               , pp env actual
+                               ]
+                        ]
+         ]
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
   pp env (TypeMismatch loc expected got) =
@@ -134,3 +150,9 @@ instance Pretty VarInfo ExpansionErr where
                  ]
 
   pp _env OccursCheckFailed = text "Occurs check failed"
+
+instance Pretty VarInfo MacroContext where
+  pp _env ExpressionCtx = text "an expression"
+  pp _env ModuleCtx = text "a module"
+  pp _env TypeCtx = text "a type"
+  pp _env DeclarationCtx = text "a top-level declaration or example"

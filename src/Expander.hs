@@ -1140,14 +1140,14 @@ expandOneType dest stx
       v <- getEValue b
       case v of
         EPrimTypeMacro impl -> impl dest stx
-        EPrimMacro _ -> throwError $ InternalError "Context expects a type"
-        EPrimDeclMacro _ -> throwError $ InternalError "Context expects a type"
-        EVarMacro _ -> throwError $ InternalError "Context expects a type, but got a program variable"
-        EPrimModuleMacro _ -> throwError $ InternalError "Context expects a type, not a module"
+        EPrimMacro _ -> throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
+        EPrimDeclMacro _ -> throwError $ WrongMacroContext stx TypeCtx DeclarationCtx
+        EVarMacro _ -> throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
+        EPrimModuleMacro _ -> throwError $ WrongMacroContext stx TypeCtx ModuleCtx
         EIncompleteMacro _ _ _ ->
-          throwError $ InternalError "Context expects a type"
+          throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
         EIncompleteDefn _ _ _ ->
-          throwError $ InternalError "Context expects a type"
+          throwError $ WrongMacroContext stx TypeCtx DeclarationCtx
         EUserMacro transformerName -> do
           stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
           p <- currentPhase
@@ -1185,11 +1185,11 @@ expandOneExpression dest stx
       v <- getEValue b
       case v of
         EPrimMacro impl -> impl dest stx
-        EPrimTypeMacro _ -> throwError $ InternalError "Current context won't accept types"
+        EPrimTypeMacro _ -> throwError $ WrongMacroContext stx ExpressionCtx TypeCtx
         EPrimModuleMacro _ ->
-          throwError $ InternalError "Current context won't accept modules"
+          throwError $ WrongMacroContext stx ExpressionCtx ModuleCtx
         EPrimDeclMacro _ ->
-          throwError $ InternalError "Current context won't accept declarations"
+          throwError $ WrongMacroContext stx ExpressionCtx DeclarationCtx
         EVarMacro var ->
           case syntaxE stx of
             Id _ -> linkExpr dest (CoreVar var)
@@ -1251,17 +1251,17 @@ expandOneDeclaration sc dest stx ph
       v <- getEValue b
       case v of
         EPrimMacro _ ->
-          throwError $ InternalError "Current context won't accept expressions"
+          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
         EPrimModuleMacro _ ->
-          throwError $ InternalError "Current context won't accept modules"
+          throwError $ WrongMacroContext stx DeclarationCtx ModuleCtx
         EPrimDeclMacro impl ->
           impl sc dest ph stx
         EPrimTypeMacro _ ->
-          throwError $ InternalError "Current context won't accept types"
+          throwError $ WrongMacroContext stx DeclarationCtx TypeCtx
         EVarMacro _ ->
-          throwError $ InternalError "Current context won't accept expressions"
+          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
         EIncompleteDefn _ _ _ ->
-          throwError $ InternalError "Current context won't accept expressions"
+          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
         EUserMacro transformerName -> do
           stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
           p <- currentPhase
