@@ -2,6 +2,7 @@
 
 (import (shift "n-ary-app.kl" 1))
 (import (shift "quasiquote.kl" 1))
+(import (shift "let.kl" 1))
 
 (define-macros
   -- (do (x <- foo)
@@ -23,16 +24,17 @@
              ((list (last-action))
               (pure last-action))
              ((cons first-action actions)
-              (syntax-case first-action
-                ((list (var <-? action))
-                 (>>= (free-identifier=? '<- <-?)
-                      (lambda (isArrow)
-                              (if isArrow
-                                  (pure `(>>= ,action (lambda (,var)
-                                                        ,(cons-list-syntax 'do actions stx))))
-                                  (syntax-error '"syntax error in do")))))
-                ((list (action))
-                 (pure `(>>= ,action (lambda (_)
-                                       ,(cons-list-syntax 'do actions stx))))))))))))))
+              (let ((otherwise (pure `(>>= ,first-action (lambda (_)
+                                                           ,(cons-list-syntax 'do actions stx))))))
+                (syntax-case first-action
+                  ((list (var <-? action))
+                   (>>= (free-identifier=? '<- <-?)
+                        (lambda (isArrow)
+                                (if isArrow
+                                    (pure `(>>= ,action (lambda (,var)
+                                                          ,(cons-list-syntax 'do actions stx))))
+                                    otherwise))))
+                  (_
+                   otherwise)))))))))))
 
 (export <- do)

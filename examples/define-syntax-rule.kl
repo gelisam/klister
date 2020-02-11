@@ -1,0 +1,33 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "do.kl" 1))
+(import (shift "list.kl" 1))
+(import (shift "quasiquote.kl" 1))
+(import (shift "syntax.kl" 1))
+
+(define-macros
+  ((define-syntax-rule
+     (lambda (stx)
+       (syntax-case stx
+         ((list (_ pattern template))
+          (syntax-case pattern
+           ((cons macro-name args)
+            (do (unquoted-template <- (foldlM (lambda (t arg)
+                                                (replace-identifier
+                                                  arg
+                                                  (list-syntax ('unquote arg) stx)
+                                                  t))
+                                              template
+                                              args))
+                (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
+                (pure `(define-macros
+                         ((,macro-name (lambda (stx)
+                                         (syntax-case stx
+                                          ((list ,pattern)
+                                           (pure ,quasiquoted-template)))))))))))))))))
+
+(define-syntax-rule (lambda2 x y body)
+  (lambda (x y) body))
+
+(example ((lambda2 x y y) 'foo 'bar))  -- 'bar
