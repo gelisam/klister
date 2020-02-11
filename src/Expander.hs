@@ -403,51 +403,36 @@ initializeKernel = do
   where
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
     typePrims =
-      [ ( "Bool"
-        , \ dest stx -> do
-            _actualName <- mustBeIdent stx
-            linkType dest TBool
-        )
-      , ( "Unit"
-        , \ dest stx -> do
-            _actualName <- mustBeIdent stx
-            linkType dest TUnit
-        )
-      , ( "Syntax"
-        , \ dest stx -> do
-            _actualName <- mustBeIdent stx
-            linkType dest TSyntax
-        )
-      , ( "Ident"
-        , \ dest stx -> do
-            _actualName <- mustBeIdent stx
-            linkType dest TIdent
-        )
-      , ( "Signal"
-        , \ dest stx -> do
-            _actualName <- mustBeIdent stx
-            linkType dest TSignal
-        )
-      , ( "->"
-        , \ dest stx -> do
-            Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
-            argDest <- scheduleType arg
-            retDest <- scheduleType ret
-            linkType dest (TFun argDest retDest)
-        )
-      , ( "Macro"
-        , \ dest stx -> do
-            Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
-            tDest <- scheduleType t
-            linkType dest (TMacro tDest)
-        )
-      , ( "List"
-        , \ dest stx -> do
-            Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
-            entryTypeDest <- scheduleType e
-            linkType dest (TList entryTypeDest)
-        )
-      ]
+      let baseType =
+            \name ctor ->
+              (name, \ dest stx -> do
+                       _actualName <- mustBeIdent stx
+                       linkType dest ctor)
+      in [ baseType "Bool" TBool
+         , baseType "Unit" TUnit
+         , baseType "Syntax" TSyntax
+         , baseType "Ident" TIdent
+         , baseType "Signal" TSignal
+         , ( "->"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+               argDest <- scheduleType arg
+               retDest <- scheduleType ret
+               linkType dest (TFun argDest retDest)
+           )
+         , ( "Macro"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
+               tDest <- scheduleType t
+               linkType dest (TMacro tDest)
+           )
+         , ( "List"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
+               entryTypeDest <- scheduleType e
+               linkType dest (TList entryTypeDest)
+           )
+         ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
     modPrims =
