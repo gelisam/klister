@@ -43,7 +43,7 @@ data ExpansionErr
   | NotExported Ident Phase
   | ReaderError Text
   | NotValidType Syntax
-  | TypeMismatch (Maybe SrcLoc) Ty Ty -- TODO structured representation
+  | TypeMismatch (Maybe SrcLoc) Ty Ty
   | OccursCheckFailed
   deriving (Show)
 
