@@ -122,7 +122,7 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
   pp env (TypeMismatch loc expected got) =
     group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
-                                         , maybe (text "unkown location") (pp env) loc <> text "."
+                                         , maybe (text "unknown location") (pp env) loc <> text "."
                                          ]
                  , group $ vsep [ group $ hang 2 $ vsep [ text "Expected"
                                                         , pp env expected
