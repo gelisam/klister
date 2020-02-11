@@ -2,6 +2,7 @@
 
 (import (shift "n-ary-app.kl" 1))
 (import (shift "quasiquote.kl" 1))
+(import (shift "let.kl" 1))
 
 (define x 'foo)
 
@@ -9,9 +10,10 @@
   ((meta-macro1 (lambda (stx)
                   (syntax-case stx
                     ((list (_ macro-name var-name value))
-                     (pure `(define-macros
-                              ((,macro-name (lambda (stx)
-                                              (pure (list-syntax ('define ',var-name ',value) stx)))))))))))
+                     (let ((body `(define ,var-name ,value)))
+                       (pure `(define-macros
+                                ((,macro-name (lambda (stx)
+                                                (pure ',body)))))))))))
    (meta-macro2 (lambda (stx)
                   (syntax-case stx
                     ((list (_ macro-name))
