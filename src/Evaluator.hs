@@ -16,6 +16,7 @@ import Core
 import Env
 import Signals
 import Syntax
+import Type
 import Value
 
 -- TODO: more precise representation
@@ -62,6 +63,7 @@ withManyExtendedEnv exts act = local (inserter exts) act
 data EvalResult =
   EvalResult { resultEnv :: VEnv
              , resultExpr :: Core
+             , resultType :: Scheme Ty
              , resultValue :: Value
              }
   deriving (Eq, Show)
@@ -81,6 +83,20 @@ eval (Core (CoreVar var)) = do
   case lookupVal var env of
     Just value -> pure value
     _ -> throwError $ EvalErrorUnbound var
+eval (Core (CoreLet ident var def body)) = do
+  val <- eval def
+  env <- ask
+  withEnv (Env.insert var ident val env) (eval body)
+eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
+  env <- ask
+  let vFun =
+        ValueClosure $ Closure
+          { _closureEnv = Env.insert funVar funIdent vFun env
+          , _closureIdent = argIdent
+          , _closureVar = argVar
+          , _closureBody = def
+          }
+  withEnv (Env.insert funVar funIdent vFun env) (eval body)
 eval (Core (CoreLam ident var body)) = do
   env <- ask
   pure $ ValueClosure $ Closure
@@ -199,6 +215,10 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
+eval (Core (CoreReplaceLoc loc stx)) = do
+  Syntax (Stx _ newLoc _) <- evalAsSyntax loc
+  Syntax (Stx scs _ contents) <- evalAsSyntax stx
+  return $ ValueSyntax $ Syntax $ Stx scs newLoc contents
 
 evalErrorType :: Text -> Value -> Eval a
 evalErrorType expected got =

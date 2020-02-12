@@ -13,6 +13,7 @@ import qualified Data.Map as Map
 import qualified Data.Set as Set
 import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
 import Data.Text (Text)
+import qualified Data.Text as T
 import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Data.Unique
@@ -28,6 +29,7 @@ import Scope
 import ScopeSet
 import Syntax
 import Syntax.SrcLoc
+import Type
 import Value
 import World
 
@@ -81,6 +83,22 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     case Env.lookupIdent v env of
       Nothing -> string ("!!" ++ show v ++ "!!")
       Just (Stx _ _ x) -> text x
+  pp env (CoreLet x@(Stx _ _ y) v def body) =
+    hang 2 $ group $
+    vsep [ text "let" <+> hang 2 (group (vsep [ pp env y <+> text "="
+                                              , pp env def
+                                              ])) <+> text "in"
+         , pp (env <> Env.singleton v x ()) body
+         ]
+  pp env (CoreLetFun f@(Stx _ _ g) fv x@(Stx _ _ y) v def body) =
+    hang 2 $ group $
+    vsep [ text "flet" <+>
+           hang 2 (group (vsep [ pp env g <+> pp env y <+> text "="
+                               , pp (env <> Env.singleton fv f () <> Env.singleton v x ()) def
+                               ])) <+>
+           text "in"
+         , pp (env <> Env.singleton fv f ()) body
+         ]
   pp env (CoreLam n@(Stx _ _ x) v body) =
     hang 2 $ group $
     text "λ" <> annotate (BindingSite v) (text x) <> "." <> line <>
@@ -128,6 +146,11 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
   pp env (CoreList e) = pp env e
+  pp env (CoreReplaceLoc loc stx) =
+    group $ hang 2 $ vsep [ text "replace-loc"
+                          , pp env loc
+                          , pp env stx
+                          ]
 
 instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
   pp env err =
@@ -182,12 +205,55 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedList core) where
 instance PrettyBinder VarInfo CompleteDecl where
   ppBind env (CompleteDecl d) = ppBind env d
 
-instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Decl a b) where
-  ppBind env (Define n@(Stx _ _ x) v e) =
+instance Pretty VarInfo (Scheme Ty) where
+  pp env (Scheme 0 t) =
+    pp env t
+  pp env (Scheme n t) =
+    text "∀" <>
+    (align $ group $
+     vsep [ group $
+            vsep (map text (take (fromIntegral n) typeVarNames)) <> text "."
+          , pp env t
+          ])
+
+typeVarNames :: [Text]
+typeVarNames = [ T.pack base <> T.pack (show i)
+               | (base, i) <- greek
+               ]
+  where
+    greek = [ ([base], num)
+        | num <- [(0 :: Integer)..]
+        , base <- "αβγδεζηθικλμνξοπρστυφχψω"
+        ]
+
+
+instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
+  pp _ TUnit = text "Unit"
+  pp _ TBool = text "Bool"
+  pp _ TSyntax = text "Syntax"
+  pp _ TIdent = text "Ident"
+  pp _ TSignal = text "Signal"
+  pp env (TFun a b) =
+    parens $ align $ group $ vsep [pp env a <+> text "→", pp env b]
+  pp env (TMacro a) = parens (text "Macro" <+> align (pp env a))
+  pp env (TList a) = parens (text "List" <+> align (pp env a))
+  pp _ (TSchemaVar n) = text $ typeVarNames !! fromIntegral n
+  pp _ (TMetaVar v) = text "META" <> viaShow v -- TODO
+
+instance Pretty VarInfo Ty where
+  pp env (Ty t) = pp env t
+
+instance (Pretty VarInfo t, PrettyBinder VarInfo a, Pretty VarInfo b) =>
+         PrettyBinder VarInfo (Decl t a b) where
+  ppBind env (Define n@(Stx _ _ x) v t e) =
     let env' = Env.singleton v n ()
     in (hang 4 $ group $
-        text "define" <+> annotate (BindingSite v) (text x) <+> text ":=" <> line <>
-        pp (env <> env') e,
+        vsep [ text "define" <+>
+               annotate (BindingSite v) (text x) <+> text ":"
+             , pp env t
+             , text ":="
+             , pp (env <> env') e
+             ],
         env')
   ppBind env (DefineMacros macros) =
     (hang 4 $ text "define-macros" <> line <>
@@ -203,7 +269,13 @@ instance (PrettyBinder VarInfo a, Pretty VarInfo b) => PrettyBinder VarInfo (Dec
     (hang 4 $ text "import" <+> pp env spec, mempty)
   ppBind env (Export x) =
     (hang 4 $ text "export" <+> pp env x, mempty)
-  ppBind env (Example e) = (hang 4 $ text "example" <+> group (pp env e), mempty)
+  ppBind env (Example t e) =
+    (hang 4 $
+     text "example" <+>
+     align (group (vsep [ group (pp env e) <+> text ":"
+                        , pp env t
+                        ])),
+     mempty)
 
 instance Pretty VarInfo ExportSpec where
   pp env (ExportIdents ids) =
@@ -363,7 +435,7 @@ instance Pretty VarInfo a => Pretty VarInfo (Env MacroVar a) where
          ]
 
 instance Pretty VarInfo CompleteModule where
-  pp env (Expanded em _) = pp env em
+  pp env (Expanded em _ ) = pp env em
   pp env (KernelModule p) = text "⟨kernel module" <> text "@" <> pp env p <> "⟩"
 
 instance Pretty VarInfo Binding where

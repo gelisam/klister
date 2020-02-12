@@ -3,6 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
@@ -61,6 +62,7 @@ import Evaluator
 import Expander.DeclScope
 import Expander.Syntax
 import Expander.Monad
+import Expander.TC
 import Module
 import ModuleName
 import Parser
@@ -71,8 +73,10 @@ import ScopeSet (ScopeSet)
 import Signals
 import ShortShow
 import SplitCore
+import SplitType
 import Syntax
 import Syntax.SrcLoc
+import Type
 import Value
 import World
 import qualified ScopeSet
@@ -102,6 +106,7 @@ expandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
 expandModule thisMod src = do
   startBindings <- view expanderCurrentBindingTable <$> getState
   modifyState $ set expanderCurrentBindingTable mempty
+  startDefTypes <- view expanderDefTypes <$> getState
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
@@ -119,6 +124,7 @@ expandModule thisMod src = do
                            }
     bs <- view expanderCurrentBindingTable <$> getState
     modifyState $ set expanderCurrentBindingTable startBindings
+    modifyState $ set expanderDefTypes startDefTypes
     return $ Expanded theModule bs
 
 
@@ -230,17 +236,23 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
   where
     evalDecl (CompleteDecl d) =
       case d of
-        Define x n e -> do
+        Define x n sch e -> do
+          ptr <- liftIO newSchemePtr
+          lift $ linkScheme ptr sch
           val <- lift $ expandEval (eval e)
           p <- lift currentPhase
           lift $ modifyState $
+            over (expanderWorld . worldTypeContexts . at p . non Env.empty) $
+            Env.insert n x ptr
+          lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Example expr -> do
+        Example sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
           tell $ [EvalResult { resultEnv = env
                              , resultExpr = expr
+                             , resultType = sch
                              , resultValue = value
                              }]
 
@@ -386,8 +398,42 @@ initializeKernel = do
   traverse_ (uncurry addExprPrimitive) exprPrims
   traverse_ (uncurry addModulePrimitive) modPrims
   traverse_ (uncurry addDeclPrimitive) declPrims
+  traverse_ (uncurry addTypePrimitive) typePrims
 
   where
+    typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
+    typePrims =
+      let baseType =
+            \name ctor ->
+              (name, \ dest stx -> do
+                       _actualName <- mustBeIdent stx
+                       linkType dest ctor)
+      in [ baseType "Bool" TBool
+         , baseType "Unit" TUnit
+         , baseType "Syntax" TSyntax
+         , baseType "Ident" TIdent
+         , baseType "Signal" TSignal
+         , ( "->"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+               argDest <- scheduleType arg
+               retDest <- scheduleType ret
+               linkType dest (TFun argDest retDest)
+           )
+         , ( "Macro"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
+               tDest <- scheduleType t
+               linkType dest (TMacro tDest)
+           )
+         , ( "List"
+           , \ dest stx -> do
+               Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
+               entryTypeDest <- scheduleType e
+               linkType dest (TList entryTypeDest)
+           )
+         ]
+
     modPrims :: [(Text, Syntax -> Expand ())]
     modPrims =
       [ ( "#%module"
@@ -423,8 +469,10 @@ initializeKernel = do
             var <- freshVar
             exprDest <- liftIO $ newSplitCorePtr
             bind b (EIncompleteDefn var x exprDest)
-            linkDecl dest (Define x var exprDest)
+            schPtr <- liftIO $ newSchemePtr
+            linkDecl dest (Define x var schPtr exprDest)
             forkExpandSyntax (ExprDest exprDest) expr
+            forkCheckDecl dest
             nowValidAt pdest (SpecificPhase p)
         )
       ,("define-macros"
@@ -442,6 +490,7 @@ initializeKernel = do
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
             linkDecl dest $ DefineMacros macros
+            forkCheckDecl dest
             nowValidAt pdest (SpecificPhase p)
         )
       , ("example"
@@ -449,7 +498,9 @@ initializeKernel = do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
-            linkDecl dest (Example exprDest)
+            sch <- liftIO newSchemePtr
+            linkDecl dest (Example sch exprDest)
+            forkCheckDecl dest
             forkExpandSyntax (ExprDest exprDest) (addScope p expr sc)
             nowValidAt pdest (SpecificPhase p)
         )
@@ -562,6 +613,39 @@ initializeKernel = do
       [ ( "oops"
         , \ _ stx -> throwError (InternalError $ "oops" ++ show stx)
         )
+      , ( "the"
+        , \ dest stx -> do
+            Stx _ _ (_, ty, expr) <- mustHaveEntries stx
+            tyDest <- scheduleType ty
+            -- TODO add type to elaborated program? Or not?
+            forkExpandSyntax (ExprDest dest) expr
+            forkTypeCheck dest tyDest
+        )
+      , ( "let"
+        , \ dest stx -> do
+            Stx _ _ (_, b, body) <- mustHaveEntries stx
+            Stx _ _ (x, def) <- mustHaveEntries b
+            (sc, x', coreX) <- prepareVar x
+            p <- currentPhase
+            psc <- phaseRoot
+            defDest <- schedule def
+            bodyDest <- schedule $ addScope p (addScope p body sc) psc
+            linkExpr dest $ CoreLet x' coreX defDest bodyDest
+        )
+      , ( "flet"
+        , \ dest stx -> do
+            Stx _ _ (_, b, body) <- mustHaveEntries stx
+            Stx _ _ (f, args, def) <- mustHaveEntries b
+            Stx _ _ x <- mustHaveEntries args
+            (fsc, f', coreF) <- prepareVar f
+            (xsc, x', coreX) <- prepareVar x
+            p <- currentPhase
+            psc <- phaseRoot
+            defDest <- schedule $
+                       addScope p (addScope p (addScope p def fsc) xsc) psc
+            bodyDest <- schedule $ addScope p (addScope p body fsc) psc
+            linkExpr dest $ CoreLetFun f' coreF x' coreX defDest bodyDest
+        )
       , ( "lambda"
         , \ dest stx -> do
             Stx _ _ (_, arg, body) <- mustHaveEntries stx
@@ -669,6 +753,13 @@ initializeKernel = do
             sourceDest <- schedule source
             linkExpr dest $ CoreList $ ScopedList listDests sourceDest
         )
+      , ( "replace-loc"
+        , \dest stx -> do
+            Stx _ _ (_ :: Syntax, loc, valStx) <- mustHaveEntries stx
+            locDest <- schedule loc
+            valStxDest <- schedule valStx
+            linkExpr dest $ CoreReplaceLoc locDest valStxDest
+        )
       , ( "syntax-case"
         , \dest stx -> do
             Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
@@ -696,7 +787,7 @@ initializeKernel = do
             macroDest <- inEarlierPhase $ do
               psc <- phaseRoot
               schedule (addScope (prior p) mdef psc)
-            forkAwaitingMacro b v m' macroDest dest (addScope p body sc)
+            forkAwaitingMacro b v m' macroDest (ExprDest dest) (addScope p body sc)
         )
       , ( "log"
         , \dest stx -> do
@@ -756,10 +847,16 @@ initializeKernel = do
       bind b (EVarMacro var)
       return (sc, x', var)
 
+    scheduleType :: Syntax -> Expand SplitTypePtr
+    scheduleType stx = do
+      dest <- liftIO newSplitTypePtr
+      forkExpandType dest stx
+      return dest
 
     schedule :: Syntax -> Expand SplitCorePtr
-    schedule stx = do
+    schedule stx@(Syntax (Stx _ loc _)) = do
       dest <- liftIO newSplitCorePtr
+      saveOrigin dest loc
       forkExpandSyntax (ExprDest dest) stx
       return dest
 
@@ -781,6 +878,12 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
+    addTypePrimitive :: Text -> (SplitTypePtr -> Syntax -> Expand ()) -> Expand ()
+    addTypePrimitive name impl = do
+      let val = EPrimTypeMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
 
     addExprPrimitive :: Text -> (SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addExprPrimitive name impl = do
@@ -866,6 +969,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression d stx
         DeclDest d sc ph ->
           expandOneDeclaration sc d stx ph
+        TypeDest d -> expandOneType d stx
     AwaitingSignal dest signal kont -> do
       signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
       case signalWasSent of
@@ -882,7 +986,17 @@ runTask (tid, localData, task) = withLocal localData $ do
                     then return tid
                     else newTaskID
           laterMacro tid' b v x dest newDeps mdest stx
-        [] ->
+        [] -> do
+          inEarlierPhase $
+            forkCompleteTypeCheck mdest $
+              Ty (TFun (Ty TSyntax)
+                       (Ty (TMacro (Ty TSyntax))))
+          forkAwaitingMacroType b v x mdest dest stx
+    AwaitingMacroType dest (TaskAwaitMacroType b v x mdest stx) ->
+      isExprChecked mdest >>=
+      \case
+        False -> stillStuck tid task
+        True ->
           linkedCore mdest >>=
           \case
             Nothing -> error "Internal error - macro body not fully expanded"
@@ -952,6 +1066,51 @@ runTask (tid, localData, task) = withLocal localData $ do
               \case
                 Nothing -> Just $ Env.singleton x n val
                 Just env -> Just $ env <> Env.singleton x n val
+    TypeCheck eDest ty -> do
+      st <- getState
+      let eTop = view (expanderCompletedCore . at eDest) st
+      case eTop of
+        Nothing -> stillStuck tid task
+        Just e ->
+          case ty of
+            IncompleteType tDest ->
+              linkedType tDest >>=
+              \case
+                Nothing -> stillStuck tid task
+                Just t ->
+                  typeCheckLayer eDest e t
+            CompleteType t ->
+              typeCheckLayer eDest e t
+    TypeCheckDecl dest -> do
+      st <- getState
+      case view (expanderCompletedDecls . at dest) st of
+        Nothing -> stillStuck tid task
+        Just d -> typeCheckDecl d
+    GeneralizeType edest ty schdest -> do
+      ready <- isExprChecked edest
+      if ready
+        then do
+          st <- getState
+          case view (expanderExpressionTypes . at edest) st of
+            Nothing -> throwError $ InternalError "Type not found during generalization"
+            Just _ -> do
+              sch <- generalizeType ty
+              linkScheme schdest sch
+        else stillStuck tid task
+    TypeCheckVar eDest ty ->
+      linkedCore eDest >>=
+      \case
+        Nothing -> stillStuck tid task
+        Just (Core (CoreVar x)) ->
+          varType x >>=
+          \case
+            Nothing -> stillStuck tid task
+            Just sch -> do
+              specialize sch >>= unify eDest ty
+              saveExprType eDest ty
+        Just _ ->
+          throwError $ InternalError "Not a variable when specializing"
+
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -959,64 +1118,11 @@ runTask (tid, localData, task) = withLocal localData $ do
         over expanderTasks $
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
 
-
+expandOneType :: SplitTypePtr -> Syntax -> Expand ()
+expandOneType dest stx = expandOneForm (TypeDest dest) stx
 
 expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
-expandOneExpression dest stx
-  | Just ident <- identifierHeaded stx = do
-      b <- resolve =<< addRootScope ident
-      v <- getEValue b
-      case v of
-        EPrimMacro impl -> impl dest stx
-        EPrimModuleMacro _ ->
-          throwError $ InternalError "Current context won't accept modules"
-        EPrimDeclMacro _ ->
-          throwError $ InternalError "Current context won't accept declarations"
-        EVarMacro var ->
-          case syntaxE stx of
-            Id _ -> linkExpr dest (CoreVar var)
-            String _ -> error "Impossible - string not ident"
-            Sig _ -> error "Impossible - signal not ident"
-            Bool _ -> error "Impossible - boolean not ident"
-            List xs -> expandOneExpression dest (addApp List stx xs)
-        EIncompleteMacro transformerName sourceIdent mdest -> do
-          forkAwaitingMacro b transformerName sourceIdent mdest dest stx
-        EIncompleteDefn x n d ->
-          forkAwaitingDefn x n b d dest stx
-        EUserMacro transformerName -> do
-          stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
-          p <- currentPhase
-          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
-          case implV of
-            Just (ValueClosure macroImpl) -> do
-              macroVal <- inEarlierPhase $ expandEval $
-                          apply macroImpl $
-                          ValueSyntax $ addScope p stx stepScope
-              case macroVal of
-                ValueMacroAction act -> do
-                  res <- interpretMacroAction act
-                  case res of
-                    Left (sig, kont) -> do
-                      forkAwaitingSignal (ExprDest dest) sig kont
-                    Right expanded ->
-                      case expanded of
-                        ValueSyntax expansionResult ->
-                          forkExpandSyntax (ExprDest dest) (flipScope p expansionResult stepScope)
-                        other -> throwError $ ValueNotSyntax other
-                other ->
-                  throwError $ ValueNotMacro other
-            Nothing ->
-              throwError $ InternalError $
-              "No transformer yet created for " ++ shortShow ident ++
-              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
-            Just other -> throwError $ ValueNotMacro other
-  | otherwise =
-    case syntaxE stx of
-      List xs -> expandOneExpression dest (addApp List stx xs)
-      Sig s -> expandLiteralSignal dest s
-      Bool b -> linkExpr dest (CoreBool b)
-      String s -> expandLiteralString dest s
-      Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+expandOneExpression dest stx = expandOneForm (ExprDest dest) stx
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
@@ -1026,22 +1132,64 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
-expandOneDeclaration sc dest stx ph
+problemContext :: MacroDest -> MacroContext
+problemContext (DeclDest _ _ _) = DeclarationCtx
+problemContext (TypeDest _) = TypeCtx
+problemContext (ExprDest _) = ExpressionCtx
+
+requireDecl :: Syntax -> MacroDest -> Expand (Scope, DeclPtr, DeclValidityPtr)
+requireDecl _ (DeclDest dest sc ph) = return (sc, dest, ph)
+requireDecl stx other =
+  throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
+
+requireExpr :: Syntax -> MacroDest -> Expand SplitCorePtr
+requireExpr _ (ExprDest dest) = return dest
+requireExpr stx other =
+  throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
+
+requireType :: Syntax -> MacroDest -> Expand SplitTypePtr
+requireType _ (TypeDest dest) = return dest
+requireType stx other =
+  throwError $ WrongMacroContext stx TypeCtx (problemContext other)
+
+
+expandOneForm :: MacroDest -> Syntax -> Expand ()
+expandOneForm prob stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve =<< addRootScope ident
       v <- getEValue b
       case v of
-        EPrimMacro _ ->
-          throwError $ InternalError "Current context won't accept expressions"
+        EPrimMacro impl -> do
+          dest <- requireExpr stx prob
+          impl dest stx
         EPrimModuleMacro _ ->
-          throwError $ InternalError "Current context won't accept modules"
-        EPrimDeclMacro impl ->
+          throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
+        EPrimDeclMacro impl -> do
+          (sc, dest, ph) <- requireDecl stx prob
           impl sc dest ph stx
-        EVarMacro _ ->
-          throwError $ InternalError "Current context won't accept expressions"
-        EIncompleteDefn _ _ _ ->
-          throwError $ InternalError "Current context won't accept expressions"
+        EPrimTypeMacro impl -> do
+          dest <- requireType stx prob
+          impl dest stx
+        EVarMacro var -> do
+          dest <- requireExpr stx prob
+          case syntaxE stx of
+            Id _ -> linkExpr dest (CoreVar var)
+            String _ -> error "Impossible - string not ident"
+            Sig _ -> error "Impossible - signal not ident"
+            Bool _ -> error "Impossible - boolean not ident"
+            List xs -> expandOneExpression dest (addApp List stx xs)
+
+        EIncompleteDefn x n d -> do
+          dest <- requireExpr stx prob
+          forkAwaitingDefn x n b d dest stx
+        EIncompleteMacro transformerName sourceIdent mdest ->
+          case prob of
+            DeclDest sc dest ph ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (DeclDest sc dest ph) stx
+            ExprDest dest ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (ExprDest dest) stx
+            TypeDest dest ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (TypeDest dest) stx
         EUserMacro transformerName -> do
           stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
           p <- currentPhase
@@ -1056,11 +1204,23 @@ expandOneDeclaration sc dest stx ph
                   res <- interpretMacroAction act
                   case res of
                     Left (sig, kont) -> do
-                      forkAwaitingSignal (DeclDest dest sc ph) sig kont
+                      case prob of
+                        DeclDest sc dest ph ->
+                          forkAwaitingSignal (DeclDest sc dest ph) sig kont
+                        ExprDest dest ->
+                          forkAwaitingSignal (ExprDest dest) sig kont
+                        TypeDest dest ->
+                          forkAwaitingSignal (TypeDest dest) sig kont
                     Right expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
-                          forkExpandSyntax (DeclDest dest sc ph) (flipScope p expansionResult stepScope)
+                          case prob of
+                            DeclDest sc dest ph ->
+                              forkExpandSyntax (DeclDest sc dest ph) (flipScope p expansionResult stepScope)
+                            ExprDest dest ->
+                              forkExpandSyntax (ExprDest dest) (flipScope p expansionResult stepScope)
+                            TypeDest dest ->
+                              forkExpandSyntax (TypeDest dest) (flipScope p expansionResult stepScope)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
@@ -1069,11 +1229,22 @@ expandOneDeclaration sc dest stx ph
               "No transformer yet created for " ++ shortShow ident ++
               " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
-
-        EIncompleteMacro transformerName sourceIdent mdest ->
-          forkAwaitingDeclMacro b transformerName sourceIdent mdest dest sc ph stx
   | otherwise =
-    throwError $ InternalError "All declarations should be identifier-headed"
+    case prob of
+      DeclDest _ _ _ ->
+        throwError $ InternalError "All declarations should be identifier-headed"
+      TypeDest _dest -> throwError $ NotValidType stx
+      ExprDest dest ->
+        case syntaxE stx of
+          List xs -> expandOneExpression dest (addApp List stx xs)
+          Sig s -> expandLiteralSignal dest s
+          Bool b -> linkExpr dest (CoreBool b)
+          String s -> expandLiteralString dest s
+          Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+
+
+expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
+expandOneDeclaration sc dest stx ph = expandOneForm (DeclDest dest sc ph) stx
 
 
 -- | Link the destination to a literal signal object
@@ -1153,3 +1324,215 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
+
+-- | Invariant: the SplitCorePtr points at the CoreF in question
+typeCheckLayer :: SplitCorePtr -> CoreF SplitCorePtr -> Ty -> Expand ()
+typeCheckLayer dest (CoreVar _) t =
+  forkCheckVar dest t
+typeCheckLayer dest (CoreLet x ident def body) t = do
+  xTy <- inTypeBinder do
+    xt <- Ty . TMetaVar <$> freshMeta
+    forkCompleteTypeCheck def xt
+    return xt
+  sch <- liftIO $ newSchemePtr
+  forkGeneralizeType def xTy sch
+  withLocalVarType x ident sch $
+    forkCompleteTypeCheck body t
+  saveExprType dest t
+typeCheckLayer dest (CoreLetFun f fident x xident def body) t = do
+  ft <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  xt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  rt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
+  fsch <- trivialScheme ft
+  xsch <- trivialScheme xt
+  inTypeBinder $
+    withLocalVarType f fident fsch $
+      withLocalVarType x xident xsch $
+        forkCompleteTypeCheck def rt
+  unify dest ft (Ty (TFun xt rt))
+  sch <- liftIO newSchemePtr
+  forkGeneralizeType def ft sch
+  withLocalVarType f fident sch $
+    forkCompleteTypeCheck body t
+  saveExprType dest t
+typeCheckLayer dest (CoreLam x ident body) t = do
+  argT <- Ty . TMetaVar <$> freshMeta
+  retT <- Ty . TMetaVar <$> freshMeta
+  unify dest t (Ty (TFun argT retT))
+  sch <- trivialScheme argT
+  withLocalVarType x ident sch $
+    forkCompleteTypeCheck body retT
+  saveExprType dest t
+typeCheckLayer dest (CoreApp fun arg) t = do
+  argT <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck fun (Ty (TFun argT t))
+  forkCompleteTypeCheck arg argT
+  saveExprType dest t
+typeCheckLayer dest (CorePure e) t = do
+  innerT <- Ty . TMetaVar <$> freshMeta
+  unify dest (Ty (TMacro innerT)) t
+  forkCompleteTypeCheck e innerT
+  saveExprType dest t
+typeCheckLayer dest (CoreBind e1 e2) t = do
+  a <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck e1 (Ty (TMacro a))
+  b <- Ty . TMetaVar <$> freshMeta
+  forkCompleteTypeCheck e2 (Ty (TFun a (Ty (TMacro b))))
+  unify dest t (Ty (TMacro b))
+  saveExprType dest t
+typeCheckLayer dest (CoreSyntaxError (SyntaxError locs msg)) t = do
+  for_ locs (flip forkCompleteTypeCheck (Ty TSyntax))
+  forkCompleteTypeCheck msg (Ty TSyntax)
+  a <- Ty . TMetaVar <$> freshMeta
+  unify dest t (Ty (TMacro a))
+  saveExprType dest t
+typeCheckLayer dest (CoreSendSignal s) t = do
+  forkCompleteTypeCheck s (Ty TSignal)
+  unify dest t (Ty (TMacro (Ty TUnit)))
+  saveExprType dest t
+typeCheckLayer dest (CoreWaitSignal s) t = do
+  forkCompleteTypeCheck s (Ty TSignal)
+  unify dest t (Ty (TMacro (Ty TUnit)))
+  saveExprType dest t
+typeCheckLayer dest (CoreIdentEq _ e1 e2) t = do
+  forkCompleteTypeCheck e1 (Ty TSyntax)
+  forkCompleteTypeCheck e2 (Ty TSyntax)
+  unify dest t (Ty (TMacro (Ty TBool)))
+  saveExprType dest t
+typeCheckLayer dest (CoreLog msg) t = do
+  forkCompleteTypeCheck msg (Ty TSyntax)
+  unify dest t (Ty (TMacro (Ty TUnit)))
+  saveExprType dest t
+typeCheckLayer dest (CoreSyntax _) t = do
+  unify dest (Ty TSyntax) t
+  saveExprType dest t
+typeCheckLayer dest (CoreCase scrutinee cases) t = do
+  forkCompleteTypeCheck scrutinee (Ty TSyntax)
+  for_ cases $ \ (pat, expr) ->
+    bindVars pat $ forkCompleteTypeCheck expr t
+  saveExprType dest t
+  where
+    bindVars (PatternIdentifier ident x) act = do
+      sch <- trivialScheme (Ty TSyntax)
+      withLocalVarType ident x sch act
+    bindVars PatternEmpty act = act
+    bindVars (PatternCons identA a identD d) act = do
+      stxT <- trivialScheme (Ty TSyntax)
+      lstT <- trivialScheme (Ty TSyntax)
+      withLocalVarType identA a stxT $
+        withLocalVarType identD d lstT $
+          act
+    bindVars (PatternList []) act = act
+    bindVars (PatternList ((ident, x) : more)) act = do
+      sch <- trivialScheme (Ty TSyntax)
+      withLocalVarType ident x sch $
+        bindVars (PatternList more) act
+    bindVars PatternAny act = act
+typeCheckLayer dest (CoreIdentifier _ident) t = do
+  unify dest t (Ty (TSyntax))
+  saveExprType dest t
+typeCheckLayer dest (CoreSignal _s) t = do
+  unify dest t (Ty (TSignal))
+  saveExprType dest t
+typeCheckLayer dest (CoreBool _) t = do
+  unify dest (Ty TBool) t
+  saveExprType dest t
+typeCheckLayer dest (CoreIf b e1 e2) t = do
+  forkCompleteTypeCheck b (Ty TBool)
+  forkCompleteTypeCheck e1 t
+  forkCompleteTypeCheck e2 t
+  saveExprType dest t
+typeCheckLayer dest (CoreIdent (ScopedIdent ident srcloc)) t = do
+  forkCompleteTypeCheck ident (Ty TSyntax)
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify dest t (Ty TSyntax)
+  saveExprType dest t
+typeCheckLayer dest (CoreEmpty (ScopedEmpty srcloc)) t = do
+  unify dest t (Ty TSyntax)
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  saveExprType dest t
+typeCheckLayer dest (CoreCons (ScopedCons hd tl srcloc)) t = do
+  forkCompleteTypeCheck hd (Ty TSyntax)
+  forkCompleteTypeCheck tl (Ty TSyntax)
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify dest t (Ty TSyntax)
+  saveExprType dest t
+typeCheckLayer dest (CoreList (ScopedList elts srcloc)) t = do
+  for_ elts $ \e -> forkCompleteTypeCheck e t
+  forkCompleteTypeCheck srcloc (Ty TSyntax)
+  unify dest t (Ty TSyntax)
+  saveExprType dest t
+typeCheckLayer dest (CoreReplaceLoc loc stx) t = do
+  unify dest t (Ty TSyntax)
+  forkCompleteTypeCheck loc (Ty TSyntax)
+  forkCompleteTypeCheck stx (Ty TSyntax)
+  saveExprType dest t
+
+typeCheckDecl :: Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()
+typeCheckDecl (Define x v sch e) = do
+  ty <- inTypeBinder do
+    tdest <- liftIO newSplitTypePtr
+    meta <- freshMeta
+    linkType tdest (TMetaVar meta)
+    forkTypeCheck e tdest
+    return (TMetaVar meta)
+  ph <- currentPhase
+  modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
+    Env.insert v x sch
+  forkGeneralizeType e (Ty ty) sch
+
+typeCheckDecl (DefineMacros macros) =
+  let macroType = Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax))))
+  in for_ macros $ \ (_, _, def) -> do
+       inEarlierPhase $ forkCompleteTypeCheck def macroType
+typeCheckDecl (Meta d) = inEarlierPhase $ forkCheckDecl d
+typeCheckDecl (Example sch e) = do
+  -- TODO Consider whether we should be generalizing examples' types.
+  -- In favor: they're basically anonymous top-level lets. Against: they don't define anything.
+  -- For now, generalizing.
+  ty <- inTypeBinder do
+    tdest <- liftIO newSplitTypePtr
+    meta <- freshMeta
+    linkType tdest (TMetaVar meta)
+    forkTypeCheck e tdest
+    return (TMetaVar meta)
+  forkGeneralizeType e (Ty ty) sch
+typeCheckDecl (Import _) = pure ()
+typeCheckDecl (Export _) = pure ()
+
+
+-- The expected type is first, the received is second
+unify :: SplitCorePtr -> Ty -> Ty -> Expand ()
+unify blame t1 t2 = do
+  t1' <- normType t1
+  t2' <- normType t2
+  unify' (unTy t1') (unTy t2')
+
+  where
+    unify' :: TyF Ty -> TyF Ty -> Expand ()
+    -- Rigid-rigid
+    unify' TBool TBool = pure ()
+    unify' TUnit TUnit = pure ()
+    unify' TSyntax TSyntax = pure ()
+    unify' TIdent TIdent = pure ()
+    unify' TSignal TSignal = pure ()
+    unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
+    unify' (TMacro a) (TMacro b) = unify blame a b
+    unify' (TList a) (TList b) = unify blame a b
+
+    -- Flex-flex
+    unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
+      l1 <- view varLevel <$> derefType ptr1
+      l2 <- view varLevel <$> derefType ptr2
+      if | ptr1 == ptr2 -> pure ()
+         | l1 < l2 -> linkToType ptr1 t2
+         | otherwise -> linkToType ptr2 t1
+
+    -- Flex-rigid
+    unify' (TMetaVar ptr1) _ = linkToType ptr1 t2
+    unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
+
+    -- Mismatch
+    unify' expected received = do
+      loc <- view (expanderOriginLocations . at blame) <$> getState
+      throwError $ TypeMismatch loc (Ty expected) (Ty received)

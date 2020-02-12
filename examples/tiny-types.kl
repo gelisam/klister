@@ -1,0 +1,20 @@
+#lang kernel
+
+(example (the Bool #true))
+(example (the Bool #false))
+(example (the Syntax 'foo))
+(example (the (Macro Syntax) (pure 'foo)))
+(example (the (-> Bool Bool) (lambda (x) x)))
+(example (the (-> Bool Syntax) (lambda (x) 'hello)))
+(example (the (Macro (-> Bool Bool))
+              (>>= (free-identifier=? 'a 'b)
+                   (lambda (eq?)
+                     (if eq?
+                         (pure (lambda (x) x))
+                         (pure (lambda (x) (if x #false #true))))))))
+                       
+
+
+
+
+

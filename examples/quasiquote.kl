@@ -57,6 +57,12 @@
                                 e)]])])]
         [_ (syntax-error [list-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
 
+(define-macros
+  ([quasiquote/loc
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ loc q))
+         (pure (list-syntax ('replace-loc loc (list-syntax ('quasiquote q) stx)) stx))]))]))
 
 [define thing [quote nothing]]
 
@@ -73,5 +79,7 @@
 
 [example [quasiquote (thing [unquote thing] thing)]]
 
-[export quasiquote unquote]
+(example (quasiquote/loc thing (thing ,thing)))
+
+[export quasiquote unquote quasiquote/loc]
 

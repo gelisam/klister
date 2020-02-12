@@ -2,25 +2,16 @@
 [import [shift "n-ary-app.kl" 1]]
 
 
-[define fix
-  [lambda (fun)
-    ([lambda (rec) (fun [lambda (x) (rec rec x)])]
-     [lambda (rec) (fun [lambda (x) (rec rec x)])])]]
-
-[define-macros
-  -- (defun f (x y z)
-  --   (... (f foo bar baz) ...))
-  -- =>
-  -- (define f
-  --   (fix (lambda (f)
-  --          (lambda (x y z)
-  --            ... (f foo bar baz) ...))))
+(define-macros
   ([defun
     [lambda (stx)
       (syntax-case stx
         [[list [_ f args body]]
-         (pure (list-syntax ('define f (list-syntax ('fix (list-syntax ('lambda (list-syntax (f) f) (list-syntax ('lambda args body) stx)) stx)) stx)) stx))]
-        [_ (syntax-error '"bad syntax" stx)])]])]
+         (pure (list-syntax
+                ('define f
+                 (list-syntax ('flet (list-syntax (f args body) stx) f) stx))
+                stx))]
+        [_ (syntax-error '"bad syntax" stx)])]]))
 
 [defun const (x y) x]
 
@@ -38,3 +29,4 @@
 [example (last-stx '(a b c d e f g))]
 
 [export defun]
+
