@@ -49,11 +49,14 @@ import Syntax
 import Value
 import World
 
-main :: IO ()
-main = defaultMain tests
+import Golden
 
-tests :: TestTree
-tests = testGroup "All tests"
+main :: IO ()
+main = do
+  defaultMain =<< (tests <$> mkGoldenTests)
+
+tests :: TestTree ->TestTree
+tests goldenTests = testGroup "All tests"
   [ testGroup "Expander tests" [ operationTests, miniTests, moduleTests ]
   , testGroup "Hedgehog tests" [ testProperty
                                    "runPartialCore . nonPartial = id"
@@ -62,6 +65,7 @@ tests = testGroup "All tests"
                                    "unsplit . split = pure"
                                    propSplitUnsplit
                                ]
+  , goldenTests
   ]
 
 operationTests :: TestTree

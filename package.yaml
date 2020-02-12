@@ -27,13 +27,18 @@ executables:
       - klister
 tests:
   klister-tests:
+    source-dirs: tests
     main:
-      tests/Test.hs
+      Test.hs
     dependencies:
+      - bytestring
       - call-stack
       - deepseq
       - hedgehog
       - klister
       - tasty
+      - tasty-golden
       - tasty-hunit
       - tasty-hedgehog
+      - text
+      - transformers
