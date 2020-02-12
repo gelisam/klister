@@ -1,16 +1,8 @@
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote-syntax-test.kl:5.16-5.23]
- <nothing>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote-syntax-test.kl:8.11-8.16]
- <thing>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote-syntax-test.kl:5.16-5.23]
- <nothing>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:49.63-49.66]
- <(thing)>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:56.57-56.60]
- <(nothing)>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:49.63-49.66]
- <(list-syntax (nothing thing) thing)>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:49.63-49.66]
- <(list-syntax (nothing thing ()) thing)>
-#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:49.63-49.66]
- <(thing nothing thing)>
+'nothing
+'thing
+'nothing
+'(thing)
+'(nothing)
+'(list-syntax (nothing thing) thing)
+'(list-syntax (nothing thing ()) thing)
+'(thing nothing thing)

@@ -1,7 +1,5 @@
-#[/Users/gelisam/working/haskell/klister/examples/list.kl:70.17-70.18]<Signal 1>
-#[/Users/gelisam/working/haskell/klister/examples/list.kl:71.16-71.23]
- <(Signal 2 Signal 3)>
-#[/Users/gelisam/working/haskell/klister/examples/list.kl:72.20-72.39]<(x y z)>
-#[/Users/gelisam/working/haskell/klister/examples/list.kl:77.18-78.17]
- <((f x) (f y) (f z))>
-#[/Users/gelisam/working/haskell/klister/examples/list.kl:81.18-82.17]<(z y x)>
+'Signal 1
+'(Signal 2 Signal 3)
+'(x y z)
+'((f x) (f y) (f z))
+'(z y x)
