@@ -418,9 +418,9 @@ forkAwaitingSignal dest signal kont =
   forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()
 forkAwaitingMacro b v x mdest dest stx =
-  forkExpanderTask $ AwaitingMacro (ExprDest dest) (TaskAwaitMacro b v x [mdest] mdest stx)
+  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingMacroType ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()

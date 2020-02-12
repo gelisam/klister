@@ -787,7 +787,7 @@ initializeKernel = do
             macroDest <- inEarlierPhase $ do
               psc <- phaseRoot
               schedule (addScope (prior p) mdef psc)
-            forkAwaitingMacro b v m' macroDest dest (addScope p body sc)
+            forkAwaitingMacro b v m' macroDest (ExprDest dest) (addScope p body sc)
         )
       , ( "log"
         , \dest stx -> do
@@ -1119,107 +1119,10 @@ runTask (tid, localData, task) = withLocal localData $ do
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
-expandOneType dest stx
-  | Just ident <- identifierHeaded stx = do
-      b <- resolve =<< addRootScope ident
-      v <- getEValue b
-      case v of
-        EPrimTypeMacro impl -> impl dest stx
-        EPrimMacro _ -> throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
-        EPrimDeclMacro _ -> throwError $ WrongMacroContext stx TypeCtx DeclarationCtx
-        EVarMacro _ -> throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
-        EPrimModuleMacro _ -> throwError $ WrongMacroContext stx TypeCtx ModuleCtx
-        EIncompleteMacro _ _ _ ->
-          throwError $ WrongMacroContext stx TypeCtx ExpressionCtx
-        EIncompleteDefn _ _ _ ->
-          throwError $ WrongMacroContext stx TypeCtx DeclarationCtx
-        EUserMacro transformerName -> do
-          stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
-          p <- currentPhase
-          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
-          case implV of
-            Just (ValueClosure macroImpl) -> do
-              macroVal <- inEarlierPhase $ expandEval $
-                          apply macroImpl $
-                          ValueSyntax $ addScope p stx stepScope
-              case macroVal of
-                ValueMacroAction act -> do
-                  res <- interpretMacroAction act
-                  case res of
-                    Left (sig, kont) -> do
-                      forkAwaitingSignal (TypeDest dest) sig kont
-                    Right expanded ->
-                      case expanded of
-                        ValueSyntax expansionResult ->
-                          forkExpandSyntax (TypeDest dest) (flipScope p expansionResult stepScope)
-                        other -> throwError $ ValueNotSyntax other
-                other ->
-                  throwError $ ValueNotMacro other
-            Nothing ->
-              throwError $ InternalError $
-              "No transformer yet created for " ++ shortShow ident ++
-              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
-            Just other -> throwError $ ValueNotMacro other
-  | otherwise = throwError $ NotValidType stx
-
+expandOneType dest stx = expandOneForm (TypeDest dest) stx
 
 expandOneExpression :: SplitCorePtr -> Syntax -> Expand ()
-expandOneExpression dest stx
-  | Just ident <- identifierHeaded stx = do
-      b <- resolve =<< addRootScope ident
-      v <- getEValue b
-      case v of
-        EPrimMacro impl -> impl dest stx
-        EPrimTypeMacro _ -> throwError $ WrongMacroContext stx ExpressionCtx TypeCtx
-        EPrimModuleMacro _ ->
-          throwError $ WrongMacroContext stx ExpressionCtx ModuleCtx
-        EPrimDeclMacro _ ->
-          throwError $ WrongMacroContext stx ExpressionCtx DeclarationCtx
-        EVarMacro var ->
-          case syntaxE stx of
-            Id _ -> linkExpr dest (CoreVar var)
-            String _ -> error "Impossible - string not ident"
-            Sig _ -> error "Impossible - signal not ident"
-            Bool _ -> error "Impossible - boolean not ident"
-            List xs -> expandOneExpression dest (addApp List stx xs)
-        EIncompleteMacro transformerName sourceIdent mdest -> do
-          forkAwaitingMacro b transformerName sourceIdent mdest dest stx
-        EIncompleteDefn x n d ->
-          forkAwaitingDefn x n b d dest stx
-        EUserMacro transformerName -> do
-          stepScope <- freshScope $ T.pack $ "Expansion step for " ++ shortShow ident
-          p <- currentPhase
-          implV <- Env.lookupVal transformerName <$> currentTransformerEnv
-          case implV of
-            Just (ValueClosure macroImpl) -> do
-              macroVal <- inEarlierPhase $ expandEval $
-                          apply macroImpl $
-                          ValueSyntax $ addScope p stx stepScope
-              case macroVal of
-                ValueMacroAction act -> do
-                  res <- interpretMacroAction act
-                  case res of
-                    Left (sig, kont) -> do
-                      forkAwaitingSignal (ExprDest dest) sig kont
-                    Right expanded ->
-                      case expanded of
-                        ValueSyntax expansionResult ->
-                          forkExpandSyntax (ExprDest dest) (flipScope p expansionResult stepScope)
-                        other -> throwError $ ValueNotSyntax other
-                other ->
-                  throwError $ ValueNotMacro other
-            Nothing ->
-              throwError $ InternalError $
-              "No transformer yet created for " ++ shortShow ident ++
-              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
-            Just other -> throwError $ ValueNotMacro other
-  | otherwise =
-    case syntaxE stx of
-      List xs -> expandOneExpression dest (addApp List stx xs)
-      Sig s -> expandLiteralSignal dest s
-      Bool b -> linkExpr dest (CoreBool b)
-      String s -> expandLiteralString dest s
-      Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+expandOneExpression dest stx = expandOneForm (ExprDest dest) stx
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
@@ -1229,24 +1132,64 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
-expandOneDeclaration sc dest stx ph
+problemContext :: MacroDest -> MacroContext
+problemContext (DeclDest _ _ _) = DeclarationCtx
+problemContext (TypeDest _) = TypeCtx
+problemContext (ExprDest _) = ExpressionCtx
+
+requireDecl :: Syntax -> MacroDest -> Expand (Scope, DeclPtr, DeclValidityPtr)
+requireDecl _ (DeclDest dest sc ph) = return (sc, dest, ph)
+requireDecl stx other =
+  throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
+
+requireExpr :: Syntax -> MacroDest -> Expand SplitCorePtr
+requireExpr _ (ExprDest dest) = return dest
+requireExpr stx other =
+  throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
+
+requireType :: Syntax -> MacroDest -> Expand SplitTypePtr
+requireType _ (TypeDest dest) = return dest
+requireType stx other =
+  throwError $ WrongMacroContext stx TypeCtx (problemContext other)
+
+
+expandOneForm :: MacroDest -> Syntax -> Expand ()
+expandOneForm prob stx
   | Just ident <- identifierHeaded stx = do
       b <- resolve =<< addRootScope ident
       v <- getEValue b
       case v of
-        EPrimMacro _ ->
-          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
+        EPrimMacro impl -> do
+          dest <- requireExpr stx prob
+          impl dest stx
         EPrimModuleMacro _ ->
-          throwError $ WrongMacroContext stx DeclarationCtx ModuleCtx
-        EPrimDeclMacro impl ->
+          throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
+        EPrimDeclMacro impl -> do
+          (sc, dest, ph) <- requireDecl stx prob
           impl sc dest ph stx
-        EPrimTypeMacro _ ->
-          throwError $ WrongMacroContext stx DeclarationCtx TypeCtx
-        EVarMacro _ ->
-          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
-        EIncompleteDefn _ _ _ ->
-          throwError $ WrongMacroContext stx DeclarationCtx ExpressionCtx
+        EPrimTypeMacro impl -> do
+          dest <- requireType stx prob
+          impl dest stx
+        EVarMacro var -> do
+          dest <- requireExpr stx prob
+          case syntaxE stx of
+            Id _ -> linkExpr dest (CoreVar var)
+            String _ -> error "Impossible - string not ident"
+            Sig _ -> error "Impossible - signal not ident"
+            Bool _ -> error "Impossible - boolean not ident"
+            List xs -> expandOneExpression dest (addApp List stx xs)
+
+        EIncompleteDefn x n d -> do
+          dest <- requireExpr stx prob
+          forkAwaitingDefn x n b d dest stx
+        EIncompleteMacro transformerName sourceIdent mdest ->
+          case prob of
+            DeclDest sc dest ph ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (DeclDest sc dest ph) stx
+            ExprDest dest ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (ExprDest dest) stx
+            TypeDest dest ->
+              forkAwaitingMacro b transformerName sourceIdent mdest (TypeDest dest) stx
         EUserMacro transformerName -> do
           stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
           p <- currentPhase
@@ -1261,11 +1204,23 @@ expandOneDeclaration sc dest stx ph
                   res <- interpretMacroAction act
                   case res of
                     Left (sig, kont) -> do
-                      forkAwaitingSignal (DeclDest dest sc ph) sig kont
+                      case prob of
+                        DeclDest sc dest ph ->
+                          forkAwaitingSignal (DeclDest sc dest ph) sig kont
+                        ExprDest dest ->
+                          forkAwaitingSignal (ExprDest dest) sig kont
+                        TypeDest dest ->
+                          forkAwaitingSignal (TypeDest dest) sig kont
                     Right expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
-                          forkExpandSyntax (DeclDest dest sc ph) (flipScope p expansionResult stepScope)
+                          case prob of
+                            DeclDest sc dest ph ->
+                              forkExpandSyntax (DeclDest sc dest ph) (flipScope p expansionResult stepScope)
+                            ExprDest dest ->
+                              forkExpandSyntax (ExprDest dest) (flipScope p expansionResult stepScope)
+                            TypeDest dest ->
+                              forkExpandSyntax (TypeDest dest) (flipScope p expansionResult stepScope)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
@@ -1274,11 +1229,22 @@ expandOneDeclaration sc dest stx ph
               "No transformer yet created for " ++ shortShow ident ++
               " (" ++ show transformerName ++ ") at phase " ++ shortShow p
             Just other -> throwError $ ValueNotMacro other
-
-        EIncompleteMacro transformerName sourceIdent mdest ->
-          forkAwaitingDeclMacro b transformerName sourceIdent mdest dest sc ph stx
   | otherwise =
-    throwError $ InternalError "All declarations should be identifier-headed"
+    case prob of
+      DeclDest _ _ _ ->
+        throwError $ InternalError "All declarations should be identifier-headed"
+      TypeDest _dest -> throwError $ NotValidType stx
+      ExprDest dest ->
+        case syntaxE stx of
+          List xs -> expandOneExpression dest (addApp List stx xs)
+          Sig s -> expandLiteralSignal dest s
+          Bool b -> linkExpr dest (CoreBool b)
+          String s -> expandLiteralString dest s
+          Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+
+
+expandOneDeclaration :: Scope -> DeclPtr -> Syntax -> DeclValidityPtr -> Expand ()
+expandOneDeclaration sc dest stx ph = expandOneForm (DeclDest dest sc ph) stx
 
 
 -- | Link the destination to a literal signal object
