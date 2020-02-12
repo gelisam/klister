@@ -51,8 +51,10 @@ runExamples file = do
     Just results -> do
       -- Show just the results of evaluation in the module the user
       -- asked to run
-      for_ results $ \(EvalResult _ _ val) -> do
-        tellLn val
+      for_ results $ \(EvalResult _ _ tp val) -> do
+        prettyTell val
+        tell " : "
+        prettyTellLn tp
   where
 
 expandFile :: FilePath -> WriterT Text IO (ModuleName, ExpanderState)
@@ -66,6 +68,10 @@ expandFile file = do
     Right result ->
       pure (moduleName, result)
 
-tellLn :: Pretty ann a
-       => a -> WriterT Text IO ()
-tellLn = tell . (<> "\n") . Text.fromStrict . pretty
+prettyTell :: Pretty ann a
+           => a -> WriterT Text IO ()
+prettyTell = tell . Text.fromStrict . pretty
+
+prettyTellLn :: Pretty ann a
+             => a -> WriterT Text IO ()
+prettyTellLn = tell . (<> "\n") . Text.fromStrict . pretty
