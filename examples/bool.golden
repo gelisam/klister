@@ -1,22 +1,22 @@
-#false
-#false
-#false
-#true
-#false
-#true
-#true
-#true
-#true
-#false
-#true
-#false
-#true
-#false
-#true
-#false
-#true
-#false
-#true
-#false
-#true
-#false
+#false : Bool
+#false : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#true : Bool
+#true : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool
+#true : Bool
+#false : Bool

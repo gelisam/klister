@@ -1,8 +1,9 @@
-'nothing
-'thing
-'nothing
-'(thing)
-'(nothing)
-'(list-syntax (nothing thing) thing)
-'(list-syntax (nothing thing ()) thing)
-'(thing nothing thing)
+'nothing : Syntax
+'thing : Syntax
+'nothing : Syntax
+'(thing) : Syntax
+'(nothing) : Syntax
+'(list-syntax (nothing thing) thing) : Syntax
+'(list-syntax (nothing thing ()) thing) : Syntax
+'(thing nothing thing) : Syntax
+'(thing nothing) : Syntax

@@ -1,4 +1,7 @@
-'a
-#<closure>
-#<closure>
-#<closure>
+'a : Syntax
+#<closure> : ∀α0 β0. ((α0 → β0) → (α0 → β0))
+#<closure> : ∀α0. (α0 → α0)
+#<closure> : ∀α0. (α0 → α0)
+#<closure> : ∀α0 β0. ((α0 → β0) → (α0 → β0))
+#<closure> : ∀α0. (α0 → α0)
+#<closure> : ∀α0. (α0 → α0)
