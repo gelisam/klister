@@ -258,9 +258,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/id-compare.kl"
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _) -> True; _ -> False}) &
+              filter (\case {(Example _ _) -> True; _ -> False}) &
               \case
-                [Example e1, Example e2] -> do
+                [Example _ e1, Example _ e2] -> do
                   assertAlphaEq "first example" e1 (Core (CoreBool True))
                   assertAlphaEq "second example" e2 (Core (CoreBool False))
                 _ -> assertFailure "Expected two examples"
@@ -269,7 +269,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Define _fn fv fbody, Example e] -> do
+                [Define _fn fv _t fbody, Example _ e] -> do
                   fspec <- lam \_x -> lam \ y -> lam \_z -> y
                   assertAlphaEq "definition of f" fbody fspec
                   case e of
@@ -281,9 +281,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/import.kl"
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _) -> True; _ -> False}) &
+              filter (\case {(Example _ _) -> True; _ -> False}) &
               \case
-                [Example e1, Example e2] -> do
+                [Example _ e1, Example _ e2] -> do
                   case e1 of
                     (Core (CoreApp (Core (CoreApp (Core (CoreVar _)) _)) _)) ->
                       pure ()
@@ -300,9 +300,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _,
-                 Meta (view completeDecl -> Define _ _ _),
+                 Meta (view completeDecl -> Define _ _ _ _),
                  DefineMacros [(_, _, _)],
-                 Example ex] ->
+                 Example _ ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
                 _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
           )
@@ -310,7 +310,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, DefineMacros [(_, _, _)], Example ex] ->
+                [Import _, Import _, DefineMacros [(_, _, _)], Example _ ex] ->
                   assertAlphaEq "Example is #f" ex (Core (CoreBool False))
                 _ -> assertFailure "Expected import, import, macro, example"
           )
@@ -318,7 +318,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Define _ _ e, DefineMacros [(_, _, _)]] -> do
+                [Import _, Define _ _ _ e, DefineMacros [(_, _, _)]] -> do
                   spec <- lam \_x -> lam \y -> lam \_z -> y
                   assertAlphaEq "Definition is λx y z . y" e spec
                 _ -> assertFailure "Expected an import, a definition, and a macro"
@@ -327,13 +327,13 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : Define _ _ thingDef : examples) -> do
+                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : DefineMacros [_] : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [e1, e2, e3, e4, e5, e6, e7, e8, Export _] -> do
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _, Export _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
-                        other -> assertFailure ("Expected 8 examples and 1 export: " ++ show other)
+                        other -> assertFailure ("Expected 8 tested examples, 1 untested, and 1 export: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
                 _ -> assertFailure "Expected an import, two macros, a definition, and examples"
           )
@@ -341,7 +341,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Define _ _ thingDef : examples) -> do
+                (Import _ : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
@@ -355,8 +355,8 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, Define _ fun1 firstFun, DefineMacros [_], Define _ fun2 secondFun,
-                 Example e1, Example e2, DefineMacros [_], Example e3] -> do
+                [Import _, Import _, Define _ fun1 _ firstFun, DefineMacros [_], Define _ fun2 _ secondFun,
+                 Example _ e1, Example _ e2, DefineMacros [_], Example _ e3] -> do
                   spec1 <- lam \x -> lam \_y -> x
                   spec2 <- lam \_x -> lam \y -> y
                   assertAlphaEq "First fun drops second argument" firstFun spec1
@@ -406,6 +406,23 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 _ ->
                   assertFailure "Expected three signals in example"
           )
+        , ( "examples/syntax-loc.kl"
+          , \_m exampleVals ->
+              case exampleVals of
+                [ValueSyntax (Syntax (Stx _ loc1 (Id "here"))), ValueSyntax (Syntax (Stx _ loc2 (Id "here")))] -> do
+                  let SrcLoc _ (SrcPos l1 c1) (SrcPos l2 c2) = loc1
+                      SrcLoc _ (SrcPos l1' c1') (SrcPos l2' c2') = loc2
+                  l1  @?= 3
+                  c1  @?= 15
+                  l2  @?= 3
+                  c2  @?= 19
+                  l1' @?= 5
+                  c1' @?= 16
+                  l2' @?= 5
+                  c2' @?= 21
+                _ ->
+                  assertFailure "Expected two identifiers in example"
+          )
         , ( "examples/bound-identifier.kl"
           , \_m exampleVals ->
               case exampleVals of
@@ -431,17 +448,22 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               NotExported (Stx _ _ "magic") p -> p == runtime
               _ -> False
           )
+        , ( "examples/non-examples/type-errors.kl"
+          , \case
+              TypeMismatch (Just _) _ _ -> True
+              _ -> False
+          )
         ]
       ]
 
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
-testQuasiquoteExamples :: Show decl => [Decl decl Core] -> IO ()
+testQuasiquoteExamples :: (Show sch, Show decl) => [Decl sch decl Core] -> IO ()
 testQuasiquoteExamples examples =
   case examples of
-    [ Example e1, Example e2, Example e3, Example e4,
-      Example e5, Example e6, Example e7, Example e8 ] -> do
+    [ Example _ e1, Example _ e2, Example _ e3, Example _ e4,
+      Example _ e5, Example _ e6, Example _ e7, Example _ e8 ] -> do
       case e1 of
         Core (CoreVar _) -> pure ()
         other -> assertFailure ("Expected a var ref, got " ++ show other)
@@ -557,7 +579,7 @@ testFile f p = do
             case Map.lookup mn (view worldEvaluated w) of
               Nothing -> assertFailure "Module valuees not in its own expansion"
               Just evalResults ->
-                p m [val | EvalResult _ _ val <- evalResults]
+                p m [val | EvalResult _ _ _ val <- evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do

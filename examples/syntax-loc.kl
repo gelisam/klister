@@ -1,0 +1,10 @@
+#lang kernel
+
+(define here 'here)
+
+(define there 'there)
+
+(example here)
+
+(example (replace-loc there here))
+

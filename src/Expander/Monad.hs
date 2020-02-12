@@ -3,12 +3,15 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
 module Expander.Monad
   ( module Expander.Error
   , module Expander.DeclScope
   -- * The expander monad
   , Expand(..)
   , currentPhase
+  , currentBindingLevel
+  , inTypeBinder
   , dependencies
   , execExpand
   , freshScope
@@ -19,14 +22,23 @@ module Expander.Monad
   , getState
   , inEarlierPhase
   , inPhase
+  , isExprChecked
   , linkedCore
+  , linkedScheme
+  , linkedType
   , linkDecl
   , linkExpr
+  , linkType
+  , linkScheme
   , modifyState
   , moduleScope
   , newDeclValidityPtr
   , phaseRoot
+  , saveExprType
+  , saveOrigin
+  , trivialScheme
   , withLocal
+  , withLocalVarType
   -- ** Context
   , ExpanderContext
   , mkInitContext
@@ -34,10 +46,17 @@ module Expander.Monad
   , module Expander.Task
   , forkAwaitingDefn
   , forkAwaitingMacro
+  , forkAwaitingMacroType
   , forkAwaitingDeclMacro
   , forkAwaitingSignal
   , forkContinueMacroAction
   , forkExpandSyntax
+  , forkExpandType
+  , forkTypeCheck
+  , forkCheckDecl
+  , forkGeneralizeType
+  , forkCheckVar
+  , forkCompleteTypeCheck
   , forkExpanderTask
   , forkInterpretMacroAction
   , stillStuck
@@ -56,19 +75,27 @@ module Expander.Monad
   -- ** Lenses
   , expanderGlobalBindingTable
   , expanderCompletedCore
+  , expanderCompletedDecls
+  , expanderCompletedTypes
   , expanderCompletedModBody
+  , expanderCompletedSchemes
   , expanderCurrentBindingTable
   , expanderCurrentEnvs
   , expanderCurrentTransformerEnvs
+  , expanderDefTypes
+  , expanderTypeStore
   , expanderDeclPhases
   , expanderExpansionEnv
+  , expanderExpressionTypes
   , expanderKernelBindings
   , expanderKernelExports
   , expanderModuleExports
   , expanderModuleImports
   , expanderModuleName
   , expanderModuleTop
+  , expanderOriginLocations
   , expanderReceivedSignals
+  , expanderVarTypes
   , expanderTasks
   , expanderWorld
   -- * Tasks
@@ -79,9 +106,11 @@ module Expander.Monad
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
+import Data.Foldable
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Monoid
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -98,12 +127,17 @@ import Expander.Task
 import Module
 import ModuleName
 import PartialCore
+import PartialType
 import Phase
 import ShortShow
 import Signals
 import SplitCore
+import SplitType
 import Scope
 import Syntax
+import Syntax.SrcLoc
+import Type
+import Type.Context
 import Value
 import World
 
@@ -135,6 +169,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 
 data EValue
   = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
+  | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
@@ -153,6 +188,8 @@ data ExpanderContext = ExpanderContext
 data ExpanderLocal = ExpanderLocal
   { _expanderModuleName :: !ModuleName
   , _expanderPhase :: !Phase
+  , _expanderBindingLevels :: !(Map Phase BindingLevel)
+  , _expanderVarTypes :: TypeContext Var SchemePtr
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -162,6 +199,8 @@ mkInitContext mn = do
                            , _expanderLocal = ExpanderLocal
                              { _expanderModuleName = mn
                              , _expanderPhase = runtime
+                             , _expanderBindingLevels = Map.empty
+                             , _expanderVarTypes = mempty
                              }
                            }
 
@@ -172,9 +211,11 @@ data ExpanderState = ExpanderState
   , _expanderGlobalBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
+  , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl DeclPtr SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SchemePtr DeclPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
@@ -186,6 +227,10 @@ data ExpanderState = ExpanderState
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentBindingTable :: !BindingTable
+  , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
+  , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
+  , _expanderTypeStore :: !(TypeStore Ty)
+  , _expanderDefTypes :: !(TypeContext Var SchemePtr) -- ^ Module-level definitions
   }
 
 initExpanderState :: ExpanderState
@@ -196,7 +241,9 @@ initExpanderState = ExpanderState
   , _expanderGlobalBindingTable = mempty
   , _expanderExpansionEnv = mempty
   , _expanderTasks = []
+  , _expanderOriginLocations = Map.empty
   , _expanderCompletedCore = Map.empty
+  , _expanderCompletedTypes = Map.empty
   , _expanderCompletedModBody = Map.empty
   , _expanderCompletedDecls = Map.empty
   , _expanderModuleTop = Nothing
@@ -210,6 +257,10 @@ initExpanderState = ExpanderState
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
   , _expanderCurrentBindingTable = mempty
+  , _expanderExpressionTypes = Map.empty
+  , _expanderCompletedSchemes = Map.empty
+  , _expanderTypeStore = mempty
+  , _expanderDefTypes = mempty
   }
 
 makeLenses ''ExpanderContext
@@ -286,9 +337,17 @@ linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
-linkDecl :: DeclPtr -> Decl DeclPtr SplitCorePtr -> Expand ()
+linkDecl :: DeclPtr -> Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
+
+linkType :: SplitTypePtr -> TyF SplitTypePtr -> Expand ()
+linkType dest ty =
+  modifyState $ over expanderCompletedTypes (<> Map.singleton dest ty)
+
+linkScheme :: SchemePtr -> Scheme Ty -> Expand ()
+linkScheme ptr sch =
+  modifyState $ over expanderCompletedSchemes (<> Map.singleton ptr sch)
 
 linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
 linkStatus slot = do
@@ -299,6 +358,15 @@ linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
   runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
   getState
+
+linkedType :: SplitTypePtr -> Expand (Maybe Ty)
+linkedType slot =
+  runPartialType . unsplitType . SplitType slot . view expanderCompletedTypes <$>
+  getState
+
+linkedScheme :: SchemePtr -> Expand (Maybe (Scheme Ty))
+linkedScheme slot =
+  view (expanderCompletedSchemes . at slot) <$> getState
 
 freshVar :: Expand Var
 freshVar = Var <$> liftIO newUnique
@@ -321,14 +389,43 @@ forkExpandSyntax :: MacroDest -> Syntax -> Expand ()
 forkExpandSyntax dest stx =
   forkExpanderTask $ ExpandSyntax dest stx
 
+forkExpandType :: SplitTypePtr -> Syntax -> Expand ()
+forkExpandType dest stx =
+  forkExpanderTask $ ExpandSyntax (TypeDest dest) stx
+
+forkCompleteTypeCheck :: SplitCorePtr -> Ty -> Expand ()
+forkCompleteTypeCheck eDest ty =
+  forkExpanderTask $ TypeCheck eDest (CompleteType ty)
+
+forkTypeCheck :: SplitCorePtr -> SplitTypePtr -> Expand ()
+forkTypeCheck eDest ty =
+  forkExpanderTask $ TypeCheck eDest (IncompleteType ty)
+
+forkCheckDecl :: DeclPtr -> Expand ()
+forkCheckDecl dest =
+  forkExpanderTask $ TypeCheckDecl dest
+
+forkGeneralizeType :: SplitCorePtr -> Ty -> SchemePtr -> Expand ()
+forkGeneralizeType expr t sch =
+  forkExpanderTask $ GeneralizeType expr t sch
+
+forkCheckVar :: SplitCorePtr -> Ty -> Expand ()
+forkCheckVar expr ty =
+  forkExpanderTask $ TypeCheckVar expr ty
+
 forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont =
   forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> SplitCorePtr -> Syntax -> Expand ()
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()
 forkAwaitingMacro b v x mdest dest stx =
-  forkExpanderTask $ AwaitingMacro (ExprDest dest) (TaskAwaitMacro b v x [mdest] mdest stx)
+  forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
+
+forkAwaitingMacroType ::
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()
+forkAwaitingMacroType b v x mdest dest stx =
+  forkExpanderTask $ AwaitingMacroType dest (TaskAwaitMacroType b v x mdest stx)
 
 forkAwaitingDeclMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
@@ -351,6 +448,12 @@ forkContinueMacroAction :: MacroDest -> Value -> [Closure] -> Expand ()
 forkContinueMacroAction dest value kont = do
   forkExpanderTask $ ContinueMacroAction dest value kont
 
+-- | Create a "trivial" type scheme that does not generalize any variables
+trivialScheme :: Ty -> Expand SchemePtr
+trivialScheme t = do
+  sch <- liftIO newSchemePtr
+  linkScheme sch (Scheme 0 t)
+  return sch
 
 -- | Compute the dependencies of a particular slot. The dependencies
 -- are the un-linked child slots. If there are no dependencies, then
@@ -379,12 +482,18 @@ getDecl ptr =
     Nothing -> throwError $ InternalError "Missing decl after expansion"
     Just decl -> flattenDecl decl
   where
-    flattenDecl :: Decl DeclPtr SplitCorePtr -> Expand (CompleteDecl)
-    flattenDecl (Define x v e) =
+    flattenDecl ::
+      Decl SchemePtr DeclPtr SplitCorePtr ->
+      Expand (CompleteDecl)
+    flattenDecl (Define x v schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ CompleteDecl $ Define x v e'
+        Just e' ->
+          linkedScheme schPtr >>=
+          \case
+            Nothing -> throwError $ InternalError "Missing scheme after expansion"
+            Just sch -> pure $ CompleteDecl $ Define x v sch e'
     flattenDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
       for macros \(x, v, e) ->
@@ -394,10 +503,66 @@ getDecl ptr =
           Just e' -> pure $ (x, v, e')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
-    flattenDecl (Example e) =
+    flattenDecl (Example schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
-        Just e' -> pure $ CompleteDecl $ Example e'
+        Just e' ->
+          linkedScheme schPtr >>=
+          \case
+            Nothing -> throwError $ InternalError "Missing example scheme after expansion"
+            Just sch -> pure $ CompleteDecl $ Example sch e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
+
+currentBindingLevel :: Expand BindingLevel
+currentBindingLevel = do
+  ph <- currentPhase
+  view (expanderLocal .
+        expanderBindingLevels .
+        at ph .
+        non topmost)
+
+topmost :: BindingLevel
+topmost = BindingLevel 0
+
+inTypeBinder :: Expand a -> Expand a
+inTypeBinder act = do
+  ph <- currentPhase
+  Expand $
+    local (over (expanderLocal .
+                 expanderBindingLevels .
+                 at ph . non topmost) bump) $
+    runExpand act
+  where
+    bump (BindingLevel n) = BindingLevel (n + 1)
+
+withLocalVarType :: Ident -> Var -> SchemePtr -> Expand a -> Expand a
+withLocalVarType ident x sch act = do
+  ph <- currentPhase
+  Expand $
+    local (over (expanderLocal . expanderVarTypes . at ph) addVar) $
+    runExpand act
+  where
+    addVar Nothing = Just $ Env.singleton x ident sch
+    addVar (Just γ) = Just $ Env.insert x ident sch γ
+
+saveExprType :: SplitCorePtr -> Ty -> Expand ()
+saveExprType dest t =
+  modifyState $ set (expanderExpressionTypes . at dest) (Just t)
+
+-- | Is the pointed-to expression completely expanded and type checked yet?
+isExprChecked :: SplitCorePtr -> Expand Bool
+isExprChecked dest = do
+  st <- getState
+  let found = view (expanderCompletedCore . at dest) st
+  case found of
+    Nothing -> return False
+    Just layer ->
+      case view (expanderExpressionTypes . at dest) st of
+        Nothing -> return False
+        Just _ -> getAll . fold <$> traverse (fmap All . isExprChecked) layer
+
+saveOrigin :: SplitCorePtr -> SrcLoc -> Expand ()
+saveOrigin ptr loc =
+  modifyState $ set (expanderOriginLocations . at ptr) (Just loc)

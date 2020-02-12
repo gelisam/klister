@@ -77,6 +77,8 @@ data HowEq = Free | Bound
 
 data CoreF core
   = CoreVar Var
+  | CoreLet Ident Var core core
+  | CoreLetFun Ident Var Ident Var core core  
   | CoreLam Ident Var core
   | CoreApp core core
   | CorePure core                       -- :: a -> Macro a
@@ -97,6 +99,7 @@ data CoreF core
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
+  | CoreReplaceLoc core core
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 
@@ -250,6 +253,24 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(Var "
    ++ shortShow var
    ++ ")"
+  shortShow (CoreLet _ x def body)
+    = "(Let "
+   ++ shortShow x
+   ++ " "
+   ++ shortShow def
+   ++ " "
+   ++ shortShow body
+   ++ ")"
+  shortShow (CoreLetFun _ f _ x def body)
+    = "(LetFun "
+   ++ shortShow f
+   ++ " "
+   ++ shortShow x
+   ++ " "
+   ++ shortShow def
+   ++ " "
+   ++ shortShow body
+   ++ ")"
   shortShow (CoreLam _ x body)
     = "(Lam "
    ++ shortShow x
@@ -328,6 +349,10 @@ instance ShortShow core => ShortShow (CoreF core) where
     = "(List "
    ++ shortShow scopedVec
    ++ ")"
+  shortShow (CoreReplaceLoc loc stx)
+    = "(ReplaceLoc "
+   ++ shortShow loc ++ " "
+   ++ shortShow stx ++ ")"
 
 instance ShortShow Core where
   shortShow (Core x) = shortShow x

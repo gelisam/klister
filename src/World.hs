@@ -14,9 +14,12 @@ import Evaluator (EvalResult)
 import Module
 import ModuleName
 import Phase
+import SplitType
+import Type.Context
 
 data World a = World
   { _worldEnvironments :: !(Map Phase (Env Var a))
+  , _worldTypeContexts :: !(TypeContext Var SchemePtr)
   , _worldTransformerEnvironments :: !(Map Phase (Env MacroVar a))
   , _worldModules :: !(Map ModuleName CompleteModule)
   , _worldVisited :: !(Map ModuleName (Set Phase))
@@ -31,6 +34,7 @@ phaseEnv p = maybe Env.empty id . view (worldEnvironments . at p)
 initialWorld :: World a
 initialWorld =
   World { _worldEnvironments = Map.empty
+        , _worldTypeContexts = mempty
         , _worldTransformerEnvironments = Map.empty
         , _worldModules = Map.empty
         , _worldVisited = Map.empty

@@ -59,6 +59,30 @@
       [[list [_ args body]]
        [pure [list-syntax ['my-lam args body] stx]]])]])]
 
+(define-macros
+  ([flet*
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ fun body))
+         (syntax-case fun
+           [(list (name args def))
+            (syntax-case args
+              [(cons arg more-args)
+               (pure (list-syntax
+                      ('flet
+                       (list-syntax (name
+                                     (list-syntax (arg) stx)
+                                     (list-syntax ('lambda more-args def) stx))
+                                    stx)
+                       body)
+                      stx))])])]))])) 
+
+(define-macros
+  ([flet (lambda (stx)
+           (syntax-case stx
+             [(cons _ rest)
+              (pure (cons-list-syntax 'flet* rest stx))]))]))
+
 [define id [lambda (x) x]]
 
 [define const [lambda (x y) x]]
@@ -71,10 +95,18 @@
 [example (compose id id)]
 [example (compose id id id)]
 
+(define compose* (flet (comp (f g x) (f (g x))) comp))
+
+[example (compose* id)]
+[example (compose* id id)]
+[example (compose* id id id)]
+
+
 (export #%module #%app
         const lambda define example define-macros quote meta if
+        let flet
         import export
         >>= pure syntax-error syntax-case
-        list-syntax cons-list-syntax empty-list-syntax
+        list-syntax cons-list-syntax empty-list-syntax replace-loc
         free-identifier=? bound-identifier=? log)
 
