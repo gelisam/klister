@@ -19,7 +19,7 @@ dependencies:
 library:
   source-dirs: src
 executables:
-  klister-repl:
+  klister:
     main:        Main.hs
     source-dirs: repl
     dependencies:
