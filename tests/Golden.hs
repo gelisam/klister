@@ -31,7 +31,9 @@ mkGoldenTests :: IO TestTree
 mkGoldenTests = do
   allKlisterFiles <- findByExtension [".kl"] "examples"
   let klisterFiles :: [FilePath]
-      klisterFiles = filter (not . ("/non-examples/" `List.isInfixOf`)) allKlisterFiles
+      klisterFiles = filter (not . ("/non-examples/" `List.isInfixOf`))
+                   . filter (not . ("/failing-examples/" `List.isInfixOf`))
+                   $ allKlisterFiles
   return $ testGroup "Golden tests"
     [ goldenVsString testName goldenFile $ do
         outputLines <- execWriterT $ runExamples klisterFile
