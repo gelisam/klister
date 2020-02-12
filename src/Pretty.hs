@@ -275,12 +275,8 @@ instance Pretty VarInfo SrcPos where
     viaShow (view srcPosCol pos)
 
 instance Pretty VarInfo a => Pretty VarInfo (Stx a) where
-  pp env (Stx _ loc v) =
-    text "#" <>
-    (align . group)
-      (text "[" <> pp env loc <> text "]" <> line' <> text "<" <>
-       align (pp env v) <>
-       text ">")
+  pp env (Stx _ _ v) =
+    text "'" <> pp env v
 
 instance Pretty VarInfo Syntax where
   pp env (Syntax e) = pp env e
