@@ -2,7 +2,7 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE TypeFamilies #-}
-module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList, named) where
+module Env (Env, empty, insert, singleton, lookup, lookupIdent, lookupVal, toList, fromList, named) where
 
 import Prelude hiding (lookup)
 
@@ -21,6 +21,9 @@ empty = Env (Map.empty)
 
 toList :: Env v a -> [(v, Ident, a)]
 toList (Env env) = [(x, n, v) | (x, (n, v)) <- Map.toList env]
+
+fromList :: Ord v => [(v, Ident, a)] -> Env v a
+fromList vars = Env (Map.fromList [(x, (n, v)) | (x, n, v) <- vars])
 
 singleton :: v -> Ident -> a -> Env v a
 singleton x n v = Env (Map.singleton x (n, v))

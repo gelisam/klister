@@ -46,6 +46,7 @@ import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
+import Type
 import Value
 import World
 
@@ -142,10 +143,6 @@ miniTests =
             \    x]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
-        , ( "[if #t [lambda [x] x] #f]"
-          , "[if #t [lambda [x] x] #f]"
-          , iF (bool True) (lam $ \x -> x) (bool False)
-          )
         , ( "send a signal nobody is waiting for"
           , "[let-syntax \n\
             \  [signaling-id [lambda [_] \n\
@@ -232,6 +229,16 @@ miniTests =
             \        [[signaling-id] [blocked-id]]]]"
           , \case
               NoProgress [AwaitingSignal _ (Signal 1) _] -> True
+              _ -> False
+          )
+        , ( "Mismatching types in if"
+          , "[if #t [lambda [x] x] #f]"
+          , \case
+              TypeMismatch _ t1 t2 ->
+                case (t1, t2) of
+                  (Ty TBool, Ty (TFun _ _)) -> True
+                  (Ty (TFun _ _), Ty TBool) -> True
+                  _ -> False
               _ -> False
           )
         ]

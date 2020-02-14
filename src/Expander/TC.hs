@@ -44,6 +44,15 @@ normType t@(unTy -> TMetaVar ptr) = do
     _ -> return t
 normType t = return t
 
+normAll :: Ty -> Expand Ty
+normAll t =
+  normType t >>= fmap Ty .
+  \case
+    (Ty (TFun a b)) -> TFun <$> normType a <*> normType b
+    (Ty (TMacro a)) -> TMacro <$> normType a
+    (Ty (TList a)) -> TList <$> normType a
+    other -> pure (unTy other)
+
 metas :: Ty -> Expand [MetaPtr]
 metas t =
   normType t >>=
@@ -58,7 +67,9 @@ occursCheck :: MetaPtr -> Ty -> Expand ()
 occursCheck ptr t = do
   free <- metas t
   if ptr `elem` free
-    then throwError $ OccursCheckFailed
+    then do
+      t' <- normAll t
+      throwError $ OccursCheckFailed ptr t'
     else pure ()
 
 pruneLevel :: Traversable f => BindingLevel -> f MetaPtr -> Expand ()
