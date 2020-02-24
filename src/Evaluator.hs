@@ -109,6 +109,11 @@ eval (Core (CoreApp fun arg)) = do
   closure <- evalAsClosure fun
   value <- eval arg
   apply closure value
+eval (Core (CoreCtor c args)) =
+  ValueCtor c <$> traverse eval args
+eval (Core (CoreDataCase scrut cases)) = do
+  value <- eval scrut
+  doDataCase value cases
 eval (Core (CorePure arg)) = do
   value <- eval arg
   pure $ ValueMacroAction
@@ -263,28 +268,42 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doCase :: Value -> [(Pattern, Core)] -> Eval Value
+doDataCase :: Value -> [(ConstructorPattern, Core)] -> Eval Value
+doDataCase v0 [] = throwError (EvalErrorCase v0)
+doDataCase v0 ((pat, rhs0) : ps) = match (doDataCase v0 ps) rhs0
+  where
+    match next rhs =
+      case v0 of
+        ValueCtor c args
+          | c == view patternConstructor pat ->
+            if length (view patternVars pat) /= length args
+              then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
+              else withManyExtendedEnv [(n, x, v) | (n, x) <- view patternVars pat | v <- args] $ eval rhs
+          | otherwise -> next
+        _otherValue -> next
+
+doCase :: Value -> [(SyntaxPattern, Core)] -> Eval Value
 doCase v0 []               = throwError (EvalErrorCase v0)
 doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
   where
-    match next (PatternIdentifier n x) rhs =
+    match next (SyntaxPatternIdentifier n x) rhs =
       \case
         v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
           withExtendedEnv n x v (eval rhs)
         _ -> next
-    match next PatternEmpty rhs =
+    match next SyntaxPatternEmpty rhs =
       \case
         (ValueSyntax (Syntax (Stx _ _ (List [])))) ->
           eval rhs
         _ -> next
-    match next (PatternCons nx x nxs xs) rhs =
+    match next (SyntaxPatternCons nx x nxs xs) rhs =
       \case
         (ValueSyntax (Syntax (Stx scs loc (List (v:vs))))) ->
           withExtendedEnv nx x (ValueSyntax v) $
           withExtendedEnv nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs)))) $
           eval rhs
         _ -> next
-    match next (PatternList xs) rhs =
+    match next (SyntaxPatternList xs) rhs =
       \case
         (ValueSyntax (Syntax (Stx _ _ (List vs))))
           | length vs == length xs ->
@@ -293,5 +312,5 @@ doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
                                 | v <- vs] $
             eval rhs
         _ -> next
-    match _next PatternAny rhs =
+    match _next SyntaxPatternAny rhs =
       const (eval rhs)

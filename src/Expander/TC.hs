@@ -161,6 +161,8 @@ generalizeType ty = do
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
     genVars vars (TMacro a) = TMacro <$> genTyVars vars a
     genVars vars (TList a) = TList <$> genTyVars vars a
+    genVars vars (TDatatype d args) =
+      TDatatype d <$> traverse (genTyVars vars) args
     genVars _ (TSchemaVar _) =
       throwError $ InternalError "Can't generalize in schema"
     genVars vars (TMetaVar v)

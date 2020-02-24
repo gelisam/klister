@@ -852,7 +852,7 @@ initializeKernel = do
         )
       ]
 
-    expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (Pattern, SplitCorePtr)
+    expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
     -- TODO match case keywords hygienically
     expandPatternCase t (Stx _ _ (lhs, rhs)) = do
       p <- currentPhase
@@ -863,7 +863,7 @@ initializeKernel = do
           (sc, x', var) <- prepareVar patVar
           let rhs' = addScope p rhs sc
           rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
-          let patOut = PatternIdentifier x' var
+          let patOut = SyntaxPatternIdentifier x' var
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
                                Syntax (Stx _ _ (List vars))])) -> do
@@ -871,7 +871,7 @@ initializeKernel = do
           let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
           rhsDest <- withLocalVarTypes [(var, ident, sch) | (_, ident, var) <- varInfo] $
                        schedule t rhs'
-          let patOut = PatternList [(ident, var) | (_, ident, var) <- varInfo]
+          let patOut = SyntaxPatternList [(ident, var) | (_, ident, var) <- varInfo]
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "cons")),
                                car,
@@ -881,14 +881,14 @@ initializeKernel = do
           let rhs' = addScope p (addScope p rhs sc) sc'
           rhsDest <- withLocalVarTypes [(carVar, car', sch), (cdrVar, cdr', sch)] $
                        schedule t rhs'
-          let patOut = PatternCons car' carVar cdr' cdrVar
+          let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [])) -> do
           rhsDest <- schedule t rhs
-          return (PatternEmpty, rhsDest)
+          return (SyntaxPatternEmpty, rhsDest)
         Syntax (Stx _ _ (Id "_")) -> do
           rhsDest <- schedule t rhs
-          return (PatternAny, rhsDest)
+          return (SyntaxPatternAny, rhsDest)
         other ->
           throwError $ UnknownPattern other
 
