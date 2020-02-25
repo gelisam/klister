@@ -1,3 +1,3 @@
-'b : Syntax
-'a : Syntax
-'b : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/hygiene.kl:12.19-12.20]<b> : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/hygiene.kl:13.37-13.38]<a> : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/hygiene.kl:23.57-23.58]<b> : Syntax

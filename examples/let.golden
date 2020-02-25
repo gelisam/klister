@@ -1,2 +1,3 @@
-'five : Syntax
-'(five two) : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/let.kl:27.20-27.24]<five> : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/quasiquote.kl:56.57-56.60]
+ <(five two)> : Syntax

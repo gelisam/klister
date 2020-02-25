@@ -1,4 +1,4 @@
-'a : Syntax
+#[/Users/gelisam/working/haskell/klister/examples/n-ary-app.kl:90.18-90.19]<a> : Syntax
 #<closure> : ∀α0 β0. ((α0 → β0) → (α0 → β0))
 #<closure> : ∀α0. (α0 → α0)
 #<closure> : ∀α0. (α0 → α0)
