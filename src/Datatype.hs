@@ -1,7 +1,9 @@
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Datatype where
 
 import Control.Lens
+import Data.String
 import Data.Text (Text)
 import Numeric.Natural
 
@@ -9,20 +11,28 @@ import ModuleName
 import Phase
 import ShortShow
 
+newtype DatatypeName = DatatypeName { _datatypeNameText :: Text }
+  deriving (Eq, IsString, Ord, Show)
+makeLenses ''DatatypeName
+
 data Datatype
   = Datatype
     { _datatypeModule :: !ModuleName -- ^ The module that defines the datatype
     , _datatypePhase :: !Phase -- ^ The phase at which the datatype is valid
-    , _datatypeName :: !Text -- ^ The unique name for the datatype at this module and phase
+    , _datatypeName :: !DatatypeName -- ^ The unique name for the datatype at this module and phase
     }
   deriving (Eq, Ord, Show)
 makeLenses ''Datatype
+
+newtype ConstructorName = ConstructorName  { _constructorNameText :: Text }
+  deriving (Eq, IsString, Ord, Show)
+makeLenses ''ConstructorName
 
 data Constructor
   = Constructor
     { _constructorModule :: !ModuleName -- ^ The module that defines the constructor
     , _constructorPhase :: !Phase -- ^ The phase at which the constructor is valid
-    , _constructorName :: !Text -- ^ The unique name for the constructor at this module and phase
+    , _constructorName :: !ConstructorName -- ^ The unique name for the constructor at this module and phase
     }
   deriving (Eq, Ord, Show)
 makeLenses ''Constructor

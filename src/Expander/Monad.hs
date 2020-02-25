@@ -114,10 +114,12 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
+import Numeric.Natural
 
 import Binding
 import Control.Lens.IORef
 import Core
+import Datatype
 import Env
 import Expander.DeclScope
 import Expander.Error
@@ -213,7 +215,7 @@ data ExpanderState = ExpanderState
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SchemePtr DeclPtr SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
@@ -335,7 +337,7 @@ linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
-linkDecl :: DeclPtr -> Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()
+linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
@@ -469,7 +471,7 @@ getDecl ptr =
     Just decl -> flattenDecl decl
   where
     flattenDecl ::
-      Decl SchemePtr DeclPtr SplitCorePtr ->
+      Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr ->
       Expand (CompleteDecl)
     flattenDecl (Define x v schPtr e) =
       linkedCore e >>=
@@ -487,6 +489,22 @@ getDecl ptr =
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
+    flattenDecl (Data x dn arity ctors) =
+      CompleteDecl . Data x dn arity <$> traverse flattenCtor ctors
+        where
+          flattenCtor ::
+            (Ident, ConstructorName, [Either Natural SplitTypePtr]) ->
+            Expand (Ident, ConstructorName, [Either Natural Ty])
+          flattenCtor (ident, cn, args) = do
+            args' <- for args $
+                       \case
+                         Left i -> pure $ Left i
+                         Right ptr' ->
+                           linkedType ptr' >>=
+                           maybe
+                             (throwError $ InternalError "Missing type after expansion")
+                             (pure . Right)
+            pure (ident, cn, args')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
     flattenDecl (Example schPtr e) =

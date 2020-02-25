@@ -248,6 +248,8 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
+        Data _ _ _ _ ->
+          error "TODO - add datatype components to env"
         Example sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)

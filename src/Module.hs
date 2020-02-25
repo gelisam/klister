@@ -46,6 +46,7 @@ import Numeric.Natural
 
 import Binding
 import Core
+import Datatype
 import ModuleName
 import Phase
 import Syntax
@@ -149,7 +150,7 @@ data Module f a = Module
 makeLenses ''Module
 
 
-newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl (Scheme Ty) CompleteDecl Core }
+newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) CompleteDecl Core }
   deriving Show
 
 instance Phased CompleteDecl where
@@ -180,24 +181,27 @@ instance Show DeclPtr where
 newDeclPtr :: IO DeclPtr
 newDeclPtr = DeclPtr <$> newUnique
 
-data Decl ty decl expr
-  = Define Ident Var ty expr
+data Decl ty scheme decl expr
+  = Define Ident Var scheme expr
   | DefineMacros [(Ident, MacroVar, expr)]
   | Meta decl
-  | Example ty expr
+  | Example scheme expr
   | Import ImportSpec
   | Export ExportSpec
+  | Data Ident DatatypeName Natural [(Ident, ConstructorName, [Either Natural ty])]
+    -- ^ User-written name, internal name, arity, constructors
   deriving (Functor, Show)
 
-instance Bifunctor (Decl ty) where
+instance Bifunctor (Decl ty scheme) where
   bimap _f g (Define x v t e) = Define x v t (g e)
   bimap _f g (DefineMacros ms) = DefineMacros [(x, v, g e) | (x, v, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
   bimap _f g (Example t e) = Example t (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
+  bimap _f _g (Data x dn arity ctors) = Data x dn arity ctors
 
-instance (Phased decl, Phased expr) => Phased (Decl ty decl expr) where
+instance (Phased decl, Phased expr) => Phased (Decl ty scheme decl expr) where
   shift i = bimap (shift i) (shift i)
 
 newtype ModBodyPtr = ModBodyPtr Unique
