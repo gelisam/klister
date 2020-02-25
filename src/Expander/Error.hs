@@ -45,7 +45,7 @@ data ExpansionErr
   | WrongMacroContext Syntax MacroContext MacroContext
   | NotValidType Syntax
   | TypeMismatch (Maybe SrcLoc) Ty Ty
-  | OccursCheckFailed
+  | OccursCheckFailed MetaPtr Ty
   deriving (Show)
 
 data MacroContext = ExpressionCtx | TypeCtx | ModuleCtx | DeclarationCtx deriving Show
@@ -149,7 +149,11 @@ instance Pretty VarInfo ExpansionErr where
                                 ]
                  ]
 
-  pp _env OccursCheckFailed = text "Occurs check failed"
+  pp env (OccursCheckFailed ptr ty) =
+    hang 2 $ group $ vsep [ text "Occurs check failed:"
+                          , group (vsep [viaShow ptr, "≠", pp env ty])
+                          ]
+
 
 instance Pretty VarInfo MacroContext where
   pp _env ExpressionCtx = text "an expression"

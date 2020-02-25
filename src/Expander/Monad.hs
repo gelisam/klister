@@ -39,6 +39,7 @@ module Expander.Monad
   , trivialScheme
   , withLocal
   , withLocalVarType
+  , withLocalVarTypes
   -- ** Context
   , ExpanderContext
   , mkInitContext
@@ -46,17 +47,14 @@ module Expander.Monad
   , module Expander.Task
   , forkAwaitingDefn
   , forkAwaitingMacro
-  , forkAwaitingMacroType
   , forkAwaitingDeclMacro
   , forkAwaitingSignal
+  , forkAwaitingType
   , forkContinueMacroAction
   , forkExpandSyntax
   , forkExpandType
-  , forkTypeCheck
-  , forkCheckDecl
   , forkGeneralizeType
-  , forkCheckVar
-  , forkCompleteTypeCheck
+  , forkExpandVar
   , forkExpanderTask
   , forkInterpretMacroAction
   , stillStuck
@@ -168,7 +166,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
   deriving (Semigroup, Monoid)
 
 data EValue
-  = EPrimMacro (SplitCorePtr -> Syntax -> Expand ()) -- ^ For "special forms"
+  = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
@@ -389,29 +387,22 @@ forkExpandSyntax :: MacroDest -> Syntax -> Expand ()
 forkExpandSyntax dest stx =
   forkExpanderTask $ ExpandSyntax dest stx
 
+forkAwaitingType :: SplitTypePtr -> [AfterTypeTask] -> Expand ()
+forkAwaitingType tdest tasks =
+  forkExpanderTask $ AwaitingType tdest tasks
+
 forkExpandType :: SplitTypePtr -> Syntax -> Expand ()
 forkExpandType dest stx =
   forkExpanderTask $ ExpandSyntax (TypeDest dest) stx
 
-forkCompleteTypeCheck :: SplitCorePtr -> Ty -> Expand ()
-forkCompleteTypeCheck eDest ty =
-  forkExpanderTask $ TypeCheck eDest (CompleteType ty)
-
-forkTypeCheck :: SplitCorePtr -> SplitTypePtr -> Expand ()
-forkTypeCheck eDest ty =
-  forkExpanderTask $ TypeCheck eDest (IncompleteType ty)
-
-forkCheckDecl :: DeclPtr -> Expand ()
-forkCheckDecl dest =
-  forkExpanderTask $ TypeCheckDecl dest
 
 forkGeneralizeType :: SplitCorePtr -> Ty -> SchemePtr -> Expand ()
 forkGeneralizeType expr t sch =
   forkExpanderTask $ GeneralizeType expr t sch
 
-forkCheckVar :: SplitCorePtr -> Ty -> Expand ()
-forkCheckVar expr ty =
-  forkExpanderTask $ TypeCheckVar expr ty
+forkExpandVar :: Ty -> SplitCorePtr -> Syntax -> Var -> Expand ()
+forkExpandVar ty expr ident var =
+  forkExpanderTask $ ExpandVar ty expr ident var
 
 forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont =
@@ -422,11 +413,6 @@ forkAwaitingMacro ::
 forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
-forkAwaitingMacroType ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()
-forkAwaitingMacroType b v x mdest dest stx =
-  forkExpanderTask $ AwaitingMacroType dest (TaskAwaitMacroType b v x mdest stx)
-
 forkAwaitingDeclMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
 forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
@@ -434,10 +420,10 @@ forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
-  SplitCorePtr -> Syntax ->
+  Ty -> SplitCorePtr -> Syntax ->
   Expand ()
-forkAwaitingDefn x n b defn dest stx =
-  forkExpanderTask $ AwaitingDefn x n b defn dest stx
+forkAwaitingDefn x n b defn t dest stx =
+  forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
@@ -546,6 +532,16 @@ withLocalVarType ident x sch act = do
   where
     addVar Nothing = Just $ Env.singleton x ident sch
     addVar (Just γ) = Just $ Env.insert x ident sch γ
+
+withLocalVarTypes :: [(Var, Ident, SchemePtr)] -> Expand a -> Expand a
+withLocalVarTypes vars act = do
+  ph <- currentPhase
+  Expand $
+    local (over (expanderLocal . expanderVarTypes . at ph) addVars) $
+    runExpand act
+  where
+    addVars Nothing = Just $ Env.fromList vars
+    addVars (Just γ) = Just $ γ <> Env.fromList vars
 
 saveExprType :: SplitCorePtr -> Ty -> Expand ()
 saveExprType dest t =

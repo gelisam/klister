@@ -20,23 +20,19 @@ import Type
 import Value
 
 data MacroDest
-  = ExprDest SplitCorePtr
+  = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
   | DeclDest DeclPtr Scope DeclValidityPtr
   deriving Show
 
-data TypeSpec
-  = CompleteType Ty
-  | IncompleteType SplitTypePtr
-  deriving Show
 
 data ExpanderTask
   = ExpandSyntax MacroDest Syntax
   | AwaitingSignal MacroDest Signal [Closure]
   | AwaitingMacro MacroDest TaskAwaitMacro
-  | AwaitingMacroType MacroDest TaskAwaitMacroType
-  | AwaitingDefn Var Ident Binding SplitCorePtr SplitCorePtr Syntax
+  | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
+  | AwaitingType SplitTypePtr [AfterTypeTask]
   | ExpandDecl DeclPtr Scope Syntax DeclValidityPtr
     -- ^ Where to put it, the scope, the decl, where to put the phase
   | ExpandMoreDecls ModBodyPtr Scope Syntax DeclValidityPtr
@@ -44,12 +40,15 @@ data ExpanderTask
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
-  | TypeCheck SplitCorePtr TypeSpec
-  | TypeCheckDecl DeclPtr
   | GeneralizeType SplitCorePtr Ty SchemePtr
     -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
-  | TypeCheckVar SplitCorePtr Ty
-    -- ^ The variable expression and the expected type
+  | ExpandVar Ty SplitCorePtr Syntax Var
+    -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
+  deriving (Show)
+
+data AfterTypeTask
+  = TypeThenUnify SplitCorePtr Ty
+  | TypeThenExpandExpr SplitCorePtr Syntax
   deriving (Show)
 
 data TaskAwaitMacro = TaskAwaitMacro
@@ -82,19 +81,17 @@ instance ShortShow TaskAwaitMacroType where
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
-  shortShow (AwaitingDefn _x n _b _defn _dest stx) =
+  shortShow (AwaitingDefn _x n _b _defn _t _dest stx) =
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
-  shortShow (AwaitingMacroType dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
+  shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
   shortShow (ExpandDecl _dest _sc stx ptr) = "(ExpandDecl " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (ExpandMoreDecls _dest _sc stx ptr) = "(ExpandMoreDecls " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
-  shortShow (TypeCheck _ _) = "(TypeCheck _ _)"
-  shortShow (TypeCheckDecl _) = "(TypeCheckDecl _ )"
-  shortShow (GeneralizeType _ _ _) = "(GeneralizeType _ _ _)"
-  shortShow (TypeCheckVar _ t) = "(TypeCheckVar _ " ++ show t ++ ")"
+  shortShow (GeneralizeType e _ _) = "(GeneralizeType " ++ show e ++ " _ _)"
+  shortShow (ExpandVar t d x v) = "(ExpandVar " ++ show t ++ " " ++ show d ++ " " ++ show x ++ " " ++ show v ++ ")"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)
