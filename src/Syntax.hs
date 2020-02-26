@@ -36,10 +36,9 @@ data ExprF a
 makePrisms ''ExprF
 
 
-newtype Syntax =
-  Syntax (Stx (ExprF Syntax))
+newtype Syntax = Syntax { _unSyntax :: (Stx (ExprF Syntax)) }
   deriving (Eq, Show)
-makePrisms ''Syntax
+makeLenses ''Syntax
 
 type Ident = Stx Text
 

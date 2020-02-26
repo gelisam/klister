@@ -188,7 +188,7 @@ data Decl ty scheme decl expr
   | Example scheme expr
   | Import ImportSpec
   | Export ExportSpec
-  | Data Ident DatatypeName Natural [(Ident, ConstructorName, [Either Natural ty])]
+  | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
     -- ^ User-written name, internal name, arity, constructors
   deriving (Functor, Show)
 

@@ -51,12 +51,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
+import Numeric.Natural
 import System.Directory
 
 import Binding
 import Binding.Info
 import Control.Lens.IORef
 import Core
+import Datatype
 import qualified Env
 import Evaluator
 import Expander.DeclScope
@@ -248,8 +250,8 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Data _ _ _ _ ->
-          error "TODO - add datatype components to env"
+        Data _ _ _ _ -> return ()
+          -- error "TODO - add datatype components to world"
         Example sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
@@ -462,7 +464,7 @@ initializeKernel = do
 
     declPrims :: [(Text, Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
-      [ ("define"
+      [ ( "define"
         , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
@@ -484,7 +486,35 @@ initializeKernel = do
             forkGeneralizeType exprDest t schPtr
             nowValidAt pdest (SpecificPhase p)
         )
-      ,("define-macros"
+      , ( "datatype"
+        , \ sc dest pdest stx -> do
+            Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
+            Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
+            Stx _ _ (name, args) <- mustBeCons nameAndArgs
+            typeArgs <- for (zip [0..] args) $ \(i, a) ->
+              prepareTypeVar i a
+            let typeScopes = map fst typeArgs ++ [sc]
+            realName <- mustBeIdent (addScope' name sc)
+            p <- currentPhase
+            let arity = length args
+            d <- freshDatatype realName
+            addDatatype realName d (fromIntegral arity)
+
+            ctors <- for ctorSpecs \ spec -> do
+              Stx _ _ (cn, ctorArgs) <- mustBeCons spec
+              realCN <- mustBeIdent cn
+              ctor <- freshConstructor realCN
+              let ctorArgs' = [ foldr (flip (addScope p)) t typeScopes
+                              | t <- ctorArgs
+                              ]
+              argTypes <- traverse scheduleType ctorArgs'
+              return (realCN, ctor, argTypes)
+
+            linkDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
+
+            nowValidAt pdest (SpecificPhase p)
+        )
+      , ( "define-macros"
         , \ sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
             Stx _ _ macroDefs <- mustBeList macroList
@@ -503,7 +533,7 @@ initializeKernel = do
             linkDecl dest $ DefineMacros macros
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("example"
+      , ( "example"
         , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
@@ -517,7 +547,7 @@ initializeKernel = do
             forkGeneralizeType exprDest t sch
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("import"
+      , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
         , \sc dest pdest stx -> do
             Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
@@ -529,7 +559,7 @@ initializeKernel = do
             linkDecl dest (Import spec)
             nowValidAt pdest AllPhases
         )
-      , ("export"
+      , ( "export"
         , \_sc dest pdest stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
@@ -539,7 +569,7 @@ initializeKernel = do
             linkDecl dest (Export exported)
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("meta"
+      , ( "meta"
         , \sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
             subDest <- liftIO newDeclPtr
@@ -894,8 +924,8 @@ initializeKernel = do
         other ->
           throwError $ UnknownPattern other
 
-    prepareVar :: Syntax -> Expand (Scope, Ident, Var)
-    prepareVar varStx = do
+    varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
+    varPrepHelper varStx = do
       sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
       x <- mustBeIdent varStx
       p <- currentPhase
@@ -903,15 +933,43 @@ initializeKernel = do
       let x' = addScope' (addScope p x sc) psc
       b <- freshBinding
       addLocalBinding x' b
+      return (sc, x', b)
+
+
+    prepareVar :: Syntax -> Expand (Scope, Ident, Var)
+    prepareVar varStx = do
+      (sc, x', b) <- varPrepHelper varStx
       var <- freshVar
       bind b (EVarMacro var)
       return (sc, x', var)
+
+    prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
+    prepareTypeVar i varStx = do
+      (sc, α, b) <- varPrepHelper varStx
+      bind b (ETypeVar i)
+      return (sc, α)
 
     scheduleType :: Syntax -> Expand SplitTypePtr
     scheduleType stx = do
       dest <- liftIO newSplitTypePtr
       forkExpandType dest stx
       return dest
+
+
+    addDatatype :: Ident -> Datatype -> Natural -> Expand ()
+    addDatatype name dt arity = do
+      name' <- addRootScope' name
+      let val = EPrimTypeMacro \dest stx -> do
+                  Stx _ _ (me, args) <- mustBeCons stx
+                  _ <- mustBeIdent me
+                  if length args /= fromIntegral arity
+                    then throwError $ InternalError "TODO ctor + message here for wrong arity"
+                    else do
+                      argDests <- traverse scheduleType args
+                      linkType dest $ TDatatype dt argDests
+      b <- freshBinding
+      addDefinedBinding name' b
+      bind b val
 
     schedule :: Ty -> Syntax -> Expand SplitCorePtr
     schedule t stx@(Syntax (Stx _ loc _)) = do
@@ -1216,7 +1274,9 @@ expandOneForm prob stx
             Sig _ -> error "Impossible - signal not ident"
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
-
+        ETypeVar i -> do
+          dest <- requireType stx prob
+          linkType dest (TSchemaVar i)
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpr stx prob
           forkAwaitingDefn x n b d t dest stx

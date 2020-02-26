@@ -1,0 +1,19 @@
+#lang kernel
+
+(datatype (Nat)
+  (zero)
+  (add1 (Nat)))
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(datatype (Tree A)
+  (leaf)
+  (branch A (Tree A) A))
+
+(datatype (Either A B)
+  (left A)
+  (right B))
+
+--(define nothing (zero))

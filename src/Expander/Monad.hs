@@ -14,6 +14,8 @@ module Expander.Monad
   , inTypeBinder
   , dependencies
   , execExpand
+  , freshConstructor
+  , freshDatatype
   , freshScope
   , freshVar
   , freshMacroVar
@@ -173,6 +175,7 @@ data EValue
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
+  | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
@@ -226,6 +229,8 @@ data ExpanderState = ExpanderState
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
+  , _expanderCurrentDatatypes :: !(Map Datatype DatatypeInfo)
+  , _expanderCurrentConstructors :: !(Map Constructor (ConstructorInfo Ty))
   , _expanderCurrentBindingTable :: !BindingTable
   , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
   , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
@@ -256,6 +261,8 @@ initExpanderState = ExpanderState
   , _expanderDeclPhases = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
+  , _expanderCurrentDatatypes = Map.empty
+  , _expanderCurrentConstructors = Map.empty
   , _expanderCurrentBindingTable = mempty
   , _expanderExpressionTypes = Map.empty
   , _expanderCompletedSchemes = Map.empty
@@ -493,17 +500,17 @@ getDecl ptr =
       CompleteDecl . Data x dn arity <$> traverse flattenCtor ctors
         where
           flattenCtor ::
-            (Ident, ConstructorName, [Either Natural SplitTypePtr]) ->
-            Expand (Ident, ConstructorName, [Either Natural Ty])
+            (Ident, Constructor, [SplitTypePtr]) ->
+            Expand (Ident, Constructor, [Ty])
           flattenCtor (ident, cn, args) = do
             args' <- for args $
-                       \case
-                         Left i -> pure $ Left i
-                         Right ptr' ->
-                           linkedType ptr' >>=
-                           maybe
-                             (throwError $ InternalError "Missing type after expansion")
-                             (pure . Right)
+                       \ptr' ->
+                         linkedType ptr' >>=
+                         \case
+                           Nothing ->
+                             throwError $ InternalError "Missing type after expansion"
+                           Just argTy ->
+                             pure argTy
             pure (ident, cn, args')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
@@ -580,3 +587,35 @@ isExprChecked dest = do
 saveOrigin :: SplitCorePtr -> SrcLoc -> Expand ()
 saveOrigin ptr loc =
   modifyState $ set (expanderOriginLocations . at ptr) (Just loc)
+
+freshDatatype :: Ident -> Expand Datatype
+freshDatatype (Stx _ _ hint) = do
+  ph <- currentPhase
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
+  go ph mn Nothing
+
+  where
+    go :: Phase -> ModuleName -> Maybe Natural -> Expand Datatype
+    go ph mn n = do
+      let attempt = hint <> maybe "" (T.pack . show) n
+      let candidate = Datatype { _datatypeName = DatatypeName attempt, _datatypePhase = ph , _datatypeModule = mn }
+      found <- view (expanderCurrentDatatypes . at candidate) <$> getState
+      case found of
+        Nothing -> return candidate
+        Just _ -> go ph mn (Just (maybe 0 (1+) n))
+
+freshConstructor :: Ident -> Expand Constructor
+freshConstructor (Stx _ _ hint) = do
+  ph <- currentPhase
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
+  go ph mn Nothing
+
+  where
+    go :: Phase -> ModuleName -> Maybe Natural -> Expand Constructor
+    go ph mn n = do
+      let attempt = hint <> maybe "" (T.pack . show) n
+      let candidate = Constructor { _constructorName = ConstructorName attempt, _constructorPhase = ph , _constructorModule = mn }
+      found <- view (expanderCurrentConstructors . at candidate) <$> getState
+      case found of
+        Nothing -> return candidate
+        Just _ -> go ph mn (Just (maybe 0 (1+) n))

@@ -303,13 +303,7 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
           : punc (space <> text "|")
             [ hang 2 $
               text c <+>
-              group (vsep [ case a of
-                              Left i ->
-                                text $ typeVarNames !! fromIntegral i
-                              Right t ->
-                                parens (pp env t)
-                          | a <- args
-                          ])
+              group (vsep [ pp env a | a <- args ])
             | (Stx _ _ c, _cn, args) <- ctors
             ]
           )
