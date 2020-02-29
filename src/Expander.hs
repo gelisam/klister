@@ -522,6 +522,19 @@ initializeKernel = do
               argTypes <- traverse scheduleType ctorArgs'
               return (realCN, ctor, argTypes)
 
+            let info =
+                  DatatypeInfo
+                  { _datatypeArity = fromIntegral arity
+                  , _datatypeConstructors =
+                    [ ctor | (_, ctor, _) <- ctors ]
+                  }
+            modifyState $
+              set (expanderCurrentDatatypes .
+                   at p . non Map.empty .
+                   at d) $
+              Just info
+
+
             forkEstablishConstructors pdest d (fromIntegral arity) ctors
 
             linkDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
@@ -892,7 +905,62 @@ initializeKernel = do
             msgDest <- schedule (Ty TSyntax) message
             linkExpr dest $ CoreLog msgDest
         )
+      , ( "case"
+        , \ t dest stx -> do
+            Stx _ _ (_, scrut, cases) <- mustBeConsCons stx
+            a <- Ty . TMetaVar <$> freshMeta
+            scrutineeDest <- schedule a scrut
+            cases' <- traverse (mustHaveEntries >=> expandDataPattern t a) cases
+            linkExpr dest $ CoreDataCase scrutineeDest cases'
+        )
       ]
+
+    expandDataPattern ::
+      Ty -> Ty ->
+      Stx (Syntax, Syntax) ->
+      Expand (ConstructorPattern, SplitCorePtr)
+    expandDataPattern exprTy scrutTy (Stx _ _ (lhs, rhs)) = do
+      p <- currentPhase
+      case lhs of
+        identPat@(Syntax (Stx _ _ (Id _))) -> do
+          (sc, x, var) <- prepareVar identPat
+          let rhs' = addScope p rhs sc
+          rhsDest <- schedule exprTy rhs'
+          pure $ (AnyConstructor x var, rhsDest)
+        other -> do
+          Stx _ _ (cname, patVars) <- mustBeCons other
+          cname' <- mustBeIdent cname
+          b <- resolve =<< addRootScope cname'
+          v <- getEValue b
+          case v of
+            EConstructor ctor _ -> do
+              ConstructorInfo args dt <- constructorInfo ctor
+              DatatypeInfo arity _ <- datatypeInfo dt
+              let mkTArgs =
+                    \ n -> if n == 0
+                             then pure []
+                             else (:) <$> (Ty . TMetaVar <$> freshMeta) <*> mkTArgs (n - 1)
+              tyArgs <- mkTArgs arity
+              argTypes <- for args \ a -> do
+                          t <- inst (Scheme arity a) tyArgs
+                          trivialScheme t
+              if length patVars /= length argTypes
+                then throwError $ InternalError "TODO arg count msg"
+                else do
+                  varInfo <- traverse prepareVar patVars
+                  let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
+                  rhsDest <- withLocalVarTypes [ (var, ident, t)
+                                               | ((_, ident, var), t) <- zip varInfo argTypes
+                                               ] $
+                             schedule exprTy rhs'
+                  unify rhsDest (Ty (TDatatype dt tyArgs)) scrutTy
+                  pure ( ConstructorPattern ctor [ (ident, var)
+                                                | (_, ident, var) <- varInfo
+                                                ]
+                       , rhsDest
+                       )
+            _nonCtor ->
+              throwError $ InternalError "TODO not ctor msg"
 
     expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
     -- TODO match case keywords hygienically
@@ -1239,7 +1307,7 @@ runTask (tid, localData, task) = withLocal localData $ do
       Expand ()
     addConstructor name dt arity ctor args = do
       name' <- addRootScope' name
-      let val = EPrimMacro \t dest stx -> do
+      let val = EConstructor ctor \t dest stx -> do
                   argTys <- argTypeMetas arity
                   unify dest t (Ty (TDatatype dt argTys))
                   args' <- for args \a -> inst (Scheme arity a) argTys
@@ -1250,6 +1318,15 @@ runTask (tid, localData, task) = withLocal localData $ do
                       then throwError $ InternalError "TODO ctor arity wrong"
                       else for (zip args' foundArgs) (uncurry schedule)
                   linkExpr dest (CoreCtor ctor argDests)
+      p <- currentPhase
+      let info = ConstructorInfo { _ctorDatatype = dt
+                                 , _ctorArguments = args
+                                 }
+      modifyState $
+        set (expanderCurrentConstructors .
+             at p . non Map.empty .
+             at ctor) $
+        Just info
       b <- freshBinding
       addDefinedBinding name' b
       bind b val
@@ -1304,6 +1381,10 @@ expandOneForm prob stx
       v <- getEValue b
       case v of
         EPrimMacro impl -> do
+          (t, dest) <- requireExpr stx prob
+          impl t dest stx
+          saveExprType dest t
+        EConstructor _ impl -> do
           (t, dest) <- requireExpr stx prob
           impl t dest stx
           saveExprType dest t

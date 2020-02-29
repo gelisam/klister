@@ -27,6 +27,11 @@ mustBeCons :: Syntax -> Expand (Stx (Syntax, [Syntax]))
 mustBeCons (Syntax (Stx scs srcloc (List (x:xs)))) = return (Stx scs srcloc (x, xs))
 mustBeCons other = throwError (NotCons other)
 
+mustBeConsCons :: Syntax -> Expand (Stx (Syntax, Syntax, [Syntax]))
+mustBeConsCons (Syntax (Stx scs srcloc (List (x:y:xs)))) = return (Stx scs srcloc (x, y, xs))
+mustBeConsCons other = throwError (NotConsCons other)
+
+
 mustBeList :: Syntax -> Expand (Stx [Syntax])
 mustBeList (Syntax (Stx scs srcloc (List xs))) = return (Stx scs srcloc xs)
 mustBeList other = throwError (NotList other)

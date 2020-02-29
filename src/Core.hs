@@ -38,12 +38,10 @@ instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
 data ConstructorPattern
-  = ConstructorPattern
-    { _patternConstructor :: !Constructor
-    , _patternVars :: [(Ident, Var)]
-    }
+  = ConstructorPattern !Constructor [(Ident, Var)]
+  | AnyConstructor Ident Var
   deriving (Eq, Show)
-makeLenses ''ConstructorPattern
+makePrisms ''ConstructorPattern
 
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
@@ -382,9 +380,11 @@ instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
 instance ShortShow ConstructorPattern where
-  shortShow pat =
-    "(" ++ shortShow (view patternConstructor pat) ++
-    " " ++ intercalate " " (map shortShow (view patternVars pat)) ++ ")"
+  shortShow (ConstructorPattern ctor vars) =
+    "(" ++ shortShow ctor ++
+    " " ++ intercalate " " (map shortShow vars) ++ ")"
+  shortShow (AnyConstructor ident _var) =
+    shortShow ident
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x

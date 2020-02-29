@@ -270,17 +270,22 @@ withScopeOf scope expr = do
 
 doDataCase :: Value -> [(ConstructorPattern, Core)] -> Eval Value
 doDataCase v0 [] = throwError (EvalErrorCase v0)
-doDataCase v0 ((pat, rhs0) : ps) = match (doDataCase v0 ps) rhs0
+doDataCase v0 ((pat, rhs0) : ps) = match (doDataCase v0 ps) pat rhs0
   where
-    match next rhs =
+    match next (ConstructorPattern ctor vars) rhs =
       case v0 of
         ValueCtor c args
-          | c == view patternConstructor pat ->
-            if length (view patternVars pat) /= length args
+          | c == ctor ->
+            if length vars /= length args
               then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
-              else withManyExtendedEnv [(n, x, v) | (n, x) <- view patternVars pat | v <- args] $ eval rhs
+              else withManyExtendedEnv [ (n, x, v) | (n, x) <- vars
+                                       | v <- args
+                                       ] $
+                   eval rhs
           | otherwise -> next
         _otherValue -> next
+    match _next (AnyConstructor n x) rhs =
+      withExtendedEnv n x v0 $ eval rhs
 
 doCase :: Value -> [(SyntaxPattern, Core)] -> Eval Value
 doCase v0 []               = throwError (EvalErrorCase v0)

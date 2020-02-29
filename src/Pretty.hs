@@ -173,16 +173,18 @@ class PrettyBinder ann a | a -> ann where
   ppBind :: Env Var () -> a -> (Doc ann, Env Var ())
 
 instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env pat =
-    case view patternVars pat of
-      [] -> (pp env (view patternConstructor pat), Env.empty)
+  ppBind env (ConstructorPattern ctor vars) =
+    case vars of
+      [] -> (pp env ctor, Env.empty)
       more -> ( hang 2 $
-                pp env (view patternConstructor pat) <+>
+                pp env ctor <+>
                 hsep [ annotate (BindingSite v) (text x)
                      | (Stx _ _ x, v) <- more
                      ]
               , foldr (\(x, v) e -> Env.insert x v () e) Env.empty [(v, x) | (x, v) <- more]
               )
+  ppBind _env (AnyConstructor ident@(Stx _ _ n) x) =
+    (annotate (BindingSite x) (text n), Env.singleton x ident ())
 
 instance PrettyBinder VarInfo SyntaxPattern where
   ppBind _env (SyntaxPatternIdentifier ident@(Stx _ _ x) v) =

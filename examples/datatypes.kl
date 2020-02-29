@@ -22,3 +22,14 @@
 
 (example (left (branch (zero) (leaf) (add1 (zero)))))
 (example (right (right (right (nil)))))
+
+
+(define double
+  (flet (f (n)
+          (case n
+            [(zero) (zero)]
+            [(add1 k) (add1 (add1 (f k)))]))
+    f))
+
+(example (double (add1 (add1 (zero)))))
+

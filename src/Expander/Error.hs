@@ -26,6 +26,7 @@ data ExpansionErr
   | NotIdentifier Syntax
   | NotEmpty Syntax
   | NotCons Syntax
+  | NotConsCons Syntax
   | NotList Syntax
   | NotString Syntax
   | NotModName Syntax
@@ -67,6 +68,8 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [text "Expected (), but got", pp env stx]
   pp env (NotCons stx) =
     hang 2 $ group $ vsep [text "Expected non-empty parens, but got", pp env stx]
+  pp env (NotConsCons stx) =
+    hang 2 $ group $ vsep [text "Expected parens with at least 2 entries, but got", pp env stx]
   pp env (NotList stx) =
     hang 2 $ group $ vsep [text "Expected parens, but got", pp env stx]
   pp env (NotString stx) =

@@ -9,8 +9,10 @@ module Expander.Monad
   , module Expander.DeclScope
   -- * The expander monad
   , Expand(..)
+  , constructorInfo
   , currentPhase
   , currentBindingLevel
+  , datatypeInfo
   , inTypeBinder
   , dependencies
   , execExpand
@@ -82,6 +84,8 @@ module Expander.Monad
   , expanderCompletedModBody
   , expanderCompletedSchemes
   , expanderCurrentBindingTable
+  , expanderCurrentConstructors
+  , expanderCurrentDatatypes
   , expanderCurrentEnvs
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
@@ -105,6 +109,7 @@ module Expander.Monad
   , newTaskID
   ) where
 
+import Control.Applicative
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -181,6 +186,8 @@ data EValue
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
+  | EConstructor !Constructor (Ty -> SplitCorePtr -> Syntax -> Expand ())
+  -- ^ Constructor identity, elaboration procedure
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
@@ -627,6 +634,27 @@ freshConstructor (Stx _ _ hint) = do
       case found of
         Nothing -> return candidate
         Just _ -> go ph mn (Just (maybe 0 (1+) n))
+
+constructorInfo :: Constructor -> Expand (ConstructorInfo Ty)
+constructorInfo ctor = do
+  p <- currentPhase
+  fromWorld <- view (expanderWorld . worldConstructors . at p . non Map.empty . at ctor) <$> getState
+  fromModule <- view (expanderCurrentConstructors . at p . non Map.empty . at ctor) <$> getState
+  case fromWorld <|> fromModule of
+    Nothing ->
+      throwError $ InternalError $ "Unknown constructor " ++ show ctor
+    Just info -> pure info
+
+datatypeInfo :: Datatype -> Expand DatatypeInfo
+datatypeInfo datatype = do
+  p <- currentPhase
+  fromWorld <- view (expanderWorld . worldDatatypes . at p . non Map.empty . at datatype) <$> getState
+  fromModule <- view (expanderCurrentDatatypes . at p . non Map.empty . at datatype) <$> getState
+  case fromWorld <|> fromModule of
+    Nothing ->
+      throwError $ InternalError $ "Unknown datatype " ++ show datatype
+    Just info -> pure info
+
 
 nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
 nowValidAt ptr p =
