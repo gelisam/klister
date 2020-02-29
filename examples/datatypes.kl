@@ -50,3 +50,5 @@
     f))
 
 (example ((plus (add1 (add1 (zero)))) (add1 (add1 (add1 (zero))))))
+
+(export Nat zero add1)

@@ -108,5 +108,6 @@
         import export
         >>= pure syntax-error syntax-case
         list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log)
+        free-identifier=? bound-identifier=? log
+        datatype case)
 

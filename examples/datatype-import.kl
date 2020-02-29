@@ -1,0 +1,12 @@
+#lang "n-ary-app.kl"
+
+(import "datatypes.kl")
+(import "defun.kl")
+
+(defun plus (n k)
+  (case n
+    [(zero) k]
+    [(add1 n*) (plus n* (add1 k))]))
+
+(example (plus (add1 (add1 (zero))) (add1 (add1 (add1 (zero))))))
+
