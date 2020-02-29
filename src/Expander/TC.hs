@@ -107,7 +107,7 @@ inst (Scheme n ty) ts
 
     inst' (TFun a b) = TFun <$> instNorm a <*> instNorm b
     inst' (TMacro a) = TMacro <$> instNorm a
-    inst' (TDatatype dt ts) = TDatatype dt <$> traverse instNorm ts
+    inst' (TDatatype dt tArgs) = TDatatype dt <$> traverse instNorm tArgs
     inst' (TSchemaVar i) = pure . unTy $ ts !! fromIntegral i
     inst' otherTy = pure otherTy
 
