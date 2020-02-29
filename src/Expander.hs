@@ -938,7 +938,8 @@ initializeKernel = do
                           t <- inst (Scheme arity a) tyArgs
                           trivialScheme t
               if length patVars /= length argTypes
-                then throwError $ InternalError "TODO arg count msg"
+                then
+                  throwError $ WrongArgCount lhs ctor (length argTypes) (length patVars)
                 else do
                   varInfo <- traverse prepareVar patVars
                   let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
@@ -953,7 +954,7 @@ initializeKernel = do
                        , rhsDest
                        )
             _nonCtor ->
-              throwError $ InternalError "TODO not ctor msg"
+              throwError $ NotAConstructor lhs
 
     expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
     -- TODO match case keywords hygienically
@@ -1034,7 +1035,7 @@ initializeKernel = do
                   Stx _ _ (me, args) <- mustBeCons stx
                   _ <- mustBeIdent me
                   if length args /= fromIntegral arity
-                    then throwError $ InternalError "TODO ctor + message here for wrong arity"
+                    then throwError $ WrongDatatypeArity stx dt arity (length args)
                     else do
                       argDests <- traverse scheduleType args
                       linkType dest $ TDatatype dt argDests
@@ -1308,7 +1309,8 @@ runTask (tid, localData, task) = withLocal localData $ do
                   _ <- mustBeIdent foundName
                   argDests <-
                     if length foundArgs /= length args'
-                      then throwError $ InternalError "TODO ctor arity wrong"
+                      then throwError $
+                           WrongArgCount stx ctor (length args') (length foundArgs)
                       else for (zip args' foundArgs) (uncurry schedule)
                   linkExpr dest (CoreCtor ctor argDests)
       p <- currentPhase
