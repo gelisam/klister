@@ -250,8 +250,20 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Data _ _ _ _ -> return ()
-          -- error "TODO - add datatype components to world"
+        Data _ dn arity ctors -> do
+          p <- lift currentPhase
+          let mn = view moduleName em
+          let dt = Datatype { _datatypeModule = mn
+                            , _datatypeName = dn
+                            }
+          for_ ctors \(_, cn, argTypes) ->
+            lift $ modifyState $
+            over (expanderWorld . worldConstructors . at p . non Map.empty) $
+            Map.insert cn (ConstructorInfo argTypes dt)
+          lift $ modifyState $
+            over (expanderWorld . worldDatatypes . at p . non Map.empty) $
+            Map.insert dt (DatatypeInfo arity [c | (_, c, _) <- ctors ])
+
         Example sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
@@ -510,9 +522,11 @@ initializeKernel = do
               argTypes <- traverse scheduleType ctorArgs'
               return (realCN, ctor, argTypes)
 
+            forkEstablishConstructors pdest d (fromIntegral arity) ctors
+
             linkDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
 
-            nowValidAt pdest (SpecificPhase p)
+
         )
       , ( "define-macros"
         , \ sc dest pdest stx -> do
@@ -579,10 +593,6 @@ initializeKernel = do
         )
       ]
       where
-        nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
-        nowValidAt ptr p =
-          modifyState $ over expanderDeclPhases $ Map.insert ptr p
-
         importSpec :: Syntax -> Expand ImportSpec
         importSpec (Syntax (Stx scs srcloc (String s))) =
           ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
@@ -971,12 +981,6 @@ initializeKernel = do
       addDefinedBinding name' b
       bind b val
 
-    schedule :: Ty -> Syntax -> Expand SplitCorePtr
-    schedule t stx@(Syntax (Stx _ loc _)) = do
-      dest <- liftIO newSplitCorePtr
-      saveOrigin dest loc
-      forkExpandSyntax (ExprDest t dest) stx
-      return dest
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
@@ -1009,6 +1013,13 @@ initializeKernel = do
       b <- freshBinding
       bind b val
       addToKernel name runtime b
+
+schedule :: Ty -> Syntax -> Expand SplitCorePtr
+schedule t stx@(Syntax (Stx _ loc _)) = do
+  dest <- liftIO newSplitCorePtr
+  saveOrigin dest loc
+  forkExpandSyntax (ExprDest t dest) stx
+  return dest
 
 addModuleScope :: HasScopes a => a -> Expand a
 addModuleScope stx = do
@@ -1204,13 +1215,52 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
-
+    EstablishConstructors pdest dt arity ctors -> do
+      ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
+                  perhapsArgs <- sequenceA <$> traverse linkedType argTys
+                  pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
+      case ctors' of
+        Nothing -> stillStuck tid task
+        Just ready -> do
+          for_ ready \(cn, ctor, ts) ->
+            addConstructor cn dt arity ctor ts
+          p <- currentPhase
+          nowValidAt pdest (SpecificPhase p)
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
       modifyState $
         over expanderTasks $
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
+
+    addConstructor ::
+      Ident -> Datatype -> Natural ->
+      Constructor -> [Ty] ->
+      Expand ()
+    addConstructor name dt arity ctor args = do
+      name' <- addRootScope' name
+      let val = EPrimMacro \t dest stx -> do
+                  argTys <- argTypeMetas arity
+                  unify dest t (Ty (TDatatype dt argTys))
+                  args' <- for args \a -> inst (Scheme arity a) argTys
+                  Stx _ _ (foundName, foundArgs) <- mustBeCons stx
+                  _ <- mustBeIdent foundName
+                  argDests <-
+                    if length foundArgs /= length args'
+                      then throwError $ InternalError "TODO ctor arity wrong"
+                      else for (zip args' foundArgs) (uncurry schedule)
+                  linkExpr dest (CoreCtor ctor argDests)
+      b <- freshBinding
+      addDefinedBinding name' b
+      bind b val
+
+      where
+        argTypeMetas 0 =
+          pure []
+        argTypeMetas n =
+          (:) <$> (Ty . TMetaVar <$> freshMeta) <*> argTypeMetas (n - 1)
+
+
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
@@ -1431,6 +1481,8 @@ unify blame t1 t2 = do
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
     unify' (TMacro a) (TMacro b) = unify blame a b
     unify' (TList a) (TList b) = unify blame a b
+    unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
+      | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
 
     -- Flex-flex
     unify' (TMetaVar ptr1) (TMetaVar ptr2) = do

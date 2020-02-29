@@ -61,6 +61,7 @@ metas t =
     Ty (TFun a b) -> (++) <$> metas a <*> metas b
     Ty (TMacro a) -> metas a
     Ty (TList a) -> metas a
+    Ty (TDatatype _ ts) -> concat <$> traverse metas ts
     _ -> pure []
 
 occursCheck :: MetaPtr -> Ty -> Expand ()
@@ -96,7 +97,8 @@ freshMeta = do
 
 inst :: Scheme Ty -> [Ty] -> Expand Ty
 inst (Scheme n ty) ts
-  | length ts /= fromIntegral n = throwError $ InternalError "Mismatch in number of type vars"
+  | length ts /= fromIntegral n =
+    throwError $ InternalError "Mismatch in number of type vars"
   | otherwise = instNorm ty
   where
     instNorm t = do

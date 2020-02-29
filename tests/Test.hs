@@ -466,7 +466,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
-testQuasiquoteExamples :: (Show sch, Show decl) => [Decl sch decl Core] -> IO ()
+testQuasiquoteExamples :: (Show t, Show sch, Show decl) => [Decl t sch decl Core] -> IO ()
 testQuasiquoteExamples examples =
   case examples of
     [ Example _ e1, Example _ e2, Example _ e3, Example _ e4,

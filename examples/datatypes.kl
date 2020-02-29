@@ -16,4 +16,9 @@
   (left A)
   (right B))
 
---(define nothing (zero))
+(define nothing (zero))
+
+(define something (add1 (add1 (zero))))
+
+(example (left (branch (zero) (leaf) (add1 (zero)))))
+(example (right (right (right (nil)))))

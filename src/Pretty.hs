@@ -106,6 +106,7 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
     pp (env <> Env.singleton v n ()) body
   pp env (CoreApp fun arg) =
     hang 2 $ parens (pp env fun <> line <> pp env arg)
+  pp env (CoreCtor ctor []) = pp env ctor
   pp env (CoreCtor ctor args) =
     hang 2 $ parens $ pp env ctor <+> group (vsep (map (pp env) args))
   pp env (CoreDataCase scrut cases) =
@@ -301,9 +302,12 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
                  ] <+>
             text "="
           : punc (space <> text "|")
-            [ hang 2 $
-              text c <+>
-              group (vsep [ pp env a | a <- args ])
+            [ case args of
+                [] -> text c
+                more ->
+                  hang 2 $
+                  text c <+>
+                  group (vsep [ pp env a | a <- more ])
             | (Stx _ _ c, _cn, args) <- ctors
             ]
           )

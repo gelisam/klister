@@ -35,6 +35,7 @@ module Expander.Monad
   , modifyState
   , moduleScope
   , newDeclValidityPtr
+  , nowValidAt
   , phaseRoot
   , saveExprType
   , saveOrigin
@@ -53,6 +54,7 @@ module Expander.Monad
   , forkAwaitingSignal
   , forkAwaitingType
   , forkContinueMacroAction
+  , forkEstablishConstructors
   , forkExpandSyntax
   , forkExpandType
   , forkGeneralizeType
@@ -229,8 +231,8 @@ data ExpanderState = ExpanderState
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
-  , _expanderCurrentDatatypes :: !(Map Datatype DatatypeInfo)
-  , _expanderCurrentConstructors :: !(Map Constructor (ConstructorInfo Ty))
+  , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
+  , _expanderCurrentConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
   , _expanderCurrentBindingTable :: !BindingTable
   , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
   , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
@@ -434,6 +436,12 @@ forkAwaitingDefn ::
 forkAwaitingDefn x n b defn t dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
+forkEstablishConstructors ::
+  DeclValidityPtr ->
+  Datatype -> Natural -> [(Ident, Constructor, [SplitTypePtr])] ->
+  Expand ()
+forkEstablishConstructors pdest dt arity ctors =
+  forkExpanderTask $ EstablishConstructors pdest dt arity ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -598,8 +606,8 @@ freshDatatype (Stx _ _ hint) = do
     go :: Phase -> ModuleName -> Maybe Natural -> Expand Datatype
     go ph mn n = do
       let attempt = hint <> maybe "" (T.pack . show) n
-      let candidate = Datatype { _datatypeName = DatatypeName attempt, _datatypePhase = ph , _datatypeModule = mn }
-      found <- view (expanderCurrentDatatypes . at candidate) <$> getState
+      let candidate = Datatype { _datatypeName = DatatypeName attempt, _datatypeModule = mn }
+      found <- view (expanderCurrentDatatypes . at ph . non Map.empty . at candidate) <$> getState
       case found of
         Nothing -> return candidate
         Just _ -> go ph mn (Just (maybe 0 (1+) n))
@@ -614,8 +622,12 @@ freshConstructor (Stx _ _ hint) = do
     go :: Phase -> ModuleName -> Maybe Natural -> Expand Constructor
     go ph mn n = do
       let attempt = hint <> maybe "" (T.pack . show) n
-      let candidate = Constructor { _constructorName = ConstructorName attempt, _constructorPhase = ph , _constructorModule = mn }
-      found <- view (expanderCurrentConstructors . at candidate) <$> getState
+      let candidate = Constructor { _constructorName = ConstructorName attempt, _constructorModule = mn }
+      found <- view (expanderCurrentConstructors . at ph . non Map.empty . at candidate) <$> getState
       case found of
         Nothing -> return candidate
         Just _ -> go ph mn (Just (maybe 0 (1+) n))
+
+nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
+nowValidAt ptr p =
+  modifyState $ over expanderDeclPhases $ Map.insert ptr p
