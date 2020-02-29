@@ -110,11 +110,8 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreCtor ctor args) =
     hang 2 $ parens $ pp env ctor <+> group (vsep (map (pp env) args))
   pp env (CoreDataCase scrut cases) =
-    hang 2 $ vsep (text "case" <+> pp env scrut <+> "of" :
-                   [ group $ hang 2 $ vsep [ ppat <+> text "↦", pp (env <> env') rhs]
-                   | (pat, rhs) <- cases
-                   , let (ppat, env') = ppBind env pat
-                   ])
+    hang 2 $
+    vsep (text "case" <+> pp env scrut <+> "of" : map (pp env) cases)
   pp env (CorePure arg) =
     text "pure" <+> pp env arg
   pp env (CoreBind act k) =
@@ -172,19 +169,29 @@ instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
 class PrettyBinder ann a | a -> ann where
   ppBind :: Env Var () -> a -> (Doc ann, Env Var ())
 
-instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env (ConstructorPattern ctor vars) =
+instance Pretty VarInfo expr => Pretty VarInfo (ConstructorPattern expr) where
+  pp env (ConstructorPattern ctor vars rhs) =
     case vars of
-      [] -> (pp env ctor, Env.empty)
-      more -> ( hang 2 $
-                pp env ctor <+>
-                hsep [ annotate (BindingSite v) (text x)
-                     | (Stx _ _ x, v) <- more
-                     ]
-              , foldr (\(x, v) e -> Env.insert x v () e) Env.empty [(v, x) | (x, v) <- more]
-              )
-  ppBind _env (AnyConstructor ident@(Stx _ _ n) x) =
-    (annotate (BindingSite x) (text n), Env.singleton x ident ())
+      [] ->
+        group $ hang 2 $
+        vsep [pp env ctor <+> text "↦", pp env rhs]
+      more ->
+        hang 2 $
+        vsep [ pp env ctor <+>
+               hsep [ annotate (BindingSite v) (text x)
+                    | (Stx _ _ x, v) <- more
+                    ] <+>
+               text "↦"
+             , let env' = foldr (\(x, v) e -> Env.insert x v () e)
+                            env
+                            [ (v, x) | (x, v) <- more ]
+               in pp env' rhs
+             ]
+  pp env (AnyConstructor ident@(Stx _ _ n) x rhs) =
+    hang 2 $ group $
+    vsep [ annotate (BindingSite x) (text n) <+> text "↦"
+         , pp (env <> Env.singleton x ident ()) rhs
+         ]
 
 instance PrettyBinder VarInfo SyntaxPattern where
   ppBind _env (SyntaxPatternIdentifier ident@(Stx _ _ x) v) =

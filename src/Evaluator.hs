@@ -268,11 +268,11 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doDataCase :: Value -> [(ConstructorPattern, Core)] -> Eval Value
+doDataCase :: Value -> [ConstructorPattern Core] -> Eval Value
 doDataCase v0 [] = throwError (EvalErrorCase v0)
-doDataCase v0 ((pat, rhs0) : ps) = match (doDataCase v0 ps) pat rhs0
+doDataCase v0 (p : ps) = match (doDataCase v0 ps) p
   where
-    match next (ConstructorPattern ctor vars) rhs =
+    match next (ConstructorPattern ctor vars rhs) =
       case v0 of
         ValueCtor c args
           | c == ctor ->
@@ -284,7 +284,7 @@ doDataCase v0 ((pat, rhs0) : ps) = match (doDataCase v0 ps) pat rhs0
                    eval rhs
           | otherwise -> next
         _otherValue -> next
-    match _next (AnyConstructor n x) rhs =
+    match _next (AnyConstructor n x rhs) =
       withExtendedEnv n x v0 $ eval rhs
 
 doCase :: Value -> [(SyntaxPattern, Core)] -> Eval Value

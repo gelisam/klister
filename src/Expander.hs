@@ -911,7 +911,7 @@ initializeKernel = do
     expandDataPattern ::
       Ty -> Ty ->
       Stx (Syntax, Syntax) ->
-      Expand (ConstructorPattern, SplitCorePtr)
+      Expand (ConstructorPattern SplitCorePtr)
     expandDataPattern exprTy scrutTy (Stx _ _ (lhs, rhs)) = do
       p <- currentPhase
       case lhs of
@@ -919,7 +919,7 @@ initializeKernel = do
           (sc, x, var) <- prepareVar identPat
           let rhs' = addScope p rhs sc
           rhsDest <- schedule exprTy rhs'
-          pure $ (AnyConstructor x var, rhsDest)
+          pure $ (AnyConstructor x var rhsDest)
         other -> do
           Stx _ _ (cname, patVars) <- mustBeCons other
           cname' <- mustBeIdent cname
@@ -948,11 +948,10 @@ initializeKernel = do
                                                ] $
                              schedule exprTy rhs'
                   unify rhsDest (Ty (TDatatype dt tyArgs)) scrutTy
-                  pure ( ConstructorPattern ctor [ (ident, var)
+                  pure (ConstructorPattern ctor [ (ident, var)
                                                 | (_, ident, var) <- varInfo
                                                 ]
-                       , rhsDest
-                       )
+                                           rhsDest)
             _nonCtor ->
               throwError $ NotAConstructor lhs
 

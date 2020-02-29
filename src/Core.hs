@@ -37,10 +37,10 @@ newtype MacroVar = MacroVar Unique
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
-data ConstructorPattern
-  = ConstructorPattern !Constructor [(Ident, Var)]
-  | AnyConstructor Ident Var
-  deriving (Eq, Show)
+data ConstructorPattern core
+  = ConstructorPattern !Constructor [(Ident, Var)] core
+  | AnyConstructor Ident Var core
+  deriving (Eq, Foldable, Functor, Show, Traversable)
 makePrisms ''ConstructorPattern
 
 data SyntaxPattern
@@ -90,7 +90,7 @@ data CoreF core
   | CoreLam Ident Var core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
-  | CoreDataCase core [(ConstructorPattern, core)]
+  | CoreDataCase core [ConstructorPattern core]
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
@@ -379,12 +379,15 @@ instance ShortShow core => ShortShow (CoreF core) where
 instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
-instance ShortShow ConstructorPattern where
-  shortShow (ConstructorPattern ctor vars) =
+instance ShortShow core => ShortShow (ConstructorPattern core) where
+  shortShow (ConstructorPattern ctor vars expr) =
     "(" ++ shortShow ctor ++
-    " " ++ intercalate " " (map shortShow vars) ++ ")"
-  shortShow (AnyConstructor ident _var) =
-    shortShow ident
+    " " ++ intercalate " " (map shortShow vars) ++
+    " " ++ shortShow expr ++
+    ")"
+  shortShow (AnyConstructor ident _var expr) =
+    "(AnyConstructor " ++ shortShow ident ++ " " ++
+    shortShow expr ++ ")"
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x
