@@ -41,3 +41,12 @@
 
 (example (flop (left #true)))
 (example (flop (right (:: (add1 (zero)) (nil)))))
+
+(define plus
+  (flet (f (n)
+          (case n
+            [(zero) (lambda (k) k)]
+            [(add1 n*) (lambda (k) ((f n*) (add1 k)))]))
+    f))
+
+(example ((plus (add1 (add1 (zero)))) (add1 (add1 (add1 (zero))))))
