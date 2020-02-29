@@ -255,12 +255,10 @@ instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
   pp _ TUnit = text "Unit"
   pp _ TBool = text "Bool"
   pp _ TSyntax = text "Syntax"
-  pp _ TIdent = text "Ident"
   pp _ TSignal = text "Signal"
   pp env (TFun a b) =
     parens $ align $ group $ vsep [pp env a <+> text "→", pp env b]
   pp env (TMacro a) = parens (text "Macro" <+> align (pp env a))
-  pp env (TList a) = parens (text "List" <+> align (pp env a))
   pp env (TDatatype t args) =
     case args of
       [] -> pp env t

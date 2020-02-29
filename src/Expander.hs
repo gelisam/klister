@@ -428,7 +428,6 @@ initializeKernel = do
       in [ baseType "Bool" TBool
          , baseType "Unit" TUnit
          , baseType "Syntax" TSyntax
-         , baseType "Ident" TIdent
          , baseType "Signal" TSignal
          , ( "->"
            , \ dest stx -> do
@@ -442,12 +441,6 @@ initializeKernel = do
                Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
                tDest <- scheduleType t
                linkType dest (TMacro tDest)
-           )
-         , ( "List"
-           , \ dest stx -> do
-               Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
-               entryTypeDest <- scheduleType e
-               linkType dest (TList entryTypeDest)
            )
          ]
 
@@ -1557,11 +1550,9 @@ unify blame t1 t2 = do
     unify' TBool TBool = pure ()
     unify' TUnit TUnit = pure ()
     unify' TSyntax TSyntax = pure ()
-    unify' TIdent TIdent = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
     unify' (TMacro a) (TMacro b) = unify blame a b
-    unify' (TList a) (TList b) = unify blame a b
     unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
       | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
 

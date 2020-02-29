@@ -25,11 +25,9 @@ data TyF t
   = TUnit
   | TBool
   | TSyntax
-  | TIdent
   | TSignal
   | TFun t t
   | TMacro t
-  | TList t
   | TDatatype Datatype [t]
   | TSchemaVar Natural
   | TMetaVar MetaPtr
