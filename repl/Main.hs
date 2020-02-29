@@ -89,9 +89,9 @@ mainWithOptions opts =
         Just results -> do
           -- Show just the results of evaluation in the module the user
           -- asked to run
-          for_ results $ \(EvalResult _ coreExpr sch val) -> do
+          for_ results $ \(EvalResult env coreExpr sch val) -> do
             putStr "Example: "
-            prettyPrint coreExpr
+            prettyPrintEnv env coreExpr
             putStr " : "
             prettyPrint sch
             putStr " ↦ "
