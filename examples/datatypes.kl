@@ -33,3 +33,11 @@
 
 (example (double (add1 (add1 (zero)))))
 
+(define flop
+  (lambda (either)
+    (case either
+      [(left a) (right a)]
+      [(right b) (left b)])))
+
+(example (flop (left #true)))
+(example (flop (right (:: (add1 (zero)) (nil)))))
