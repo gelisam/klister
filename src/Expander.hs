@@ -667,6 +667,7 @@ initializeKernel = do
                        withLocalVarType x' coreX xsch $
                        schedule rt $
                        addScope p (addScope p (addScope p def fsc) xsc) psc
+            unify dest ft (Ty (TFun xt rt))
             sch <- liftIO newSchemePtr
             forkGeneralizeType defDest ft sch
             bodyDest <- withLocalVarType f' coreF sch $
