@@ -1,0 +1,87 @@
+#lang "n-ary-app.kl"
+
+(import "defun.kl")
+
+
+(define car
+  (lambda (stx)
+    (syntax-case stx
+      ((cons a _)
+       a))))
+
+(define cdr
+  (lambda (stx)
+    (syntax-case stx
+      ((cons _ d)
+       d))))
+
+(defun map (f stx)
+  (syntax-case stx
+    (() stx)
+    ((cons a d)
+     (cons-list-syntax (f a) (map f d) stx))))
+
+-- (-> (-> a b b)
+--     b
+--     (List a)
+--     b)
+(defun foldr (f b0 as0)
+  (syntax-case as0
+    (() b0)
+    ((cons a as)
+     (f a (foldr f b0 as)))))
+
+-- (-> (-> b a b)
+--     b
+--     (List a)
+--     b)
+(defun foldl (f b0 as0)
+  (syntax-case as0
+    (() b0)
+    ((cons a as)
+     (foldl f (f b0 a) as))))
+
+-- (-> (-> a b (Macro b))
+--     b
+--     (List a)
+--     (Macro b))
+(defun foldrM (f b0 as0)
+  (syntax-case as0
+    (()
+     (pure b0))
+    ((cons a as1)
+     (>>= (foldrM f b0 as1)
+          (lambda (as2)
+            (f a as2))))))
+
+-- (-> (-> b a (Macro b))
+--     b
+--     (List a)
+--     (Macro b))
+(defun foldlM (f b0 as0)
+  (syntax-case as0
+    (()
+     (pure b0))
+    ((cons a1 as)
+     (>>= (f b0 a1)
+          (lambda (a2)
+            (foldlM f a2 as))))))
+
+(example (car '(1 2 3)))
+(example (cdr '(1 2 3)))
+(example (map car '((x 1) (y 2) (z 3))))
+(example (foldr (lambda (x xs)
+                  (cons-list-syntax (list-syntax ('f x) x)
+                                    xs
+                                    xs))
+                '()
+                '(x y z)))
+(example (foldl (lambda (xs x)
+                  (cons-list-syntax x xs xs))
+                '()
+                '(x y z)))
+
+-- foldrM and foldlM can't be tested here because we'd need to define a macro
+-- but foldrM and foldlM are only available at phase 0.
+
+(export car cdr map foldr foldl foldrM foldlM)

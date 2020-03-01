@@ -1,0 +1,6 @@
+#[lets.kl:3.31-3.34]<foo> : Syntax
+#[lets.kl:5.30-5.31]<a> : Syntax
+#[lets.kl:7.71-7.75]<(a a)> : Syntax
+#[lets.kl:9.79-9.83]<(a a)> : Syntax
+#[lets.kl:13.27-13.30]<foo> : Syntax
+Signal 45 : Signal

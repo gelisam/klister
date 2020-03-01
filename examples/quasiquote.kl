@@ -15,7 +15,7 @@
 [define-macros
   ([unquote
     [lambda (stx)
-      (syntax-error [quote "Used out of context"] stx)]]
+      (syntax-error [quote "unquote used out of context"] stx)]]
    [quasiquote
     [lambda (stx)
       (syntax-case stx

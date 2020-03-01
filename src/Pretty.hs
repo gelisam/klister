@@ -17,6 +17,7 @@ import qualified Data.Text as T
 import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
 import Data.Unique
+import System.FilePath (takeFileName)
 
 import Binding
 import Binding.Info
@@ -337,7 +338,7 @@ instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (M
 
 instance Pretty VarInfo SrcLoc where
   pp env loc =
-    string (view srcLocFilePath loc) <> text ":" <>
+    string (takeFileName (view srcLocFilePath loc)) <> text ":" <>
     pp env (view srcLocStart loc) <> text "-" <>
     pp env (view srcLocEnd loc)
 
