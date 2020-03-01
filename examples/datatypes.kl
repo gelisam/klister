@@ -10,7 +10,7 @@
 
 (datatype (Tree A)
   (leaf)
-  (branch A (Tree A) A))
+  (branch (Tree A) A (Tree A)))
 
 (datatype (Either A B)
   (left A)
@@ -20,7 +20,7 @@
 
 (define something (add1 (add1 (zero))))
 
-(example (left (branch (zero) (leaf) (add1 (zero)))))
+(example (left (branch (branch (leaf) (zero) (leaf)) (add1 (zero)) (leaf))))
 (example (right (right (right (nil)))))
 
 
