@@ -1,0 +1,64 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define not
+  (lambda (b)
+    (if b #false #true)))
+
+(define binary-and
+  (lambda (x y)
+    (if x y #false)))
+
+(define binary-or
+  (lambda (x y)
+    (if x #true y)))
+
+(define-macros
+  ((and (lambda (stx)
+          (syntax-case stx
+            ((cons _ args)
+             (syntax-case args
+               (()
+                (pure '#true))
+               ((cons x xs)
+                (pure `(binary-and ,x
+                                   ,(cons-list-syntax 'and xs stx)))))))))
+   (or (lambda (stx)
+         (syntax-case stx
+           ((cons _ args)
+            (syntax-case args
+              (()
+               (pure '#false))
+              ((cons x xs)
+               (pure `(binary-or ,x
+                                 ,(cons-list-syntax 'or xs stx)))))))))))
+
+(example (binary-and #false #false))
+(example (binary-and #false #true))
+(example (binary-and #true #false))
+(example (binary-and #true #true))
+
+(example (binary-or #false #false))
+(example (binary-or #false #true))
+(example (binary-or #true #false))
+(example (binary-or #true #true))
+
+(example (and))
+(example (and #false))
+(example (and #true))
+(example (and #true #false))
+(example (and #true #true))
+(example (and #true #false #true))
+(example (and #true #true #true))
+
+(example (or))
+(example (or #true))
+(example (or #false))
+(example (or #false #true))
+(example (or #false #false))
+(example (or #false #true #false))
+(example (or #false #false #false))
+
+(export not binary-and binary-or and or)

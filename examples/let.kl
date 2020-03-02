@@ -1,0 +1,36 @@
+#lang "n-ary-app.kl"
+
+(import "quasiquote.kl")
+(import (shift "n-ary-app.kl" 1))
+(import (shift "list.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define-macros
+  -- (let ((x foo)
+  --       (y bar))
+  --   body)
+  -- =>
+  -- ((lambda (x y) body)
+  --  foo
+  --  bar)
+  ((let (lambda (stx)
+          (syntax-case stx
+            ((list (_ args body))
+             (pure (cons-list-syntax
+                     `(lambda ,(map car args) ,body)
+                     (map cdr args)
+                     stx))))))))
+
+-- examples from Racket's documentation of let
+
+-- 'five
+(example (let ([x 'five]) x))
+
+-- ('five 'two)
+(example (let ([x 'five])
+           (let ([x 'two]
+                 [y x])
+             `(,y ,x))))
+
+
+(export let)

@@ -1,0 +1,26 @@
+#lang "n-ary-app.kl"
+
+(import "defun.kl")
+(import "do.kl")
+
+-- (replace-identifier 'y 'x '(x y z z y)
+-- =>
+-- (pure '(x x z z x))
+(defun replace-identifier (needle replacement haystack)
+  (syntax-case haystack
+    ((ident identifier)
+     (do (identifier=needle <- (bound-identifier=? identifier needle))
+         (if identifier=needle
+           (pure replacement)
+           (pure identifier))))
+    ((cons a d)
+     (do (a2 <- (replace-identifier needle replacement a))
+         (d2 <- (replace-identifier needle replacement d))
+         (pure (cons-list-syntax a2 d2 haystack))))
+    (_
+     (pure haystack))))
+
+-- can't be tested here because we'd need to define a macro but
+-- replace-identifier is only available at phase 0.
+
+(export replace-identifier)

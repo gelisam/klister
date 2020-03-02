@@ -1,0 +1,5 @@
+#[list.kl:70.17-70.18]<Signal 1> : Syntax
+#[list.kl:71.16-71.23]<(Signal 2 Signal 3)> : Syntax
+#[list.kl:72.20-72.39]<(x y z)> : Syntax
+#[list.kl:77.18-78.17]<((f x) (f y) (f z))> : Syntax
+#[list.kl:81.18-82.17]<(z y x)> : Syntax

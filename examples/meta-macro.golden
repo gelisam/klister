@@ -1,0 +1,2 @@
+#[meta-macro.kl:7.12-7.15]<foo> : Syntax
+#[meta-macro.kl:31.15-31.18]<baz> : Syntax
