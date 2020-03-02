@@ -431,7 +431,11 @@ instance Pretty VarInfo Value where
   pp env (ValueMacroAction act) = pp env act
   pp _env (ValueSignal s) = viaShow s
   pp _env (ValueBool b) = text $ if b then "#true" else "#false"
+  pp _env (ValueCtor c []) =
+    parens $
+    text (view (constructorName . constructorNameText) c)
   pp env (ValueCtor c args) =
+    parens $
     text (view (constructorName . constructorNameText) c) <+>
     align (group (vsep (map (pp env) args)))
 

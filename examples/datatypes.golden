@@ -1,0 +1,6 @@
+(left (branch (branch (leaf) (zero) (leaf)) (add1 (zero)) (leaf))) : ∀α0. (Either (Tree Nat) α0)
+(right (right (right (nil)))) : ∀α0 β0 γ0 δ0. (Either α0 (Either β0 (Either γ0 (List δ0))))
+(add1 (add1 (add1 (add1 (zero))))) : Nat
+(right #true) : ∀α0. (Either α0 Bool)
+(left (:: (add1 (zero)) (nil))) : ∀α0. (Either (List Nat) α0)
+(add1 (add1 (add1 (add1 (add1 (zero)))))) : Nat
