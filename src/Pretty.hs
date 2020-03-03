@@ -24,6 +24,7 @@ import Binding.Info
 import Core
 import Datatype
 import Env
+import Evaluator (EvalResult(..))
 import Module
 import ModuleName
 import Phase
@@ -79,7 +80,8 @@ data VarInfo
 instance Pretty VarInfo Core where
   pp env (Core e) = pp env e
 
-instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
+instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
+         Pretty VarInfo (CoreF pat core) where
   pp env (CoreVar v) =
     annotate (UseSite v) $
     case Env.lookupIdent v env of
@@ -111,8 +113,18 @@ instance Pretty VarInfo core => Pretty VarInfo (CoreF core) where
   pp env (CoreCtor ctor args) =
     hang 2 $ parens $ pp env ctor <+> group (vsep (map (pp env) args))
   pp env (CoreDataCase scrut cases) =
-    hang 2 $
-    vsep (text "case" <+> pp env scrut <+> "of" : map (pp env) cases)
+    hang 2 $ group $
+    vsep [ text "case" <+> pp env scrut <+> "of"
+         , encloseSep (flatAlt mempty (text "{" <> space))
+                      (flatAlt mempty (space <> text "}"))
+                      (flatAlt mempty (space <> text ";" <> space)) $
+           map (\(pat, rhs) ->
+                   let (ppPat, env') = ppBind env pat
+                   in hang 2 $ group $
+                      vsep [ppPat <+> text "↦",
+                            pp (env <> env') rhs])
+            cases
+         ]
   pp env (CorePure arg) =
     text "pure" <+> pp env arg
   pp env (CoreBind act k) =
@@ -170,29 +182,21 @@ instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
 class PrettyBinder ann a | a -> ann where
   ppBind :: Env Var () -> a -> (Doc ann, Env Var ())
 
-instance Pretty VarInfo expr => Pretty VarInfo (ConstructorPattern expr) where
-  pp env (ConstructorPattern ctor vars rhs) =
+instance PrettyBinder VarInfo ConstructorPattern where
+  ppBind env (ConstructorPattern ctor vars) =
     case vars of
-      [] ->
-        group $ hang 2 $
-        vsep [pp env ctor <+> text "↦", pp env rhs]
+      [] -> (pp env ctor, Env.empty)
       more ->
-        hang 2 $
-        vsep [ pp env ctor <+>
-               hsep [ annotate (BindingSite v) (text x)
-                    | (Stx _ _ x, v) <- more
-                    ] <+>
-               text "↦"
-             , let env' = foldr (\(x, v) e -> Env.insert x v () e)
-                            env
-                            [ (v, x) | (x, v) <- more ]
-               in pp env' rhs
-             ]
-  pp env (AnyConstructor ident@(Stx _ _ n) x rhs) =
-    hang 2 $ group $
-    vsep [ annotate (BindingSite x) (text n) <+> text "↦"
-         , pp (env <> Env.singleton x ident ()) rhs
-         ]
+        let env' = foldr (\(x, v) e -> Env.insert x v () e)
+                   Env.empty
+                   [ (v, x) | (x, v) <- more ]
+        in (pp env ctor <+>
+             hsep [ annotate (BindingSite v) (text x)
+                  | (Stx _ _ x, v) <- more
+                  ],
+            env')
+  ppBind _env (AnyConstructor ident@(Stx _ _ n) x) =
+    (annotate (BindingSite x) (text n), Env.singleton x ident ())
 
 instance PrettyBinder VarInfo SyntaxPattern where
   ppBind _env (SyntaxPatternIdentifier ident@(Stx _ _ x) v) =
@@ -249,14 +253,19 @@ instance Pretty VarInfo (Scheme Ty) where
           ])
 
 typeVarNames :: [Text]
-typeVarNames = [ T.pack base <> T.pack (show i)
-               | (base, i) <- greek
-               ]
+typeVarNames =
+  greek ++
+  [ base <> T.pack (show i)
+  | (base, i) <- greekNum
+  ]
   where
-    greek = [ ([base], num)
-        | num <- [(0 :: Integer)..]
-        , base <- "αβγδεζηθικλμνξοπρστυφχψω"
-        ]
+    greek = [ T.pack [letter]
+            | letter <- "αβγδεζηθικλμνξοπρστυφχψω"
+            ]
+    greekNum = [ (base, num)
+               | num <- [(0 :: Integer)..]
+               , base <- greek
+               ]
 
 
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
@@ -327,9 +336,9 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
     (hang 4 $ text "import" <+> pp env spec, mempty)
   ppBind env (Export x) =
     (hang 4 $ text "export" <+> pp env x, mempty)
-  ppBind env (Example t e) =
+  ppBind env (Example loc t e) =
     (hang 4 $
-     text "example" <+>
+     text "example@" <> pp env loc <+>
      align (group (vsep [ group (pp env e) <+> text ":"
                         , pp env t
                         ])),
@@ -514,6 +523,18 @@ instance Pretty VarInfo loc => Pretty VarInfo (BindingInfo loc) where
   pp env (BoundLocally loc) = pp env loc <> text ":" <+> text "local"
   pp env (Defined loc) = pp env loc <> text ":" <+> text "defined"
   pp env (Imported loc) = pp env loc <> text ":" <+> text "import"
+
+instance Pretty VarInfo EvalResult where
+  pp env (EvalResult loc valEnv coreExpr sch val) =
+    let varEnv = fmap (const ()) valEnv
+    in group $ hang 2 $
+       vsep [ text "Example at" <+> pp env loc <> text ":"
+            , hang 2 $ group $
+              vsep [ pp varEnv coreExpr <+> text ":"
+                   , pp varEnv sch
+                   ] <+> text "↦"
+            , pp varEnv val
+            ]
 
 
 instance Pretty VarInfo BindingTable where

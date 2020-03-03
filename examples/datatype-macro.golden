@@ -1,0 +1,4 @@
+(:: Signal 3 (:: Signal 2 (:: Signal 1 (nil)))) : (List Signal)
+(:: Signal 3 (:: Signal 2 (:: Signal 1 (nil)))) : (List Signal)
+#[datatype-macro.kl:48.38-48.39]<a> : Syntax
+Signal 3 : Signal

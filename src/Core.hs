@@ -7,7 +7,9 @@ module Core where
 
 import Control.Lens hiding (elements)
 import Control.Monad
+import Data.Bifunctor.TH
 import Data.List
+import Data.Foldable
 import Data.Unique
 
 import Alpha
@@ -37,11 +39,14 @@ newtype MacroVar = MacroVar Unique
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
-data ConstructorPattern core
-  = ConstructorPattern !Constructor [(Ident, Var)] core
-  | AnyConstructor Ident Var core
-  deriving (Eq, Foldable, Functor, Show, Traversable)
+data ConstructorPattern
+  = ConstructorPattern !Constructor [(Ident, Var)]
+  | AnyConstructor Ident Var
+  deriving (Eq, Show)
 makePrisms ''ConstructorPattern
+
+instance Phased ConstructorPattern where
+  shift _ = id
 
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
@@ -83,14 +88,14 @@ makeLenses ''ScopedList
 data HowEq = Free | Bound
   deriving (Eq, Show)
 
-data CoreF core
+data CoreF pat core
   = CoreVar Var
   | CoreLet Ident Var core core
   | CoreLetFun Ident Var Ident Var core core
   | CoreLam Ident Var core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
-  | CoreDataCase core [ConstructorPattern core]
+  | CoreDataCase core [(pat, core)]
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
@@ -112,14 +117,17 @@ data CoreF core
   | CoreReplaceLoc core core
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
+deriveBifunctor ''CoreF
+deriveBifoldable ''CoreF
+deriveBitraversable ''CoreF
 
-instance Phased core => Phased (CoreF core) where
+instance (Phased pat, Phased core) => Phased (CoreF pat core) where
   shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
   shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
-  shift i other = fmap (shift i) other
+  shift i other = bimap (shift i) (shift i) other
 
 newtype Core = Core
-  { unCore :: CoreF Core }
+  { unCore :: CoreF ConstructorPattern Core }
   deriving (Eq, Show)
 makePrisms ''Core
 
@@ -132,7 +140,7 @@ instance AlphaEq a => AlphaEq (SyntaxError a) where
     alphaCheck locations1 locations2
     alphaCheck message1   message2
 
-instance AlphaEq core => AlphaEq (CoreF core) where
+instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
   alphaCheck (CoreVar var1)
              (CoreVar var2) = do
     alphaCheck var1 var2
@@ -201,6 +209,17 @@ instance AlphaEq core => AlphaEq (CoreF core) where
     alphaCheck scopedVec1 scopedVec2
   alphaCheck _ _ = notAlphaEquivalent
 
+
+instance AlphaEq ConstructorPattern where
+  alphaCheck (ConstructorPattern c1 vars1)
+             (ConstructorPattern c2 vars2) = do
+    alphaCheck c1 c2
+    for_ (zip vars1 vars2) (uncurry alphaCheck)
+  alphaCheck (AnyConstructor _ x1)
+             (AnyConstructor _ x2) = do
+    alphaCheck x1 x2
+  alphaCheck _ _ = notAlphaEquivalent
+
 instance AlphaEq Core where
   alphaCheck (Core x1)
              (Core x2) = do
@@ -258,7 +277,8 @@ instance ShortShow a => ShortShow (SyntaxError a) where
 instance ShortShow Var where
   shortShow (Var x) = shortShow x
 
-instance ShortShow core => ShortShow (CoreF core) where
+instance (ShortShow pat, ShortShow core) =>
+         ShortShow (CoreF pat core) where
   shortShow (CoreVar var)
     = "(Var "
    ++ shortShow var
@@ -379,15 +399,13 @@ instance ShortShow core => ShortShow (CoreF core) where
 instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
-instance ShortShow core => ShortShow (ConstructorPattern core) where
-  shortShow (ConstructorPattern ctor vars expr) =
+instance ShortShow ConstructorPattern where
+  shortShow (ConstructorPattern ctor vars) =
     "(" ++ shortShow ctor ++
     " " ++ intercalate " " (map shortShow vars) ++
-    " " ++ shortShow expr ++
     ")"
-  shortShow (AnyConstructor ident _var expr) =
-    "(AnyConstructor " ++ shortShow ident ++ " " ++
-    shortShow expr ++ ")"
+  shortShow (AnyConstructor ident _var) =
+    "(AnyConstructor " ++ shortShow ident ++ " )"
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x

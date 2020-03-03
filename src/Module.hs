@@ -50,6 +50,7 @@ import Datatype
 import ModuleName
 import Phase
 import Syntax
+import Syntax.SrcLoc
 import Type
 
 
@@ -185,7 +186,7 @@ data Decl ty scheme decl expr
   = Define Ident Var scheme expr
   | DefineMacros [(Ident, MacroVar, expr)]
   | Meta decl
-  | Example scheme expr
+  | Example SrcLoc scheme expr
   | Import ImportSpec
   | Export ExportSpec
   | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
@@ -196,7 +197,7 @@ instance Bifunctor (Decl ty scheme) where
   bimap _f g (Define x v t e) = Define x v t (g e)
   bimap _f g (DefineMacros ms) = DefineMacros [(x, v, g e) | (x, v, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
-  bimap _f g (Example t e) = Example t (g e)
+  bimap _f g (Example loc t e) = Example loc t (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
   bimap _f _g (Data x dn arity ctors) = Data x dn arity ctors

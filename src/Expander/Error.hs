@@ -53,7 +53,13 @@ data ExpansionErr
   | WrongDatatypeArity Syntax Datatype Natural Int
   deriving (Show)
 
-data MacroContext = ExpressionCtx | TypeCtx | ModuleCtx | DeclarationCtx deriving Show
+data MacroContext
+  = ExpressionCtx
+  | TypeCtx
+  | ModuleCtx
+  | DeclarationCtx
+  | PatternCaseCtx
+  deriving Show
 
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
@@ -181,3 +187,4 @@ instance Pretty VarInfo MacroContext where
   pp _env ModuleCtx = text "a module"
   pp _env TypeCtx = text "a type"
   pp _env DeclarationCtx = text "a top-level declaration or example"
+  pp _env PatternCaseCtx = text "a pattern"

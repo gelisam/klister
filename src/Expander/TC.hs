@@ -174,3 +174,10 @@ generalizeType ty = do
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
+
+
+makeTypeMetas :: Natural -> Expand [Ty]
+makeTypeMetas 0 =
+  pure []
+makeTypeMetas n =
+  (:) <$> (Ty . TMetaVar <$> freshMeta) <*> makeTypeMetas (n - 1)

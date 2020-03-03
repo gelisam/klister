@@ -7,6 +7,7 @@ import Data.String
 import Data.Text (Text)
 import Numeric.Natural
 
+import Alpha
 import ModuleName
 import ShortShow
 
@@ -36,6 +37,11 @@ makeLenses ''Constructor
 
 instance ShortShow Constructor where
   shortShow = show
+
+instance AlphaEq Constructor where
+  alphaCheck c1 c2
+    | c1 == c2 = pure ()
+    | otherwise = notAlphaEquivalent
 
 data DatatypeInfo
   = DatatypeInfo

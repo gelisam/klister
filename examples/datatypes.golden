@@ -1,6 +1,8 @@
-(left (branch (branch (leaf) (zero) (leaf)) (add1 (zero)) (leaf))) : ∀α0. (Either (Tree Nat) α0)
-(right (right (right (nil)))) : ∀α0 β0 γ0 δ0. (Either α0 (Either β0 (Either γ0 (List δ0))))
+(left (branch (branch (leaf) (zero) (leaf)) (add1 (zero)) (leaf))) : ∀α. (Either (Tree Nat) α)
+(right (right (right (nil)))) : ∀α β γ δ. (Either α (Either β (Either γ (List δ))))
 (add1 (add1 (add1 (add1 (zero))))) : Nat
-(right #true) : ∀α0. (Either α0 Bool)
-(left (:: (add1 (zero)) (nil))) : ∀α0. (Either (List Nat) α0)
+(right #true) : ∀α. (Either α Bool)
+(left (:: (add1 (zero)) (nil))) : ∀α. (Either (List Nat) α)
+#<closure> : (Nat → (Nat → Nat))
 (add1 (add1 (add1 (add1 (add1 (zero)))))) : Nat
+#<closure> : (Alphabet → Signal)

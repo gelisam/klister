@@ -32,6 +32,7 @@ module Expander.Monad
   , linkedType
   , linkDecl
   , linkExpr
+  , linkPattern
   , linkType
   , linkScheme
   , modifyState
@@ -79,6 +80,7 @@ module Expander.Monad
   -- ** Lenses
   , expanderGlobalBindingTable
   , expanderCompletedCore
+  , expanderCompletedPatterns
   , expanderCompletedDecls
   , expanderCompletedTypes
   , expanderCompletedModBody
@@ -100,6 +102,7 @@ module Expander.Monad
   , expanderModuleName
   , expanderModuleTop
   , expanderOriginLocations
+  , expanderPatternBinders
   , expanderReceivedSignals
   , expanderVarTypes
   , expanderTasks
@@ -110,6 +113,7 @@ module Expander.Monad
   ) where
 
 import Control.Applicative
+import Control.Arrow
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -186,7 +190,7 @@ data EValue
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
-  | EConstructor !Constructor (Ty -> SplitCorePtr -> Syntax -> Expand ())
+  | EConstructor !Constructor
   -- ^ Constructor identity, elaboration procedure
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
@@ -224,7 +228,9 @@ data ExpanderState = ExpanderState
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
-  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF PatternPtr SplitCorePtr))
+  , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
+  , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr))
@@ -257,6 +263,8 @@ initExpanderState = ExpanderState
   , _expanderTasks = []
   , _expanderOriginLocations = Map.empty
   , _expanderCompletedCore = Map.empty
+  , _expanderCompletedPatterns = Map.empty
+  , _expanderPatternBinders = Map.empty
   , _expanderCompletedTypes = Map.empty
   , _expanderCompletedModBody = Map.empty
   , _expanderCompletedDecls = Map.empty
@@ -349,9 +357,13 @@ makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
 makePrisms ''ExpanderTask
 
-linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
+linkExpr :: SplitCorePtr -> CoreF PatternPtr SplitCorePtr -> Expand ()
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
+
+linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
+linkPattern dest pat =
+  modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 
 linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
@@ -365,14 +377,16 @@ linkScheme :: SchemePtr -> Scheme Ty -> Expand ()
 linkScheme ptr sch =
   modifyState $ over expanderCompletedSchemes (<> Map.singleton ptr sch)
 
-linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
+linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF PatternPtr SplitCorePtr))
 linkStatus slot = do
   complete <- view expanderCompletedCore <$> getState
   return $ Map.lookup slot complete
 
 linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
-  runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
+  runPartialCore . unsplit .
+  uncurry (SplitCore slot) .
+  (view expanderCompletedCore &&& view expanderCompletedPatterns) <$>
   getState
 
 linkedType :: SplitTypePtr -> Expand (Maybe Ty)
@@ -445,10 +459,10 @@ forkAwaitingDefn x n b defn t dest stx =
 
 forkEstablishConstructors ::
   DeclValidityPtr ->
-  Datatype -> Natural -> [(Ident, Constructor, [SplitTypePtr])] ->
+  Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors pdest dt arity ctors =
-  forkExpanderTask $ EstablishConstructors pdest dt arity ctors
+forkEstablishConstructors pdest dt ctors =
+  forkExpanderTask $ EstablishConstructors pdest dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -529,7 +543,7 @@ getDecl ptr =
             pure (ident, cn, args')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
-    flattenDecl (Example schPtr e) =
+    flattenDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -537,7 +551,7 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Example sch e'
+            Just sch -> pure $ CompleteDecl $ Example loc sch e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
 

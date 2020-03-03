@@ -51,7 +51,7 @@ runExamples file = do
     Just results -> do
       -- Show just the results of evaluation in the module the user
       -- asked to run
-      for_ results $ \(EvalResult _ _ tp val) -> do
+      for_ results $ \(EvalResult _ _ _ tp val) -> do
         prettyTell val
         tell " : "
         prettyTellLn tp

@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Main where
@@ -86,16 +87,10 @@ mainWithOptions opts =
         prettyPrint $ view expanderGlobalBindingTable result
       case Map.lookup mn (view worldEvaluated (view expanderWorld result)) of
         Nothing -> fail "Internal error: module not evaluated"
-        Just results -> do
+        Just results ->
           -- Show just the results of evaluation in the module the user
           -- asked to run
-          for_ results $ \(EvalResult env coreExpr sch val) -> do
-            putStr "Example: "
-            prettyPrintEnv env coreExpr
-            putStr " : "
-            prettyPrint sch
-            putStr " ↦ "
-            prettyPrintLn val
+          for_ results prettyPrintLn
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
@@ -149,4 +144,4 @@ repl ctx startWorld = do
                         runExceptT (runReaderT (runEval (eval expr)) (phaseEnv runtime currentWorld)) >>=
                           \case
                             Left evalErr -> print evalErr
-                            Right val -> prettyPrint val >> putStrLn ""
+                            Right val -> prettyPrintLn val

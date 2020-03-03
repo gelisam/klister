@@ -90,8 +90,10 @@ expandExpr stx = do
   forkExpandSyntax (ExprDest t dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
+  patterns <- view expanderCompletedPatterns <$> getState
   return $ SplitCore { _splitCoreRoot = dest
                      , _splitCoreDescendants = children
+                     , _splitCorePatterns = patterns
                      }
 
 initializeLanguage :: Stx ModuleName -> Expand ()
@@ -264,10 +266,11 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
             over (expanderWorld . worldDatatypes . at p . non Map.empty) $
             Map.insert dt (DatatypeInfo arity [c | (_, c, _) <- ctors ])
 
-        Example sch expr -> do
+        Example loc sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
-          tell $ [EvalResult { resultEnv = env
+          tell $ [EvalResult { resultLoc = loc
+                             , resultEnv = env
                              , resultExpr = expr
                              , resultType = sch
                              , resultValue = value
@@ -528,11 +531,9 @@ initializeKernel = do
               Just info
 
 
-            forkEstablishConstructors pdest d (fromIntegral arity) ctors
+            forkEstablishConstructors pdest d ctors
 
             linkDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
-
-
         )
       , ( "define-macros"
         , \ sc dest pdest stx -> do
@@ -559,7 +560,7 @@ initializeKernel = do
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
             sch <- liftIO newSchemePtr
-            linkDecl dest (Example sch exprDest)
+            linkDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
             t <- inTypeBinder do
               t <- Ty . TMetaVar <$> freshMeta
               forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
@@ -904,57 +905,11 @@ initializeKernel = do
             Stx _ _ (_, scrut, cases) <- mustBeConsCons stx
             a <- Ty . TMetaVar <$> freshMeta
             scrutineeDest <- schedule a scrut
-            cases' <- traverse (mustHaveEntries >=> expandDataPattern t a) cases
+            cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
             linkExpr dest $ CoreDataCase scrutineeDest cases'
         )
       ]
 
-    expandDataPattern ::
-      Ty -> Ty ->
-      Stx (Syntax, Syntax) ->
-      Expand (ConstructorPattern SplitCorePtr)
-    expandDataPattern exprTy scrutTy (Stx _ _ (lhs, rhs)) = do
-      p <- currentPhase
-      case lhs of
-        identPat@(Syntax (Stx _ _ (Id _))) -> do
-          (sc, x, var) <- prepareVar identPat
-          let rhs' = addScope p rhs sc
-          rhsDest <- schedule exprTy rhs'
-          pure $ (AnyConstructor x var rhsDest)
-        other -> do
-          Stx _ _ (cname, patVars) <- mustBeCons other
-          cname' <- mustBeIdent cname
-          b <- resolve =<< addRootScope cname'
-          v <- getEValue b
-          case v of
-            EConstructor ctor _ -> do
-              ConstructorInfo args dt <- constructorInfo ctor
-              DatatypeInfo arity _ <- datatypeInfo dt
-              let mkTArgs =
-                    \ n -> if n == 0
-                             then pure []
-                             else (:) <$> (Ty . TMetaVar <$> freshMeta) <*> mkTArgs (n - 1)
-              tyArgs <- mkTArgs arity
-              argTypes <- for args \ a -> do
-                          t <- inst (Scheme arity a) tyArgs
-                          trivialScheme t
-              if length patVars /= length argTypes
-                then
-                  throwError $ WrongArgCount lhs ctor (length argTypes) (length patVars)
-                else do
-                  varInfo <- traverse prepareVar patVars
-                  let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
-                  rhsDest <- withLocalVarTypes [ (var, ident, t)
-                                               | ((_, ident, var), t) <- zip varInfo argTypes
-                                               ] $
-                             schedule exprTy rhs'
-                  unify rhsDest (Ty (TDatatype dt tyArgs)) scrutTy
-                  pure (ConstructorPattern ctor [ (ident, var)
-                                                | (_, ident, var) <- varInfo
-                                                ]
-                                           rhsDest)
-            _nonCtor ->
-              throwError $ NotAConstructor lhs
 
     expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
     -- TODO match case keywords hygienically
@@ -995,31 +950,6 @@ initializeKernel = do
           return (SyntaxPatternAny, rhsDest)
         other ->
           throwError $ UnknownPattern other
-
-    varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
-    varPrepHelper varStx = do
-      sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
-      x <- mustBeIdent varStx
-      p <- currentPhase
-      psc <- phaseRoot
-      let x' = addScope' (addScope p x sc) psc
-      b <- freshBinding
-      addLocalBinding x' b
-      return (sc, x', b)
-
-
-    prepareVar :: Syntax -> Expand (Scope, Ident, Var)
-    prepareVar varStx = do
-      (sc, x', b) <- varPrepHelper varStx
-      var <- freshVar
-      bind b (EVarMacro var)
-      return (sc, x', var)
-
-    prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
-    prepareTypeVar i varStx = do
-      (sc, α, b) <- varPrepHelper varStx
-      bind b (ETypeVar i)
-      return (sc, α)
 
     scheduleType :: Syntax -> Expand SplitTypePtr
     scheduleType stx = do
@@ -1076,12 +1006,51 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
+varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
+varPrepHelper varStx = do
+  sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
+  x <- mustBeIdent varStx
+  p <- currentPhase
+  psc <- phaseRoot
+  let x' = addScope' (addScope p x sc) psc
+  b <- freshBinding
+  addLocalBinding x' b
+  return (sc, x', b)
+
+
+prepareVar :: Syntax -> Expand (Scope, Ident, Var)
+prepareVar varStx = do
+  (sc, x', b) <- varPrepHelper varStx
+  var <- freshVar
+  bind b (EVarMacro var)
+  return (sc, x', var)
+
+prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
+prepareTypeVar i varStx = do
+  (sc, α, b) <- varPrepHelper varStx
+  bind b (ETypeVar i)
+  return (sc, α)
+
+
 schedule :: Ty -> Syntax -> Expand SplitCorePtr
 schedule t stx@(Syntax (Stx _ loc _)) = do
   dest <- liftIO newSplitCorePtr
   saveOrigin dest loc
   forkExpandSyntax (ExprDest t dest) stx
   return dest
+
+scheduleDataPattern ::
+  Ty -> Ty ->
+  Stx (Syntax, Syntax) ->
+  Expand (PatternPtr, SplitCorePtr)
+scheduleDataPattern exprTy scrutTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = do
+  dest <- liftIO newPatternPtr
+  forkExpandSyntax (PatternDest exprTy scrutTy dest) patStx
+  rhsDest <- liftIO newSplitCorePtr
+  saveOrigin rhsDest loc
+  forkExpanderTask $ AwaitingPattern dest exprTy rhsDest rhsStx
+  return (dest, rhsDest)
+
 
 addModuleScope :: HasScopes a => a -> Expand a
 addModuleScope stx = do
@@ -1160,7 +1129,10 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression t d stx
         DeclDest d sc ph ->
           expandOneDeclaration sc d stx ph
-        TypeDest d -> expandOneType d stx
+        TypeDest d ->
+          expandOneType d stx
+        PatternDest exprT scrutT d ->
+          expandOnePattern exprT scrutT d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -1277,7 +1249,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
-    EstablishConstructors pdest dt arity ctors -> do
+    EstablishConstructors pdest dt ctors -> do
       ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
                   perhapsArgs <- sequenceA <$> traverse linkedType argTys
                   pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
@@ -1285,9 +1257,30 @@ runTask (tid, localData, task) = withLocal localData $ do
         Nothing -> stillStuck tid task
         Just ready -> do
           for_ ready \(cn, ctor, ts) ->
-            addConstructor cn dt arity ctor ts
+            addConstructor cn dt ctor ts
           p <- currentPhase
           nowValidAt pdest (SpecificPhase p)
+    AwaitingPattern patPtr ty dest stx -> do
+      view (expanderCompletedPatterns . at patPtr) <$> getState >>=
+        \case
+          Nothing -> stillStuck tid task
+          Just _pat -> do
+            varInfo <- view (expanderPatternBinders . at patPtr) <$> getState
+            case varInfo of
+              Nothing -> throwError $ InternalError "Pattern info not added"
+              Just vars -> do
+                p <- currentPhase
+                let rhs' = foldr (flip (addScope p)) stx
+                             [ sc'
+                             | (sc', _, _, _) <- vars
+                             ]
+                withLocalVarTypes
+                  [ (var, varStx, t)
+                  | (_sc, varStx, var, t) <- vars
+                  ] $
+                  expandOneExpression ty dest rhs'
+
+
   where
     laterMacro tid' b v x dest deps mdest stx = do
       localConfig <- view expanderLocal
@@ -1296,23 +1289,12 @@ runTask (tid, localData, task) = withLocal localData $ do
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
 
     addConstructor ::
-      Ident -> Datatype -> Natural ->
+      Ident -> Datatype ->
       Constructor -> [Ty] ->
       Expand ()
-    addConstructor name dt arity ctor args = do
+    addConstructor name dt ctor args = do
       name' <- addRootScope' name
-      let val = EConstructor ctor \t dest stx -> do
-                  argTys <- argTypeMetas arity
-                  unify dest t (Ty (TDatatype dt argTys))
-                  args' <- for args \a -> inst (Scheme arity a) argTys
-                  Stx _ _ (foundName, foundArgs) <- mustBeCons stx
-                  _ <- mustBeIdent foundName
-                  argDests <-
-                    if length foundArgs /= length args'
-                      then throwError $
-                           WrongArgCount stx ctor (length args') (length foundArgs)
-                      else for (zip args' foundArgs) (uncurry schedule)
-                  linkExpr dest (CoreCtor ctor argDests)
+      let val = EConstructor ctor
       p <- currentPhase
       let info = ConstructorInfo { _ctorDatatype = dt
                                  , _ctorArguments = args
@@ -1326,13 +1308,10 @@ runTask (tid, localData, task) = withLocal localData $ do
       addDefinedBinding name' b
       bind b val
 
-      where
-        argTypeMetas 0 =
-          pure []
-        argTypeMetas n =
-          (:) <$> (Ty . TMetaVar <$> freshMeta) <*> argTypeMetas (n - 1)
 
-
+expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+expandOnePattern exprTy scrutTy dest stx =
+  expandOneForm (PatternDest exprTy scrutTy dest) stx
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
@@ -1352,6 +1331,7 @@ problemContext :: MacroDest -> MacroContext
 problemContext (DeclDest _ _ _) = DeclarationCtx
 problemContext (TypeDest _) = TypeCtx
 problemContext (ExprDest _ _) = ExpressionCtx
+problemContext (PatternDest _ _ _) = PatternCaseCtx
 
 requireDecl :: Syntax -> MacroDest -> Expand (Scope, DeclPtr, DeclValidityPtr)
 requireDecl _ (DeclDest dest sc ph) = return (sc, dest, ph)
@@ -1379,10 +1359,45 @@ expandOneForm prob stx
           (t, dest) <- requireExpr stx prob
           impl t dest stx
           saveExprType dest t
-        EConstructor _ impl -> do
-          (t, dest) <- requireExpr stx prob
-          impl t dest stx
-          saveExprType dest t
+        EConstructor ctor -> do
+          ConstructorInfo args dt <- constructorInfo ctor
+          DatatypeInfo arity _ <- datatypeInfo dt
+          case prob of
+            ExprDest t dest -> do
+              argTys <- makeTypeMetas arity
+              unify dest t (Ty (TDatatype dt argTys))
+              args' <- for args \a -> inst (Scheme arity a) argTys
+              Stx _ _ (foundName, foundArgs) <- mustBeCons stx
+              _ <- mustBeIdent foundName
+              argDests <-
+                if length foundArgs /= length args'
+                  then throwError $
+                       WrongArgCount stx ctor (length args') (length foundArgs)
+                  else for (zip args' foundArgs) (uncurry schedule)
+              linkExpr dest (CoreCtor ctor argDests)
+              saveExprType dest t
+            PatternDest _exprTy patTy dest -> do
+              Stx _ loc (_cname, patVars) <- mustBeCons stx
+              tyArgs <- makeTypeMetas arity
+              argTypes <- for args \ a -> do
+                            t <- inst (Scheme arity a) tyArgs
+                            trivialScheme t
+              unify loc (Ty (TDatatype dt tyArgs)) patTy
+              if length patVars /= length argTypes
+                then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
+                else do
+                  varInfo <- traverse prepareVar patVars
+                  modifyState $
+                    set (expanderPatternBinders . at dest) $
+                    Just [ (sc, name, x, t)
+                         | ((sc, name, x), t) <- zip varInfo argTypes
+                         ]
+                  linkPattern dest $
+                    ConstructorPattern ctor [ (varStx, var)
+                                            | (_, varStx, var) <- varInfo
+                                            ]
+            other ->
+              throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
         EPrimModuleMacro _ ->
           throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
         EPrimDeclMacro impl -> do
@@ -1439,7 +1454,10 @@ expandOneForm prob stx
     case prob of
       DeclDest _ _ _ ->
         throwError $ InternalError "All declarations should be identifier-headed"
-      TypeDest _dest -> throwError $ NotValidType stx
+      TypeDest _dest ->
+        throwError $ NotValidType stx
+      PatternDest _ _ _ ->
+        throwError $ InternalError "All patterns should be identifier-headed"
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
@@ -1537,10 +1555,17 @@ interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
 
+class UnificationErrorBlame a where
+  getBlameLoc :: a -> Expand (Maybe SrcLoc)
 
+instance UnificationErrorBlame SrcLoc where
+  getBlameLoc = pure . pure
+
+instance UnificationErrorBlame SplitCorePtr where
+  getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
 
 -- The expected type is first, the received is second
-unify :: SplitCorePtr -> Ty -> Ty -> Expand ()
+unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
 unify blame t1 t2 = do
   t1' <- normType t1
   t2' <- normType t2
@@ -1572,5 +1597,5 @@ unify blame t1 t2 = do
 
     -- Mismatch
     unify' expected received = do
-      loc <- view (expanderOriginLocations . at blame) <$> getState
+      loc <- getBlameLoc blame
       throwError $ TypeMismatch loc (Ty expected) (Ty received)

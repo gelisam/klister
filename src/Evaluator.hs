@@ -16,6 +16,7 @@ import Core
 import Env
 import Signals
 import Syntax
+import Syntax.SrcLoc
 import Type
 import Value
 
@@ -61,7 +62,8 @@ withManyExtendedEnv exts act = local (inserter exts) act
 
 -- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
 data EvalResult =
-  EvalResult { resultEnv :: VEnv
+  EvalResult { resultLoc :: SrcLoc
+             , resultEnv :: VEnv
              , resultExpr :: Core
              , resultType :: Scheme Ty
              , resultValue :: Value
@@ -268,11 +270,11 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doDataCase :: Value -> [ConstructorPattern Core] -> Eval Value
+doDataCase :: Value -> [(ConstructorPattern, Core)] -> Eval Value
 doDataCase v0 [] = throwError (EvalErrorCase v0)
-doDataCase v0 (p : ps) = match (doDataCase v0 ps) p
+doDataCase v0 ((pat, rhs) : ps) = match (doDataCase v0 ps) pat
   where
-    match next (ConstructorPattern ctor vars rhs) =
+    match next (ConstructorPattern ctor vars) =
       case v0 of
         ValueCtor c args
           | c == ctor ->
@@ -284,7 +286,7 @@ doDataCase v0 (p : ps) = match (doDataCase v0 ps) p
                    eval rhs
           | otherwise -> next
         _otherValue -> next
-    match _next (AnyConstructor n x rhs) =
+    match _next (AnyConstructor n x) =
       withExtendedEnv n x v0 $ eval rhs
 
 doCase :: Value -> [(SyntaxPattern, Core)] -> Eval Value

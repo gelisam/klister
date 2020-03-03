@@ -2,7 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Expander.Task where
 
-import Numeric.Natural
 import qualified Data.Text as T
 
 import Binding
@@ -25,6 +24,8 @@ data MacroDest
   = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
   | DeclDest DeclPtr Scope DeclValidityPtr
+  | PatternDest Ty Ty PatternPtr
+    -- ^ expression type, scrutinee type, destination pointer
   deriving Show
 
 
@@ -46,9 +47,8 @@ data ExpanderTask
     -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
-  | EstablishConstructors DeclValidityPtr Datatype Natural [(Ident, Constructor, [SplitTypePtr])]
-
-
+  | EstablishConstructors DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
+  | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
   deriving (Show)
 
 data AfterTypeTask
@@ -97,7 +97,8 @@ instance ShortShow ExpanderTask where
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
   shortShow (GeneralizeType e _ _) = "(GeneralizeType " ++ show e ++ " _ _)"
   shortShow (ExpandVar t d x v) = "(ExpandVar " ++ show t ++ " " ++ show d ++ " " ++ show x ++ " " ++ show v ++ ")"
-  shortShow (EstablishConstructors _ dt _ _) = "(EstablishConstructors " ++ show dt ++ ")"
+  shortShow (EstablishConstructors _ dt _) = "(EstablishConstructors " ++ show dt ++ ")"
+  shortShow (AwaitingPattern _ _ _ _) = "(AwaitingPattern _ _ _ _)"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)

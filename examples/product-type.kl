@@ -1,0 +1,14 @@
+#lang kernel
+
+(datatype (× A B)
+  (times A B))
+
+(define fst
+  (lambda (x)
+    (case x
+      [(times a _)
+       a])))
+
+(example (fst (times 'a 'b)))
+
+(example fst)
