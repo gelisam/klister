@@ -9,12 +9,14 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 
 import Core (MacroVar, Var)
+import Datatype
 import Env
 import Evaluator (EvalResult)
 import Module
 import ModuleName
 import Phase
 import SplitType
+import Type
 import Type.Context
 
 data World a = World
@@ -25,6 +27,8 @@ data World a = World
   , _worldVisited :: !(Map ModuleName (Set Phase))
   , _worldExports :: !(Map ModuleName Exports)
   , _worldEvaluated :: !(Map ModuleName [EvalResult])
+  , _worldDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
+  , _worldConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
   }
 makeLenses ''World
 
@@ -40,6 +44,8 @@ initialWorld =
         , _worldVisited = Map.empty
         , _worldExports = Map.empty
         , _worldEvaluated = Map.empty
+        , _worldDatatypes = Map.empty
+        , _worldConstructors = Map.empty
         }
 
 addExpandedModule :: CompleteModule -> World a -> World a

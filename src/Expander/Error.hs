@@ -8,6 +8,7 @@ import Data.Text (Text)
 import qualified Data.Text as T
 
 import Core
+import Datatype
 import Evaluator
 import Expander.Task
 import Phase
@@ -26,6 +27,7 @@ data ExpansionErr
   | NotIdentifier Syntax
   | NotEmpty Syntax
   | NotCons Syntax
+  | NotConsCons Syntax
   | NotList Syntax
   | NotString Syntax
   | NotModName Syntax
@@ -46,9 +48,18 @@ data ExpansionErr
   | NotValidType Syntax
   | TypeMismatch (Maybe SrcLoc) Ty Ty
   | OccursCheckFailed MetaPtr Ty
+  | WrongArgCount Syntax Constructor Int Int
+  | NotAConstructor Syntax
+  | WrongDatatypeArity Syntax Datatype Natural Int
   deriving (Show)
 
-data MacroContext = ExpressionCtx | TypeCtx | ModuleCtx | DeclarationCtx deriving Show
+data MacroContext
+  = ExpressionCtx
+  | TypeCtx
+  | ModuleCtx
+  | DeclarationCtx
+  | PatternCaseCtx
+  deriving Show
 
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
@@ -67,6 +78,8 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [text "Expected (), but got", pp env stx]
   pp env (NotCons stx) =
     hang 2 $ group $ vsep [text "Expected non-empty parens, but got", pp env stx]
+  pp env (NotConsCons stx) =
+    hang 2 $ group $ vsep [text "Expected parens with at least 2 entries, but got", pp env stx]
   pp env (NotList stx) =
     hang 2 $ group $ vsep [text "Expected parens, but got", pp env stx]
   pp env (NotString stx) =
@@ -153,10 +166,25 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [ text "Occurs check failed:"
                           , group (vsep [viaShow ptr, "≠", pp env ty])
                           ]
-
+  pp env (WrongArgCount stx ctor wanted got) =
+    hang 2 $
+    vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
+         , text "Wanted" <+> viaShow wanted
+         , text "Got" <+> viaShow got
+         , text "At" <+> align (pp env stx)
+         ]
+  pp env (NotAConstructor stx) =
+    hang 2 $ group $ vsep [text "Not a constructor in", pp env stx]
+  pp env (WrongDatatypeArity stx dt arity got) =
+    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env dt
+                  , text "Wanted" <+> viaShow arity
+                  , text "Got" <+> viaShow got
+                  , text "In" <+> align (pp env stx)
+                  ]
 
 instance Pretty VarInfo MacroContext where
   pp _env ExpressionCtx = text "an expression"
   pp _env ModuleCtx = text "a module"
   pp _env TypeCtx = text "a type"
   pp _env DeclarationCtx = text "a top-level declaration or example"
+  pp _env PatternCaseCtx = text "a pattern"

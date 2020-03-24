@@ -51,12 +51,14 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
+import Numeric.Natural
 import System.Directory
 
 import Binding
 import Binding.Info
 import Control.Lens.IORef
 import Core
+import Datatype
 import qualified Env
 import Evaluator
 import Expander.DeclScope
@@ -88,8 +90,10 @@ expandExpr stx = do
   forkExpandSyntax (ExprDest t dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
+  patterns <- view expanderCompletedPatterns <$> getState
   return $ SplitCore { _splitCoreRoot = dest
                      , _splitCoreDescendants = children
+                     , _splitCorePatterns = patterns
                      }
 
 initializeLanguage :: Stx ModuleName -> Expand ()
@@ -248,10 +252,25 @@ evalMod (Expanded em _) = snd <$> runWriterT (traverse_ evalDecl (view moduleBod
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p . non Env.empty) $
               Env.insert n x val
-        Example sch expr -> do
+        Data _ dn arity ctors -> do
+          p <- lift currentPhase
+          let mn = view moduleName em
+          let dt = Datatype { _datatypeModule = mn
+                            , _datatypeName = dn
+                            }
+          for_ ctors \(_, cn, argTypes) ->
+            lift $ modifyState $
+            over (expanderWorld . worldConstructors . at p . non Map.empty) $
+            Map.insert cn (ConstructorInfo argTypes dt)
+          lift $ modifyState $
+            over (expanderWorld . worldDatatypes . at p . non Map.empty) $
+            Map.insert dt (DatatypeInfo arity [c | (_, c, _) <- ctors ])
+
+        Example loc sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
-          tell $ [EvalResult { resultEnv = env
+          tell $ [EvalResult { resultLoc = loc
+                             , resultEnv = env
                              , resultExpr = expr
                              , resultType = sch
                              , resultValue = value
@@ -412,7 +431,6 @@ initializeKernel = do
       in [ baseType "Bool" TBool
          , baseType "Unit" TUnit
          , baseType "Syntax" TSyntax
-         , baseType "Ident" TIdent
          , baseType "Signal" TSignal
          , ( "->"
            , \ dest stx -> do
@@ -426,12 +444,6 @@ initializeKernel = do
                Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
                tDest <- scheduleType t
                linkType dest (TMacro tDest)
-           )
-         , ( "List"
-           , \ dest stx -> do
-               Stx _ _ (_ :: Syntax, e) <- mustHaveEntries stx
-               entryTypeDest <- scheduleType e
-               linkType dest (TList entryTypeDest)
            )
          ]
 
@@ -460,7 +472,7 @@ initializeKernel = do
 
     declPrims :: [(Text, Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
-      [ ("define"
+      [ ( "define"
         , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
@@ -482,7 +494,48 @@ initializeKernel = do
             forkGeneralizeType exprDest t schPtr
             nowValidAt pdest (SpecificPhase p)
         )
-      ,("define-macros"
+      , ( "datatype"
+        , \ sc dest pdest stx -> do
+            Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
+            Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
+            Stx _ _ (name, args) <- mustBeCons nameAndArgs
+            typeArgs <- for (zip [0..] args) $ \(i, a) ->
+              prepareTypeVar i a
+            let typeScopes = map fst typeArgs ++ [sc]
+            realName <- mustBeIdent (addScope' name sc)
+            p <- currentPhase
+            let arity = length args
+            d <- freshDatatype realName
+            addDatatype realName d (fromIntegral arity)
+
+            ctors <- for ctorSpecs \ spec -> do
+              Stx _ _ (cn, ctorArgs) <- mustBeCons spec
+              realCN <- mustBeIdent cn
+              ctor <- freshConstructor realCN
+              let ctorArgs' = [ foldr (flip (addScope p)) t typeScopes
+                              | t <- ctorArgs
+                              ]
+              argTypes <- traverse scheduleType ctorArgs'
+              return (realCN, ctor, argTypes)
+
+            let info =
+                  DatatypeInfo
+                  { _datatypeArity = fromIntegral arity
+                  , _datatypeConstructors =
+                    [ ctor | (_, ctor, _) <- ctors ]
+                  }
+            modifyState $
+              set (expanderCurrentDatatypes .
+                   at p . non Map.empty .
+                   at d) $
+              Just info
+
+
+            forkEstablishConstructors pdest d ctors
+
+            linkDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
+        )
+      , ( "define-macros"
         , \ sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
             Stx _ _ macroDefs <- mustBeList macroList
@@ -501,13 +554,13 @@ initializeKernel = do
             linkDecl dest $ DefineMacros macros
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("example"
+      , ( "example"
         , \ sc dest pdest stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
             sch <- liftIO newSchemePtr
-            linkDecl dest (Example sch exprDest)
+            linkDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
             t <- inTypeBinder do
               t <- Ty . TMetaVar <$> freshMeta
               forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
@@ -515,7 +568,7 @@ initializeKernel = do
             forkGeneralizeType exprDest t sch
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("import"
+      , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
         , \sc dest pdest stx -> do
             Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
@@ -527,7 +580,7 @@ initializeKernel = do
             linkDecl dest (Import spec)
             nowValidAt pdest AllPhases
         )
-      , ("export"
+      , ( "export"
         , \_sc dest pdest stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
@@ -537,7 +590,7 @@ initializeKernel = do
             linkDecl dest (Export exported)
             nowValidAt pdest (SpecificPhase p)
         )
-      , ("meta"
+      , ( "meta"
         , \sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
             subDest <- liftIO newDeclPtr
@@ -547,10 +600,6 @@ initializeKernel = do
         )
       ]
       where
-        nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
-        nowValidAt ptr p =
-          modifyState $ over expanderDeclPhases $ Map.insert ptr p
-
         importSpec :: Syntax -> Expand ImportSpec
         importSpec (Syntax (Stx scs srcloc (String s))) =
           ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
@@ -851,9 +900,18 @@ initializeKernel = do
             msgDest <- schedule (Ty TSyntax) message
             linkExpr dest $ CoreLog msgDest
         )
+      , ( "case"
+        , \ t dest stx -> do
+            Stx _ _ (_, scrut, cases) <- mustBeConsCons stx
+            a <- Ty . TMetaVar <$> freshMeta
+            scrutineeDest <- schedule a scrut
+            cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
+            linkExpr dest $ CoreDataCase scrutineeDest cases'
+        )
       ]
 
-    expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (Pattern, SplitCorePtr)
+
+    expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
     -- TODO match case keywords hygienically
     expandPatternCase t (Stx _ _ (lhs, rhs)) = do
       p <- currentPhase
@@ -864,7 +922,7 @@ initializeKernel = do
           (sc, x', var) <- prepareVar patVar
           let rhs' = addScope p rhs sc
           rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
-          let patOut = PatternIdentifier x' var
+          let patOut = SyntaxPatternIdentifier x' var
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
                                Syntax (Stx _ _ (List vars))])) -> do
@@ -872,7 +930,7 @@ initializeKernel = do
           let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
           rhsDest <- withLocalVarTypes [(var, ident, sch) | (_, ident, var) <- varInfo] $
                        schedule t rhs'
-          let patOut = PatternList [(ident, var) | (_, ident, var) <- varInfo]
+          let patOut = SyntaxPatternList [(ident, var) | (_, ident, var) <- varInfo]
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "cons")),
                                car,
@@ -882,29 +940,16 @@ initializeKernel = do
           let rhs' = addScope p (addScope p rhs sc) sc'
           rhsDest <- withLocalVarTypes [(carVar, car', sch), (cdrVar, cdr', sch)] $
                        schedule t rhs'
-          let patOut = PatternCons car' carVar cdr' cdrVar
+          let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
           return (patOut, rhsDest)
         Syntax (Stx _ _ (List [])) -> do
           rhsDest <- schedule t rhs
-          return (PatternEmpty, rhsDest)
+          return (SyntaxPatternEmpty, rhsDest)
         Syntax (Stx _ _ (Id "_")) -> do
           rhsDest <- schedule t rhs
-          return (PatternAny, rhsDest)
+          return (SyntaxPatternAny, rhsDest)
         other ->
           throwError $ UnknownPattern other
-
-    prepareVar :: Syntax -> Expand (Scope, Ident, Var)
-    prepareVar varStx = do
-      sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
-      x <- mustBeIdent varStx
-      p <- currentPhase
-      psc <- phaseRoot
-      let x' = addScope' (addScope p x sc) psc
-      b <- freshBinding
-      addLocalBinding x' b
-      var <- freshVar
-      bind b (EVarMacro var)
-      return (sc, x', var)
 
     scheduleType :: Syntax -> Expand SplitTypePtr
     scheduleType stx = do
@@ -912,12 +957,22 @@ initializeKernel = do
       forkExpandType dest stx
       return dest
 
-    schedule :: Ty -> Syntax -> Expand SplitCorePtr
-    schedule t stx@(Syntax (Stx _ loc _)) = do
-      dest <- liftIO newSplitCorePtr
-      saveOrigin dest loc
-      forkExpandSyntax (ExprDest t dest) stx
-      return dest
+
+    addDatatype :: Ident -> Datatype -> Natural -> Expand ()
+    addDatatype name dt arity = do
+      name' <- addRootScope' name
+      let val = EPrimTypeMacro \dest stx -> do
+                  Stx _ _ (me, args) <- mustBeCons stx
+                  _ <- mustBeIdent me
+                  if length args /= fromIntegral arity
+                    then throwError $ WrongDatatypeArity stx dt arity (length args)
+                    else do
+                      argDests <- traverse scheduleType args
+                      linkType dest $ TDatatype dt argDests
+      b <- freshBinding
+      addDefinedBinding name' b
+      bind b val
+
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
@@ -950,6 +1005,52 @@ initializeKernel = do
       b <- freshBinding
       bind b val
       addToKernel name runtime b
+
+varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
+varPrepHelper varStx = do
+  sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
+  x <- mustBeIdent varStx
+  p <- currentPhase
+  psc <- phaseRoot
+  let x' = addScope' (addScope p x sc) psc
+  b <- freshBinding
+  addLocalBinding x' b
+  return (sc, x', b)
+
+
+prepareVar :: Syntax -> Expand (Scope, Ident, Var)
+prepareVar varStx = do
+  (sc, x', b) <- varPrepHelper varStx
+  var <- freshVar
+  bind b (EVarMacro var)
+  return (sc, x', var)
+
+prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
+prepareTypeVar i varStx = do
+  (sc, α, b) <- varPrepHelper varStx
+  bind b (ETypeVar i)
+  return (sc, α)
+
+
+schedule :: Ty -> Syntax -> Expand SplitCorePtr
+schedule t stx@(Syntax (Stx _ loc _)) = do
+  dest <- liftIO newSplitCorePtr
+  saveOrigin dest loc
+  forkExpandSyntax (ExprDest t dest) stx
+  return dest
+
+scheduleDataPattern ::
+  Ty -> Ty ->
+  Stx (Syntax, Syntax) ->
+  Expand (PatternPtr, SplitCorePtr)
+scheduleDataPattern exprTy scrutTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = do
+  dest <- liftIO newPatternPtr
+  forkExpandSyntax (PatternDest exprTy scrutTy dest) patStx
+  rhsDest <- liftIO newSplitCorePtr
+  saveOrigin rhsDest loc
+  forkExpanderTask $ AwaitingPattern dest exprTy rhsDest rhsStx
+  return (dest, rhsDest)
+
 
 addModuleScope :: HasScopes a => a -> Expand a
 addModuleScope stx = do
@@ -1028,7 +1129,10 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression t d stx
         DeclDest d sc ph ->
           expandOneDeclaration sc d stx ph
-        TypeDest d -> expandOneType d stx
+        TypeDest d ->
+          expandOneType d stx
+        PatternDest exprT scrutT d ->
+          expandOnePattern exprT scrutT d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -1145,6 +1249,37 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
+    EstablishConstructors pdest dt ctors -> do
+      ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
+                  perhapsArgs <- sequenceA <$> traverse linkedType argTys
+                  pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
+      case ctors' of
+        Nothing -> stillStuck tid task
+        Just ready -> do
+          for_ ready \(cn, ctor, ts) ->
+            addConstructor cn dt ctor ts
+          p <- currentPhase
+          nowValidAt pdest (SpecificPhase p)
+    AwaitingPattern patPtr ty dest stx -> do
+      view (expanderCompletedPatterns . at patPtr) <$> getState >>=
+        \case
+          Nothing -> stillStuck tid task
+          Just _pat -> do
+            varInfo <- view (expanderPatternBinders . at patPtr) <$> getState
+            case varInfo of
+              Nothing -> throwError $ InternalError "Pattern info not added"
+              Just vars -> do
+                p <- currentPhase
+                let rhs' = foldr (flip (addScope p)) stx
+                             [ sc'
+                             | (sc', _, _, _) <- vars
+                             ]
+                withLocalVarTypes
+                  [ (var, varStx, t)
+                  | (_sc, varStx, var, t) <- vars
+                  ] $
+                  expandOneExpression ty dest rhs'
+
 
   where
     laterMacro tid' b v x dest deps mdest stx = do
@@ -1152,6 +1287,31 @@ runTask (tid, localData, task) = withLocal localData $ do
       modifyState $
         over expanderTasks $
           ((tid', localConfig, AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx)) :)
+
+    addConstructor ::
+      Ident -> Datatype ->
+      Constructor -> [Ty] ->
+      Expand ()
+    addConstructor name dt ctor args = do
+      name' <- addRootScope' name
+      let val = EConstructor ctor
+      p <- currentPhase
+      let info = ConstructorInfo { _ctorDatatype = dt
+                                 , _ctorArguments = args
+                                 }
+      modifyState $
+        set (expanderCurrentConstructors .
+             at p . non Map.empty .
+             at ctor) $
+        Just info
+      b <- freshBinding
+      addDefinedBinding name' b
+      bind b val
+
+
+expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+expandOnePattern exprTy scrutTy dest stx =
+  expandOneForm (PatternDest exprTy scrutTy dest) stx
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
@@ -1171,6 +1331,7 @@ problemContext :: MacroDest -> MacroContext
 problemContext (DeclDest _ _ _) = DeclarationCtx
 problemContext (TypeDest _) = TypeCtx
 problemContext (ExprDest _ _) = ExpressionCtx
+problemContext (PatternDest _ _ _) = PatternCaseCtx
 
 requireDecl :: Syntax -> MacroDest -> Expand (Scope, DeclPtr, DeclValidityPtr)
 requireDecl _ (DeclDest dest sc ph) = return (sc, dest, ph)
@@ -1198,6 +1359,45 @@ expandOneForm prob stx
           (t, dest) <- requireExpr stx prob
           impl t dest stx
           saveExprType dest t
+        EConstructor ctor -> do
+          ConstructorInfo args dt <- constructorInfo ctor
+          DatatypeInfo arity _ <- datatypeInfo dt
+          case prob of
+            ExprDest t dest -> do
+              argTys <- makeTypeMetas arity
+              unify dest t (Ty (TDatatype dt argTys))
+              args' <- for args \a -> inst (Scheme arity a) argTys
+              Stx _ _ (foundName, foundArgs) <- mustBeCons stx
+              _ <- mustBeIdent foundName
+              argDests <-
+                if length foundArgs /= length args'
+                  then throwError $
+                       WrongArgCount stx ctor (length args') (length foundArgs)
+                  else for (zip args' foundArgs) (uncurry schedule)
+              linkExpr dest (CoreCtor ctor argDests)
+              saveExprType dest t
+            PatternDest _exprTy patTy dest -> do
+              Stx _ loc (_cname, patVars) <- mustBeCons stx
+              tyArgs <- makeTypeMetas arity
+              argTypes <- for args \ a -> do
+                            t <- inst (Scheme arity a) tyArgs
+                            trivialScheme t
+              unify loc (Ty (TDatatype dt tyArgs)) patTy
+              if length patVars /= length argTypes
+                then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
+                else do
+                  varInfo <- traverse prepareVar patVars
+                  modifyState $
+                    set (expanderPatternBinders . at dest) $
+                    Just [ (sc, name, x, t)
+                         | ((sc, name, x), t) <- zip varInfo argTypes
+                         ]
+                  linkPattern dest $
+                    ConstructorPattern ctor [ (varStx, var)
+                                            | (_, varStx, var) <- varInfo
+                                            ]
+            other ->
+              throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
         EPrimModuleMacro _ ->
           throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
         EPrimDeclMacro impl -> do
@@ -1215,7 +1415,9 @@ expandOneForm prob stx
             Sig _ -> error "Impossible - signal not ident"
             Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
-
+        ETypeVar i -> do
+          dest <- requireType stx prob
+          linkType dest (TSchemaVar i)
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpr stx prob
           forkAwaitingDefn x n b d t dest stx
@@ -1252,7 +1454,10 @@ expandOneForm prob stx
     case prob of
       DeclDest _ _ _ ->
         throwError $ InternalError "All declarations should be identifier-headed"
-      TypeDest _dest -> throwError $ NotValidType stx
+      TypeDest _dest ->
+        throwError $ NotValidType stx
+      PatternDest _ _ _ ->
+        throwError $ InternalError "All patterns should be identifier-headed"
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
@@ -1350,10 +1555,17 @@ interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
 
+class UnificationErrorBlame a where
+  getBlameLoc :: a -> Expand (Maybe SrcLoc)
 
+instance UnificationErrorBlame SrcLoc where
+  getBlameLoc = pure . pure
+
+instance UnificationErrorBlame SplitCorePtr where
+  getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
 
 -- The expected type is first, the received is second
-unify :: SplitCorePtr -> Ty -> Ty -> Expand ()
+unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
 unify blame t1 t2 = do
   t1' <- normType t1
   t2' <- normType t2
@@ -1365,11 +1577,11 @@ unify blame t1 t2 = do
     unify' TBool TBool = pure ()
     unify' TUnit TUnit = pure ()
     unify' TSyntax TSyntax = pure ()
-    unify' TIdent TIdent = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
     unify' (TMacro a) (TMacro b) = unify blame a b
-    unify' (TList a) (TList b) = unify blame a b
+    unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
+      | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
 
     -- Flex-flex
     unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
@@ -1385,5 +1597,5 @@ unify blame t1 t2 = do
 
     -- Mismatch
     unify' expected received = do
-      loc <- view (expanderOriginLocations . at blame) <$> getState
+      loc <- getBlameLoc blame
       throwError $ TypeMismatch loc (Ty expected) (Ty received)

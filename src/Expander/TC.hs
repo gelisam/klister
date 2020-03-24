@@ -50,7 +50,8 @@ normAll t =
   \case
     (Ty (TFun a b)) -> TFun <$> normType a <*> normType b
     (Ty (TMacro a)) -> TMacro <$> normType a
-    (Ty (TList a)) -> TList <$> normType a
+    (Ty (TDatatype dt tArgs)) ->
+      TDatatype dt <$> traverse normType tArgs
     other -> pure (unTy other)
 
 metas :: Ty -> Expand [MetaPtr]
@@ -60,7 +61,7 @@ metas t =
     Ty (TMetaVar x) -> pure [x]
     Ty (TFun a b) -> (++) <$> metas a <*> metas b
     Ty (TMacro a) -> metas a
-    Ty (TList a) -> metas a
+    Ty (TDatatype _ ts) -> concat <$> traverse metas ts
     _ -> pure []
 
 occursCheck :: MetaPtr -> Ty -> Expand ()
@@ -96,7 +97,8 @@ freshMeta = do
 
 inst :: Scheme Ty -> [Ty] -> Expand Ty
 inst (Scheme n ty) ts
-  | length ts /= fromIntegral n = throwError $ InternalError "Mismatch in number of type vars"
+  | length ts /= fromIntegral n =
+    throwError $ InternalError "Mismatch in number of type vars"
   | otherwise = instNorm ty
   where
     instNorm t = do
@@ -105,7 +107,7 @@ inst (Scheme n ty) ts
 
     inst' (TFun a b) = TFun <$> instNorm a <*> instNorm b
     inst' (TMacro a) = TMacro <$> instNorm a
-    inst' (TList a) = TList <$> instNorm a
+    inst' (TDatatype dt tArgs) = TDatatype dt <$> traverse instNorm tArgs
     inst' (TSchemaVar i) = pure . unTy $ ts !! fromIntegral i
     inst' otherTy = pure otherTy
 
@@ -155,12 +157,12 @@ generalizeType ty = do
     genVars _ TUnit = pure TUnit
     genVars _ TBool = pure TBool
     genVars _ TSyntax = pure TSyntax
-    genVars _ TIdent = pure TIdent
     genVars _ TSignal = pure TSignal
     genVars vars (TFun dom ran) =
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
     genVars vars (TMacro a) = TMacro <$> genTyVars vars a
-    genVars vars (TList a) = TList <$> genTyVars vars a
+    genVars vars (TDatatype d args) =
+      TDatatype d <$> traverse (genTyVars vars) args
     genVars _ (TSchemaVar _) =
       throwError $ InternalError "Can't generalize in schema"
     genVars vars (TMetaVar v)
@@ -172,3 +174,10 @@ generalizeType ty = do
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
+
+
+makeTypeMetas :: Natural -> Expand [Ty]
+makeTypeMetas 0 =
+  pure []
+makeTypeMetas n =
+  (:) <$> (Ty . TMetaVar <$> freshMeta) <*> makeTypeMetas (n - 1)

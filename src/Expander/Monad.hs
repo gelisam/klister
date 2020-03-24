@@ -9,11 +9,15 @@ module Expander.Monad
   , module Expander.DeclScope
   -- * The expander monad
   , Expand(..)
+  , constructorInfo
   , currentPhase
   , currentBindingLevel
+  , datatypeInfo
   , inTypeBinder
   , dependencies
   , execExpand
+  , freshConstructor
+  , freshDatatype
   , freshScope
   , freshVar
   , freshMacroVar
@@ -28,11 +32,13 @@ module Expander.Monad
   , linkedType
   , linkDecl
   , linkExpr
+  , linkPattern
   , linkType
   , linkScheme
   , modifyState
   , moduleScope
   , newDeclValidityPtr
+  , nowValidAt
   , phaseRoot
   , saveExprType
   , saveOrigin
@@ -51,6 +57,7 @@ module Expander.Monad
   , forkAwaitingSignal
   , forkAwaitingType
   , forkContinueMacroAction
+  , forkEstablishConstructors
   , forkExpandSyntax
   , forkExpandType
   , forkGeneralizeType
@@ -73,11 +80,14 @@ module Expander.Monad
   -- ** Lenses
   , expanderGlobalBindingTable
   , expanderCompletedCore
+  , expanderCompletedPatterns
   , expanderCompletedDecls
   , expanderCompletedTypes
   , expanderCompletedModBody
   , expanderCompletedSchemes
   , expanderCurrentBindingTable
+  , expanderCurrentConstructors
+  , expanderCurrentDatatypes
   , expanderCurrentEnvs
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
@@ -92,6 +102,7 @@ module Expander.Monad
   , expanderModuleName
   , expanderModuleTop
   , expanderOriginLocations
+  , expanderPatternBinders
   , expanderReceivedSignals
   , expanderVarTypes
   , expanderTasks
@@ -101,6 +112,8 @@ module Expander.Monad
   , newTaskID
   ) where
 
+import Control.Applicative
+import Control.Arrow
 import Control.Lens
 import Control.Monad.Except
 import Control.Monad.Reader
@@ -114,10 +127,12 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Data.Unique
+import Numeric.Natural
 
 import Binding
 import Control.Lens.IORef
 import Core
+import Datatype
 import Env
 import Expander.DeclScope
 import Expander.Error
@@ -171,9 +186,12 @@ data EValue
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
+  | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
+  | EConstructor !Constructor
+  -- ^ Constructor identity, elaboration procedure
 
 data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
@@ -210,10 +228,12 @@ data ExpanderState = ExpanderState
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
-  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF SplitCorePtr))
+  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF PatternPtr SplitCorePtr))
+  , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
+  , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SchemePtr DeclPtr SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
@@ -224,6 +244,8 @@ data ExpanderState = ExpanderState
   , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
+  , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
+  , _expanderCurrentConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
   , _expanderCurrentBindingTable :: !BindingTable
   , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
   , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
@@ -241,6 +263,8 @@ initExpanderState = ExpanderState
   , _expanderTasks = []
   , _expanderOriginLocations = Map.empty
   , _expanderCompletedCore = Map.empty
+  , _expanderCompletedPatterns = Map.empty
+  , _expanderPatternBinders = Map.empty
   , _expanderCompletedTypes = Map.empty
   , _expanderCompletedModBody = Map.empty
   , _expanderCompletedDecls = Map.empty
@@ -254,6 +278,8 @@ initExpanderState = ExpanderState
   , _expanderDeclPhases = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
+  , _expanderCurrentDatatypes = Map.empty
+  , _expanderCurrentConstructors = Map.empty
   , _expanderCurrentBindingTable = mempty
   , _expanderExpressionTypes = Map.empty
   , _expanderCompletedSchemes = Map.empty
@@ -331,11 +357,15 @@ makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
 makePrisms ''ExpanderTask
 
-linkExpr :: SplitCorePtr -> CoreF SplitCorePtr -> Expand ()
+linkExpr :: SplitCorePtr -> CoreF PatternPtr SplitCorePtr -> Expand ()
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
-linkDecl :: DeclPtr -> Decl SchemePtr DeclPtr SplitCorePtr -> Expand ()
+linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
+linkPattern dest pat =
+  modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
+
+linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
@@ -347,14 +377,16 @@ linkScheme :: SchemePtr -> Scheme Ty -> Expand ()
 linkScheme ptr sch =
   modifyState $ over expanderCompletedSchemes (<> Map.singleton ptr sch)
 
-linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF SplitCorePtr))
+linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF PatternPtr SplitCorePtr))
 linkStatus slot = do
   complete <- view expanderCompletedCore <$> getState
   return $ Map.lookup slot complete
 
 linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
-  runPartialCore . unsplit . SplitCore slot . view expanderCompletedCore <$>
+  runPartialCore . unsplit .
+  uncurry (SplitCore slot) .
+  (view expanderCompletedCore &&& view expanderCompletedPatterns) <$>
   getState
 
 linkedType :: SplitTypePtr -> Expand (Maybe Ty)
@@ -425,6 +457,12 @@ forkAwaitingDefn ::
 forkAwaitingDefn x n b defn t dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
+forkEstablishConstructors ::
+  DeclValidityPtr ->
+  Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
+  Expand ()
+forkEstablishConstructors pdest dt ctors =
+  forkExpanderTask $ EstablishConstructors pdest dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -469,7 +507,7 @@ getDecl ptr =
     Just decl -> flattenDecl decl
   where
     flattenDecl ::
-      Decl SchemePtr DeclPtr SplitCorePtr ->
+      Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr ->
       Expand (CompleteDecl)
     flattenDecl (Define x v schPtr e) =
       linkedCore e >>=
@@ -487,9 +525,25 @@ getDecl ptr =
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
+    flattenDecl (Data x dn arity ctors) =
+      CompleteDecl . Data x dn arity <$> traverse flattenCtor ctors
+        where
+          flattenCtor ::
+            (Ident, Constructor, [SplitTypePtr]) ->
+            Expand (Ident, Constructor, [Ty])
+          flattenCtor (ident, cn, args) = do
+            args' <- for args $
+                       \ptr' ->
+                         linkedType ptr' >>=
+                         \case
+                           Nothing ->
+                             throwError $ InternalError "Missing type after expansion"
+                           Just argTy ->
+                             pure argTy
+            pure (ident, cn, args')
     flattenDecl (Meta d) =
       CompleteDecl . Meta <$> getDecl d
-    flattenDecl (Example schPtr e) =
+    flattenDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -497,7 +551,7 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Example sch e'
+            Just sch -> pure $ CompleteDecl $ Example loc sch e'
     flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
     flattenDecl (Export x) = return $ CompleteDecl $ Export x
 
@@ -562,3 +616,60 @@ isExprChecked dest = do
 saveOrigin :: SplitCorePtr -> SrcLoc -> Expand ()
 saveOrigin ptr loc =
   modifyState $ set (expanderOriginLocations . at ptr) (Just loc)
+
+freshDatatype :: Ident -> Expand Datatype
+freshDatatype (Stx _ _ hint) = do
+  ph <- currentPhase
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
+  go ph mn Nothing
+
+  where
+    go :: Phase -> ModuleName -> Maybe Natural -> Expand Datatype
+    go ph mn n = do
+      let attempt = hint <> maybe "" (T.pack . show) n
+      let candidate = Datatype { _datatypeName = DatatypeName attempt, _datatypeModule = mn }
+      found <- view (expanderCurrentDatatypes . at ph . non Map.empty . at candidate) <$> getState
+      case found of
+        Nothing -> return candidate
+        Just _ -> go ph mn (Just (maybe 0 (1+) n))
+
+freshConstructor :: Ident -> Expand Constructor
+freshConstructor (Stx _ _ hint) = do
+  ph <- currentPhase
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
+  go ph mn Nothing
+
+  where
+    go :: Phase -> ModuleName -> Maybe Natural -> Expand Constructor
+    go ph mn n = do
+      let attempt = hint <> maybe "" (T.pack . show) n
+      let candidate = Constructor { _constructorName = ConstructorName attempt, _constructorModule = mn }
+      found <- view (expanderCurrentConstructors . at ph . non Map.empty . at candidate) <$> getState
+      case found of
+        Nothing -> return candidate
+        Just _ -> go ph mn (Just (maybe 0 (1+) n))
+
+constructorInfo :: Constructor -> Expand (ConstructorInfo Ty)
+constructorInfo ctor = do
+  p <- currentPhase
+  fromWorld <- view (expanderWorld . worldConstructors . at p . non Map.empty . at ctor) <$> getState
+  fromModule <- view (expanderCurrentConstructors . at p . non Map.empty . at ctor) <$> getState
+  case fromWorld <|> fromModule of
+    Nothing ->
+      throwError $ InternalError $ "Unknown constructor " ++ show ctor
+    Just info -> pure info
+
+datatypeInfo :: Datatype -> Expand DatatypeInfo
+datatypeInfo datatype = do
+  p <- currentPhase
+  fromWorld <- view (expanderWorld . worldDatatypes . at p . non Map.empty . at datatype) <$> getState
+  fromModule <- view (expanderCurrentDatatypes . at p . non Map.empty . at datatype) <$> getState
+  case fromWorld <|> fromModule of
+    Nothing ->
+      throwError $ InternalError $ "Unknown datatype " ++ show datatype
+    Just info -> pure info
+
+
+nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
+nowValidAt ptr p =
+  modifyState $ over expanderDeclPhases $ Map.insert ptr p

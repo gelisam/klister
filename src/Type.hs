@@ -11,6 +11,8 @@ import Data.Map (Map)
 import Data.Unique
 import Numeric.Natural
 
+import Datatype
+
 newtype MetaPtr = MetaPtr Unique deriving (Eq, Ord)
 
 newMetaPtr :: IO MetaPtr
@@ -23,11 +25,10 @@ data TyF t
   = TUnit
   | TBool
   | TSyntax
-  | TIdent
   | TSignal
   | TFun t t
   | TMacro t
-  | TList t
+  | TDatatype Datatype [t]
   | TSchemaVar Natural
   | TMetaVar MetaPtr
   deriving (Eq, Foldable, Functor, Show, Traversable)

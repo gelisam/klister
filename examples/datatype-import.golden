@@ -1,0 +1,1 @@
+(add1 (add1 (add1 (add1 (add1 (zero)))))) : Nat

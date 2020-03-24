@@ -1,0 +1,54 @@
+#lang "n-ary-app.kl"
+(import "defun.kl")
+(import (shift "n-ary-app.kl" 1))
+(import (shift "lispy-do.kl" 1))
+(import (shift "let.kl" 1))
+(import (shift (only "list.kl" map) 1))
+
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(defun snoc (xs x)
+  (case xs
+    [(nil) (:: x (nil))]
+    [(:: y ys) (:: y (snoc ys x))]))
+
+(defun reverse (xs)
+  (case xs
+    [(nil) (nil)]
+    [(:: x xs) (snoc (reverse xs) x)]))
+
+(define-macros
+  ([list
+     (lambda (stx)
+       (syntax-case stx
+         [(cons _ more)
+          (syntax-case more
+           [()
+            (pure (replace-loc more '(nil)))]
+           [(cons x xs)
+            (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
+
+(example (reverse (:: 1 (:: 2 (:: 3 (nil))))))
+
+(example (reverse (list 1 2 3)))
+
+(define-macros
+  ([null (lambda (stx) (pure '(nil)))]))
+
+(define-macros
+  ([head
+    (lambda (stx)
+     (syntax-case stx
+       [(list (_ x))
+        (pure (quasiquote/loc stx (:: ,x xs)))]))]))
+
+(example (case (reverse null) [null 'a]))
+
+(example (case (reverse (list 1 2 3)) [(head x) x]))
+
+
+
+         

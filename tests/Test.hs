@@ -269,9 +269,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/id-compare.kl"
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _ _) -> True; _ -> False}) &
+              filter (\case {(Example _ _ _) -> True; _ -> False}) &
               \case
-                [Example _ e1, Example _ e2] -> do
+                [Example _ _ e1, Example _ _ e2] -> do
                   assertAlphaEq "first example" e1 (Core (CoreBool True))
                   assertAlphaEq "second example" e2 (Core (CoreBool False))
                 _ -> assertFailure "Expected two examples"
@@ -280,7 +280,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Define _fn fv _t fbody, Example _ e] -> do
+                [Define _fn fv _t fbody, Example _ _ e] -> do
                   fspec <- lam \_x -> lam \ y -> lam \_z -> y
                   assertAlphaEq "definition of f" fbody fspec
                   case e of
@@ -292,9 +292,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/import.kl"
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _ _) -> True; _ -> False}) &
+              filter (\case {(Example _ _ _) -> True; _ -> False}) &
               \case
-                [Example _ e1, Example _ e2] -> do
+                [Example _ _ e1, Example _ _ e2] -> do
                   case e1 of
                     (Core (CoreApp (Core (CoreApp (Core (CoreVar _)) _)) _)) ->
                       pure ()
@@ -313,7 +313,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                 [Import _,
                  Meta (view completeDecl -> Define _ _ _ _),
                  DefineMacros [(_, _, _)],
-                 Example _ ex] ->
+                 Example _ _ ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
                 _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
           )
@@ -321,7 +321,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, DefineMacros [(_, _, _)], Example _ ex] ->
+                [Import _, Import _, DefineMacros [(_, _, _)], Example _ _ ex] ->
                   assertAlphaEq "Example is #f" ex (Core (CoreBool False))
                 _ -> assertFailure "Expected import, import, macro, example"
           )
@@ -342,7 +342,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _, Export _] -> do
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _ _, Export _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
                         other -> assertFailure ("Expected 8 tested examples, 1 untested, and 1 export: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
@@ -367,7 +367,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _, Import _, Define _ fun1 _ firstFun, DefineMacros [_], Define _ fun2 _ secondFun,
-                 Example _ e1, Example _ e2, DefineMacros [_], Example _ e3] -> do
+                 Example _ _ e1, Example _ _ e2, DefineMacros [_], Example _ _ e3] -> do
                   spec1 <- lam \x -> lam \_y -> x
                   spec2 <- lam \_x -> lam \y -> y
                   assertAlphaEq "First fun drops second argument" firstFun spec1
@@ -470,11 +470,11 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
     isEmpty [] = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
-testQuasiquoteExamples :: (Show sch, Show decl) => [Decl sch decl Core] -> IO ()
+testQuasiquoteExamples :: (Show t, Show sch, Show decl) => [Decl t sch decl Core] -> IO ()
 testQuasiquoteExamples examples =
   case examples of
-    [ Example _ e1, Example _ e2, Example _ e3, Example _ e4,
-      Example _ e5, Example _ e6, Example _ e7, Example _ e8 ] -> do
+    [ Example _ _ e1, Example _ _ e2, Example _ _ e3, Example _ _ e4,
+      Example _ _ e5, Example _ _ e6, Example _ _ e7, Example _ _ e8 ] -> do
       case e1 of
         Core (CoreVar _) -> pure ()
         other -> assertFailure ("Expected a var ref, got " ++ show other)
@@ -588,9 +588,9 @@ testFile f p = do
             assertFailure "Expected user module, got kernel"
           Just (Expanded m _) ->
             case Map.lookup mn (view worldEvaluated w) of
-              Nothing -> assertFailure "Module valuees not in its own expansion"
+              Nothing -> assertFailure "Module values not in its own expansion"
               Just evalResults ->
-                p m [val | EvalResult _ _ _ val <- evalResults]
+                p m [val | EvalResult _ _ _ _ val <- evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
@@ -680,7 +680,7 @@ genSyntaxError subgen =
   <$> Gen.list range256 subgen
   <*> subgen
 
-genLam :: (CoreF Bool -> GenT IO a) -> GenT IO (CoreF a)
+genLam :: (CoreF ConstructorPattern Bool -> GenT IO a) -> GenT IO (CoreF ConstructorPattern a)
 genLam subgen = do
   ident <- Gen.generalize genIdent
   var <- genVar
@@ -691,22 +691,22 @@ genLam subgen = do
 -- Subgenerators have access to both a list of identifiers and the knowledge of
 -- which subtree of 'CoreF' they're being asked to generate.
 genCoreF :: forall a.
-  (Maybe (GenT IO Var) -> CoreF Bool -> GenT IO a) {- ^ Generic sub-generator -} ->
+  (Maybe (GenT IO Var) -> CoreF ConstructorPattern Bool -> GenT IO a) {- ^ Generic sub-generator -} ->
   Maybe (GenT IO Var) {- ^ Variable generator -} ->
-  GenT IO (CoreF a)
+  GenT IO (CoreF ConstructorPattern a)
 genCoreF subgen varGen =
   let sameVars = subgen varGen
       -- A unary constructor with no binding
-      unary :: (forall b. b -> CoreF b) -> GenT IO (CoreF a)
+      unary :: (forall b. b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
       unary constructor = constructor <$> sameVars (constructor True)
       -- A binary constructor with no binding
-      binary :: (forall b. b -> b -> CoreF b) -> GenT IO (CoreF a)
+      binary :: (forall b. b -> b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
       binary constructor =
         constructor
         <$> sameVars (constructor True False)
         <*> sameVars (constructor False True)
       -- A ternary constructor with no binding
-      ternary :: (forall b. b -> b -> b -> CoreF b) -> GenT IO (CoreF a)
+      ternary :: (forall b. b -> b -> b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
       ternary constructor =
         constructor
         <$> sameVars (constructor True False False)
@@ -746,7 +746,7 @@ genAnyCore = Core <$> genCoreF (\_varGen _pos -> genAnyCore) (Just genVar)
 -- e.g. @f a@ where @f@ is not a lambda
 genWellScopedCore :: GenT IO Core
 genWellScopedCore =
-  let sub :: Maybe (GenT IO Var) -> CoreF Bool -> GenT IO Core
+  let --sub :: Maybe (GenT IO Var) -> CoreF Bool -> GenT IO Core
       sub vars pos = top $
         case pos of
           CoreLam _ var _ -> Just $ Gen.choice (pure var : maybeToList vars)

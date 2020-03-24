@@ -7,9 +7,13 @@ module Core where
 
 import Control.Lens hiding (elements)
 import Control.Monad
+import Data.Bifunctor.TH
+import Data.List
+import Data.Foldable
 import Data.Unique
 
 import Alpha
+import Datatype
 import Phase
 import ShortShow
 import Signals
@@ -35,14 +39,23 @@ newtype MacroVar = MacroVar Unique
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
-data Pattern
-  = PatternIdentifier Ident Var
-  | PatternEmpty
-  | PatternCons Ident Var Ident Var
-  | PatternList [(Ident, Var)]
-  | PatternAny
+data ConstructorPattern
+  = ConstructorPattern !Constructor [(Ident, Var)]
+  | AnyConstructor Ident Var
   deriving (Eq, Show)
-makePrisms ''Pattern
+makePrisms ''ConstructorPattern
+
+instance Phased ConstructorPattern where
+  shift _ = id
+
+data SyntaxPattern
+  = SyntaxPatternIdentifier Ident Var
+  | SyntaxPatternEmpty
+  | SyntaxPatternCons Ident Var Ident Var
+  | SyntaxPatternList [(Ident, Var)]
+  | SyntaxPatternAny
+  deriving (Eq, Show)
+makePrisms ''SyntaxPattern
 
 data ScopedIdent core = ScopedIdent
   { _scopedIdentIdentifier :: core
@@ -75,12 +88,14 @@ makeLenses ''ScopedList
 data HowEq = Free | Bound
   deriving (Eq, Show)
 
-data CoreF core
+data CoreF pat core
   = CoreVar Var
   | CoreLet Ident Var core core
-  | CoreLetFun Ident Var Ident Var core core  
+  | CoreLetFun Ident Var Ident Var core core
   | CoreLam Ident Var core
   | CoreApp core core
+  | CoreCtor Constructor [core] -- ^ Constructor application
+  | CoreDataCase core [(pat, core)]
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
@@ -90,7 +105,7 @@ data CoreF core
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
   | CoreSyntax Syntax
-  | CoreCase core [(Pattern, core)]
+  | CoreCase core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
   | CoreSignal Signal
   | CoreBool Bool
@@ -102,14 +117,17 @@ data CoreF core
   | CoreReplaceLoc core core
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
+deriveBifunctor ''CoreF
+deriveBifoldable ''CoreF
+deriveBitraversable ''CoreF
 
-instance Phased core => Phased (CoreF core) where
+instance (Phased pat, Phased core) => Phased (CoreF pat core) where
   shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
   shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
-  shift i other = fmap (shift i) other
+  shift i other = bimap (shift i) (shift i) other
 
 newtype Core = Core
-  { unCore :: CoreF Core }
+  { unCore :: CoreF ConstructorPattern Core }
   deriving (Eq, Show)
 makePrisms ''Core
 
@@ -122,7 +140,7 @@ instance AlphaEq a => AlphaEq (SyntaxError a) where
     alphaCheck locations1 locations2
     alphaCheck message1   message2
 
-instance AlphaEq core => AlphaEq (CoreF core) where
+instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
   alphaCheck (CoreVar var1)
              (CoreVar var2) = do
     alphaCheck var1 var2
@@ -191,24 +209,35 @@ instance AlphaEq core => AlphaEq (CoreF core) where
     alphaCheck scopedVec1 scopedVec2
   alphaCheck _ _ = notAlphaEquivalent
 
+
+instance AlphaEq ConstructorPattern where
+  alphaCheck (ConstructorPattern c1 vars1)
+             (ConstructorPattern c2 vars2) = do
+    alphaCheck c1 c2
+    for_ (zip vars1 vars2) (uncurry alphaCheck)
+  alphaCheck (AnyConstructor _ x1)
+             (AnyConstructor _ x2) = do
+    alphaCheck x1 x2
+  alphaCheck _ _ = notAlphaEquivalent
+
 instance AlphaEq Core where
   alphaCheck (Core x1)
              (Core x2) = do
     alphaCheck x1 x2
 
-instance AlphaEq Pattern where
-  alphaCheck (PatternIdentifier _ x1)
-             (PatternIdentifier _ x2) = do
+instance AlphaEq SyntaxPattern where
+  alphaCheck (SyntaxPatternIdentifier _ x1)
+             (SyntaxPatternIdentifier _ x2) = do
     alphaCheck x1 x2
-  alphaCheck PatternEmpty
-             PatternEmpty = do
+  alphaCheck SyntaxPatternEmpty
+             SyntaxPatternEmpty = do
     pure ()
-  alphaCheck (PatternCons _ x1 _ xs1)
-             (PatternCons _ x2 _ xs2) = do
+  alphaCheck (SyntaxPatternCons _ x1 _ xs1)
+             (SyntaxPatternCons _ x2 _ xs2) = do
     alphaCheck x1   x2
     alphaCheck xs1  xs2
-  alphaCheck (PatternList xs1)
-             (PatternList xs2) = do
+  alphaCheck (SyntaxPatternList xs1)
+             (SyntaxPatternList xs2) = do
     alphaCheck (map snd xs1) (map snd xs2)
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -248,7 +277,8 @@ instance ShortShow a => ShortShow (SyntaxError a) where
 instance ShortShow Var where
   shortShow (Var x) = shortShow x
 
-instance ShortShow core => ShortShow (CoreF core) where
+instance (ShortShow pat, ShortShow core) =>
+         ShortShow (CoreF pat core) where
   shortShow (CoreVar var)
     = "(Var "
    ++ shortShow var
@@ -282,6 +312,18 @@ instance ShortShow core => ShortShow (CoreF core) where
    ++ shortShow fun
    ++ " "
    ++ shortShow arg
+   ++ ")"
+  shortShow (CoreCtor ctor args)
+    = "(Ctor "
+   ++ shortShow ctor
+   ++ " "
+   ++ shortShow args
+   ++ ")"
+  shortShow (CoreDataCase scrut cases)
+    = "(DataCase "
+   ++ shortShow scrut
+   ++ " "
+   ++ intercalate ", " (map shortShow cases)
    ++ ")"
   shortShow (CorePure x)
     = "(Pure "
@@ -357,20 +399,28 @@ instance ShortShow core => ShortShow (CoreF core) where
 instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
-instance ShortShow Pattern where
-  shortShow (PatternIdentifier _ x) = shortShow x
-  shortShow PatternEmpty = "Empty"
-  shortShow (PatternCons _ x _ xs)
+instance ShortShow ConstructorPattern where
+  shortShow (ConstructorPattern ctor vars) =
+    "(" ++ shortShow ctor ++
+    " " ++ intercalate " " (map shortShow vars) ++
+    ")"
+  shortShow (AnyConstructor ident _var) =
+    "(AnyConstructor " ++ shortShow ident ++ " )"
+
+instance ShortShow SyntaxPattern where
+  shortShow (SyntaxPatternIdentifier _ x) = shortShow x
+  shortShow SyntaxPatternEmpty = "Empty"
+  shortShow (SyntaxPatternCons _ x _ xs)
     = "(Cons "
    ++ shortShow x
    ++ " "
    ++ shortShow xs
    ++ ")"
-  shortShow (PatternList xs)
+  shortShow (SyntaxPatternList xs)
     = "(List "
    ++ shortShow (map snd xs)
    ++ ")"
-  shortShow PatternAny = "_"
+  shortShow SyntaxPatternAny = "_"
 
 instance ShortShow core => ShortShow (ScopedIdent core) where
   shortShow (ScopedIdent ident scope)
