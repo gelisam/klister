@@ -495,9 +495,11 @@ getBody ptr =
   (view (expanderCompletedModBody . at ptr) <$> getState) >>=
   \case
     Nothing -> throwError $ InternalError "Incomplete module after expansion"
-    Just Done -> pure []
-    Just (Decl decl next) ->
-      (:) <$> getDecl decl <*> getBody next
+    Just NoDecls -> pure []
+    Just (Decl decl) ->
+      (:[]) <$> getDecl decl
+    Just (Decls l r) ->
+      (++) <$> getBody l <*> getBody r
 
 getDecl :: DeclPtr -> Expand CompleteDecl
 getDecl ptr =

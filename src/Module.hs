@@ -215,7 +215,7 @@ newModBodyPtr :: IO ModBodyPtr
 newModBodyPtr = ModBodyPtr <$> newUnique
 
 
-data ModuleBodyF decl next = Done | Decl decl next
+data ModuleBodyF decl next = NoDecls | Decl decl | Decls next next
 
 data SplitModuleBody a = SplitModuleBody
   { _splitModuleRoot :: ModBodyPtr

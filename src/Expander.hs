@@ -1078,17 +1078,19 @@ forkExpandOneDecl dest sc phaseDest stx = do
 
 forkExpandDecls :: ModBodyPtr -> Syntax -> Expand ()
 forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
-  modifyState $ over expanderCompletedModBody (<> Map.singleton dest Done)
+  modifyState $ over expanderCompletedModBody (<> Map.singleton dest NoDecls)
 forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   -- Create a scope for this new declaration
   sc <- freshScope $ T.pack $ "For declaration at " ++ shortShow (stxLoc d)
-  restDest <- liftIO $ newModBodyPtr
   declDest <- liftIO $ newDeclPtr
+  headDest <- liftIO $ newModBodyPtr
+  tailDest <- liftIO $ newModBodyPtr
   declPhase <- newDeclValidityPtr
-  modifyState $ over expanderCompletedModBody $
-    (<> Map.singleton dest (Decl declDest restDest))
+  modifyState $ over expanderCompletedModBody
+    $ (<> Map.singleton dest (Decls headDest tailDest))
+    . (<> Map.singleton headDest (Decl declDest))
   forkExpanderTask $
-    ExpandMoreDecls restDest sc
+    ExpandMoreDecls tailDest sc
       (Syntax (Stx scs loc (List ds)))
       declPhase
   forkExpandOneDecl declDest sc declPhase =<< addRootScope d
