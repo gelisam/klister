@@ -475,7 +475,7 @@ initializeKernel = do
     declPrims :: [(Text, Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
       [ ( "define"
-        , \ sc dest pdest stx -> do
+        , \ sc dest vp stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
             x <- flip addScope' sc <$> mustBeIdent varStx
@@ -494,10 +494,10 @@ initializeKernel = do
             modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
               Env.insert var x schPtr
             forkGeneralizeType exprDest t schPtr
-            nowValidAt pdest (SpecificPhase p)
+            nowValidAt vp (SpecificPhase p)
         )
       , ( "datatype"
-        , \ sc dest pdest stx -> do
+        , \ sc dest vp stx -> do
             Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
             Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
             Stx _ _ (name, args) <- mustBeCons nameAndArgs
@@ -533,12 +533,12 @@ initializeKernel = do
               Just info
 
 
-            forkEstablishConstructors pdest d ctors
+            forkEstablishConstructors vp d ctors
 
             linkOneDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
         )
       , ( "define-macros"
-        , \ sc dest pdest stx -> do
+        , \ sc dest vp stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
             Stx _ _ macroDefs <- mustBeList macroList
             p <- currentPhase
@@ -554,10 +554,10 @@ initializeKernel = do
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
             linkOneDecl dest $ DefineMacros macros
-            nowValidAt pdest (SpecificPhase p)
+            nowValidAt vp (SpecificPhase p)
         )
       , ( "example"
-        , \ sc dest pdest stx -> do
+        , \ sc dest vp stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
@@ -568,11 +568,11 @@ initializeKernel = do
               forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
               return t
             forkGeneralizeType exprDest t sch
-            nowValidAt pdest (SpecificPhase p)
+            nowValidAt vp (SpecificPhase p)
         )
       , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
-        , \sc dest pdest stx -> do
+        , \sc dest vp stx -> do
             Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
             spec <- importSpec toImport
             modExports <- getImports spec
@@ -580,25 +580,25 @@ initializeKernel = do
               imported <- addRootScope' $ addScope' (Stx scs loc x) sc
               addImportBinding imported b
             linkOneDecl dest (Import spec)
-            nowValidAt pdest AllPhases
+            nowValidAt vp AllPhases
         )
       , ( "export"
-        , \_sc dest pdest stx -> do
+        , \_sc dest vp stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
             p <- currentPhase
             es <- getExports exported
             modifyState $ over expanderModuleExports $ (<> es)
             linkOneDecl dest (Export exported)
-            nowValidAt pdest (SpecificPhase p)
+            nowValidAt vp (SpecificPhase p)
         )
       , ( "meta"
-        , \sc dest pdest stx -> do
+        , \sc dest vp stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
             subDest <- liftIO newDeclTreePtr
             linkOneDecl dest (Meta subDest)
             inEarlierPhase $
-              forkExpandOneDecl subDest sc pdest =<< addRootScope subDecl
+              forkExpandOneDecl subDest sc vp =<< addRootScope subDecl
         )
       ]
       where
@@ -1128,8 +1128,8 @@ runTask (tid, localData, task) = withLocal localData $ do
       case dest of
         ExprDest t d ->
           expandOneExpression t d stx
-        DeclTreeDest d sc ph ->
-          expandOneDeclTreeNode sc d stx ph
+        DeclTreeDest d sc vp ->
+          expandOneDeclTreeNode sc d stx vp
         TypeDest d ->
           expandOneType d stx
         PatternDest exprT scrutT d ->
@@ -1192,10 +1192,10 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just _v -> do
           bind b $ EVarMacro x
           forkExpandSyntax (ExprDest t dest) stx
-    ExpandDeclTree dest sc stx ph ->
-      expandOneDeclTreeNode sc dest stx ph
+    ExpandDeclTree dest sc stx vp ->
+      expandOneDeclTreeNode sc dest stx vp
     ExpandDependentDeclTree dest sc stx waitingOn -> do
-      readyYet <- view (expanderDeclPhases . at waitingOn) <$> getState
+      readyYet <- view (expanderDeclValidities . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
           stillStuck tid task
@@ -1250,7 +1250,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
-    EstablishConstructors pdest dt ctors -> do
+    EstablishConstructors vp dt ctors -> do
       ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
                   perhapsArgs <- sequenceA <$> traverse linkedType argTys
                   pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
@@ -1260,7 +1260,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           for_ ready \(cn, ctor, ts) ->
             addConstructor cn dt ctor ts
           p <- currentPhase
-          nowValidAt pdest (SpecificPhase p)
+          nowValidAt vp (SpecificPhase p)
     AwaitingPattern patPtr ty dest stx -> do
       view (expanderCompletedPatterns . at patPtr) <$> getState >>=
         \case
@@ -1335,7 +1335,7 @@ problemContext (ExprDest _ _) = ExpressionCtx
 problemContext (PatternDest _ _ _) = PatternCaseCtx
 
 requireDeclarationCtx :: Syntax -> MacroDest -> Expand (Scope, DeclTreePtr, DeclValidityPtr)
-requireDeclarationCtx _ (DeclTreeDest dest sc ph) = return (sc, dest, ph)
+requireDeclarationCtx _ (DeclTreeDest dest sc vp) = return (sc, dest, vp)
 requireDeclarationCtx stx other =
   throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
 
@@ -1402,8 +1402,8 @@ expandOneForm prob stx
         EPrimModuleMacro _ ->
           throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
         EPrimDeclMacro impl -> do
-          (sc, dest, ph) <- requireDeclarationCtx stx prob
-          impl sc dest ph stx
+          (sc, dest, vp) <- requireDeclarationCtx stx prob
+          impl sc dest vp stx
         EPrimTypeMacro impl -> do
           dest <- requireTypeCtx stx prob
           impl dest stx
@@ -1475,8 +1475,8 @@ expandOneForm prob stx
 
 
 expandOneDeclTreeNode :: Scope -> DeclTreePtr -> Syntax -> DeclValidityPtr -> Expand ()
-expandOneDeclTreeNode sc dest stx ph =
-  expandOneForm (DeclTreeDest dest sc ph) stx
+expandOneDeclTreeNode sc dest stx vp =
+  expandOneForm (DeclTreeDest dest sc vp) stx
 
 
 -- | Link the destination to a literal signal object

@@ -94,7 +94,7 @@ module Expander.Monad
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
   , expanderTypeStore
-  , expanderDeclPhases
+  , expanderDeclValidities
   , expanderExpansionEnv
   , expanderExpressionTypes
   , expanderKernelBindings
@@ -243,7 +243,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
-  , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
+  , _expanderDeclValidities :: !(Map DeclValidityPtr PhaseSpec)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
@@ -277,7 +277,7 @@ initExpanderState = ExpanderState
   , _expanderModuleRoots = Map.empty
   , _expanderKernelBindings = mempty
   , _expanderKernelExports = noExports
-  , _expanderDeclPhases = Map.empty
+  , _expanderDeclValidities = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
   , _expanderCurrentDatatypes = Map.empty
@@ -473,8 +473,8 @@ forkEstablishConstructors ::
   DeclValidityPtr ->
   Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors pdest dt ctors =
-  forkExpanderTask $ EstablishConstructors pdest dt ctors
+forkEstablishConstructors vp dt ctors =
+  forkExpanderTask $ EstablishConstructors vp dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -686,4 +686,4 @@ datatypeInfo datatype = do
 
 nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
 nowValidAt ptr p =
-  modifyState $ over expanderDeclPhases $ Map.insert ptr p
+  modifyState $ over expanderDeclValidities $ Map.insert ptr p
