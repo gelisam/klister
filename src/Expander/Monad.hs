@@ -518,12 +518,12 @@ getDecl ptr =
   (view (expanderCompletedDecls . at ptr) <$> getState) >>=
   \case
     Nothing -> throwError $ InternalError "Missing decl after expansion"
-    Just decl -> flattenDecl decl
+    Just decl -> zonkDecl decl
   where
-    flattenDecl ::
+    zonkDecl ::
       Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr ->
       Expand (CompleteDecl)
-    flattenDecl (Define x v schPtr e) =
+    zonkDecl (Define x v schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -532,20 +532,20 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing scheme after expansion"
             Just sch -> pure $ CompleteDecl $ Define x v sch e'
-    flattenDecl (DefineMacros macros) =
+    zonkDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
       for macros \(x, v, e) ->
         linkedCore e >>=
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
-    flattenDecl (Data x dn arity ctors) =
-      CompleteDecl . Data x dn arity <$> traverse flattenCtor ctors
+    zonkDecl (Data x dn arity ctors) =
+      CompleteDecl . Data x dn arity <$> traverse zonkCtor ctors
         where
-          flattenCtor ::
+          zonkCtor ::
             (Ident, Constructor, [SplitTypePtr]) ->
             Expand (Ident, Constructor, [Ty])
-          flattenCtor (ident, cn, args) = do
+          zonkCtor (ident, cn, args) = do
             args' <- for args $
                        \ptr' ->
                          linkedType ptr' >>=
@@ -555,9 +555,9 @@ getDecl ptr =
                            Just argTy ->
                              pure argTy
             pure (ident, cn, args')
-    flattenDecl (Meta d) =
+    zonkDecl (Meta d) =
       CompleteDecl . Meta <$> getDeclGroup d
-    flattenDecl (Example loc schPtr e) =
+    zonkDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -566,8 +566,8 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
             Just sch -> pure $ CompleteDecl $ Example loc sch e'
-    flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
-    flattenDecl (Export x) = return $ CompleteDecl $ Export x
+    zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
+    zonkDecl (Export x) = return $ CompleteDecl $ Export x
 
 currentBindingLevel :: Expand BindingLevel
 currentBindingLevel = do
