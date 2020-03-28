@@ -23,7 +23,7 @@ import Value
 data MacroDest
   = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
-  | ModBodyDest ModBodyPtr Scope DeclValidityPtr
+  | DeclTreeDest DeclTreePtr Scope DeclValidityPtr
   | PatternDest Ty Ty PatternPtr
     -- ^ expression type, scrutinee type, destination pointer
   deriving Show
@@ -36,10 +36,10 @@ data ExpanderTask
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | AwaitingType SplitTypePtr [AfterTypeTask]
-  | ExpandModBody ModBodyPtr Scope Syntax DeclValidityPtr
+  | ExpandDeclTree DeclTreePtr Scope Syntax DeclValidityPtr
     -- ^ The tree node to fill, the scope, the decls, and how to notify that all
     -- the names have been bound.
-  | ExpandDependentModBody ModBodyPtr Scope Syntax DeclValidityPtr
+  | ExpandDependentDeclTree DeclTreePtr Scope Syntax DeclValidityPtr
     -- ^ Depends on the binding of the names in DeclValidityPtr
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
@@ -91,8 +91,8 @@ instance ShortShow ExpanderTask where
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
-  shortShow (ExpandModBody _dest _sc stx ptr) = "(ExpandModBody " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
-  shortShow (ExpandDependentModBody _dest _sc stx ptr) = "(ExpandDependentModBody " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
+  shortShow (ExpandDeclTree _dest _sc stx ptr) = "(ExpandDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
+  shortShow (ExpandDependentDeclTree _dest _sc stx ptr) = "(ExpandDependentDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"

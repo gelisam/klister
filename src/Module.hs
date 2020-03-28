@@ -25,10 +25,10 @@ module Module (
   , forExports_
   , ModulePtr
   , newModulePtr
-  , ModBodyPtr
-  , newModBodyPtr
-  , ModuleBodyF(..)
-  , SplitModuleBody(..)
+  , DeclTreePtr
+  , newDeclTreePtr
+  , DeclTreeF(..)
+  , SplitDeclTree(..)
   , DeclPtr
   , newDeclPtr
   , BindingTable
@@ -205,21 +205,24 @@ instance Bifunctor (Decl ty scheme) where
 instance (Phased decl, Phased expr) => Phased (Decl ty scheme decl expr) where
   shift i = bimap (shift i) (shift i)
 
-newtype ModBodyPtr = ModBodyPtr Unique
+newtype DeclTreePtr = DeclTreePtr Unique
   deriving (Eq, Ord)
 
-instance Show ModBodyPtr where
-  show (ModBodyPtr u) = "(ModBodyPtr " ++ show (hashUnique u) ++ ")"
+instance Show DeclTreePtr where
+  show (DeclTreePtr u) = "(DeclTreePtr " ++ show (hashUnique u) ++ ")"
 
-newModBodyPtr :: IO ModBodyPtr
-newModBodyPtr = ModBodyPtr <$> newUnique
+newDeclTreePtr :: IO DeclTreePtr
+newDeclTreePtr = DeclTreePtr <$> newUnique
 
 
-data ModuleBodyF decl next = NoDecls | Decl decl | Decls next next
+data DeclTreeF decl next
+  = DeclTreeLeaf
+  | DeclTreeAtom decl
+  | DeclTreeBranch next next
 
-data SplitModuleBody a = SplitModuleBody
-  { _splitModuleRoot :: ModBodyPtr
-  , _splitModuleDescendents :: Map ModBodyPtr (ModuleBodyF a ModBodyPtr)
+data SplitDeclTree a = SplitDeclTree
+  { _splitDeclTreeRoot :: DeclTreePtr
+  , _splitDeclTreeDescendents :: Map DeclTreePtr (DeclTreeF a DeclTreePtr)
   }
 
 makeLenses ''CompleteDecl

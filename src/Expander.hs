@@ -115,12 +115,12 @@ expandModule thisMod src = do
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
-    modBodyDest <- liftIO $ newModBodyPtr
-    modifyState $ set expanderModuleTop $ Just modBodyDest
+    declTreeDest <- liftIO $ newDeclTreePtr
+    modifyState $ set expanderModuleTop $ Just declTreeDest
     decls <- addModuleScope (view moduleContents src)
-    forkExpandDecls modBodyDest decls
+    forkExpandDecls declTreeDest decls
     expandTasks
-    body <- getBody modBodyDest
+    body <- getDeclGroup declTreeDest
     let modName = view moduleSource src
     let theModule = Module { _moduleName = modName
                            , _moduleImports = noImports
@@ -458,7 +458,7 @@ initializeKernel = do
               Just _ ->
                 error "TODO throw real error - already expanding a module"
               Nothing -> do
-                bodyPtr <- liftIO newModBodyPtr
+                bodyPtr <- liftIO newDeclTreePtr
                 modifyState $ set expanderModuleTop (Just bodyPtr)
                 Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustHaveEntries stx
                 _actualName <- mustBeIdent name
@@ -472,7 +472,7 @@ initializeKernel = do
         )
       ]
 
-    declPrims :: [(Text, Scope -> ModBodyPtr -> DeclValidityPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
       [ ( "define"
         , \ sc dest pdest stx -> do
@@ -595,7 +595,7 @@ initializeKernel = do
       , ( "meta"
         , \sc dest pdest stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
-            subDest <- liftIO newModBodyPtr
+            subDest <- liftIO newDeclTreePtr
             linkOneDecl dest (Meta subDest)
             inEarlierPhase $
               forkExpandOneDecl subDest sc pdest =<< addRootScope subDecl
@@ -986,7 +986,7 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
-    addDeclPrimitive :: Text -> (Scope -> ModBodyPtr -> DeclValidityPtr -> Syntax -> Expand ()) -> Expand ()
+    addDeclPrimitive :: Text -> (Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ()) -> Expand ()
     addDeclPrimitive name impl = do
       let val = EPrimDeclMacro impl
       b <- freshBinding
@@ -1074,22 +1074,22 @@ addRootScope' stx = do
   return (addScope' stx rsc)
 
 
-forkExpandOneDecl :: ModBodyPtr -> Scope -> DeclValidityPtr -> Syntax -> Expand ()
+forkExpandOneDecl :: DeclTreePtr -> Scope -> DeclValidityPtr -> Syntax -> Expand ()
 forkExpandOneDecl dest sc declValidityPtr stx = do
-  forkExpanderTask $ ExpandModBody dest sc stx declValidityPtr
+  forkExpanderTask $ ExpandDeclTree dest sc stx declValidityPtr
 
-forkExpandDecls :: ModBodyPtr -> Syntax -> Expand ()
+forkExpandDecls :: DeclTreePtr -> Syntax -> Expand ()
 forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
-  linkModBody dest NoDecls
+  linkDeclTree dest DeclTreeLeaf
 forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   -- Create a scope for this new declaration
   sc <- freshScope $ T.pack $ "For declaration at " ++ shortShow (stxLoc d)
-  carDest <- liftIO $ newModBodyPtr
-  cdrDest <- liftIO $ newModBodyPtr
+  carDest <- liftIO $ newDeclTreePtr
+  cdrDest <- liftIO $ newDeclTreePtr
   declValidityPtr <- newDeclValidityPtr
-  linkModBody dest (Decls carDest cdrDest)
+  linkDeclTree dest (DeclTreeBranch carDest cdrDest)
   forkExpanderTask $
-    ExpandDependentModBody cdrDest sc
+    ExpandDependentDeclTree cdrDest sc
       (Syntax (Stx scs loc (List ds)))
       declValidityPtr
   forkExpandOneDecl carDest sc declValidityPtr =<< addRootScope d
@@ -1128,8 +1128,8 @@ runTask (tid, localData, task) = withLocal localData $ do
       case dest of
         ExprDest t d ->
           expandOneExpression t d stx
-        ModBodyDest d sc ph ->
-          expandOneModuleBodyNode sc d stx ph
+        DeclTreeDest d sc ph ->
+          expandOneDeclTreeNode sc d stx ph
         TypeDest d ->
           expandOneType d stx
         PatternDest exprT scrutT d ->
@@ -1192,9 +1192,9 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just _v -> do
           bind b $ EVarMacro x
           forkExpandSyntax (ExprDest t dest) stx
-    ExpandModBody dest sc stx ph ->
-      expandOneModuleBodyNode sc dest stx ph
-    ExpandDependentModBody dest sc stx waitingOn -> do
+    ExpandDeclTree dest sc stx ph ->
+      expandOneDeclTreeNode sc dest stx ph
+    ExpandDependentDeclTree dest sc stx waitingOn -> do
       readyYet <- view (expanderDeclPhases . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
@@ -1329,13 +1329,13 @@ addApp ctor (Syntax (Stx scs loc _)) args =
     app = Syntax (Stx scs loc (Id "#%app"))
 
 problemContext :: MacroDest -> MacroContext
-problemContext (ModBodyDest _ _ _) = DeclarationCtx
+problemContext (DeclTreeDest _ _ _) = DeclarationCtx
 problemContext (TypeDest _) = TypeCtx
 problemContext (ExprDest _ _) = ExpressionCtx
 problemContext (PatternDest _ _ _) = PatternCaseCtx
 
-requireDeclarationCtx :: Syntax -> MacroDest -> Expand (Scope, ModBodyPtr, DeclValidityPtr)
-requireDeclarationCtx _ (ModBodyDest dest sc ph) = return (sc, dest, ph)
+requireDeclarationCtx :: Syntax -> MacroDest -> Expand (Scope, DeclTreePtr, DeclValidityPtr)
+requireDeclarationCtx _ (DeclTreeDest dest sc ph) = return (sc, dest, ph)
 requireDeclarationCtx stx other =
   throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
 
@@ -1453,7 +1453,7 @@ expandOneForm prob stx
             Just other -> throwError $ ValueNotMacro other
   | otherwise =
     case prob of
-      ModBodyDest _ _ _ ->
+      DeclTreeDest _ _ _ ->
         throwError $ InternalError "All declarations should be identifier-headed"
       TypeDest _dest ->
         throwError $ NotValidType stx
@@ -1474,9 +1474,9 @@ expandOneForm prob stx
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 
-expandOneModuleBodyNode :: Scope -> ModBodyPtr -> Syntax -> DeclValidityPtr -> Expand ()
-expandOneModuleBodyNode sc dest stx ph =
-  expandOneForm (ModBodyDest dest sc ph) stx
+expandOneDeclTreeNode :: Scope -> DeclTreePtr -> Syntax -> DeclValidityPtr -> Expand ()
+expandOneDeclTreeNode sc dest stx ph =
+  expandOneForm (DeclTreeDest dest sc ph) stx
 
 
 -- | Link the destination to a literal signal object
