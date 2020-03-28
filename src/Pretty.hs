@@ -241,6 +241,16 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedList core) where
 instance PrettyBinder VarInfo CompleteDecl where
   ppBind env (CompleteDecl d) = ppBind env d
 
+instance PrettyBinder VarInfo [CompleteDecl] where
+  ppBind env [] = (text "no-decls", env)
+  ppBind env [decl] = ppBind env decl
+  ppBind env decls =
+    let (docs, envs) = unzip $ fmap (ppBind env) decls
+        doc = align $ group $ vsep docs
+        env' = mconcat envs
+    in (text "group" <> doc, env')
+
+
 instance Pretty VarInfo (Scheme Ty) where
   pp env (Scheme 0 t) =
     pp env t

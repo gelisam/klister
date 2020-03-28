@@ -151,7 +151,7 @@ data Module f a = Module
 makeLenses ''Module
 
 
-newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) CompleteDecl Core }
+newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) [CompleteDecl] Core }
   deriving Show
 
 instance Phased CompleteDecl where

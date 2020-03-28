@@ -30,7 +30,9 @@ module Expander.Monad
   , linkedCore
   , linkedScheme
   , linkedType
+  , linkModBody
   , linkDecl
+  , linkOneDecl
   , linkExpr
   , linkPattern
   , linkType
@@ -184,7 +186,7 @@ data EValue
   = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (Scope -> ModBodyPtr -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
@@ -233,7 +235,7 @@ data ExpanderState = ExpanderState
   , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr ModBodyPtr SplitCorePtr))
   , _expanderModuleTop :: !(Maybe ModBodyPtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
@@ -365,9 +367,19 @@ linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 
-linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr -> Expand ()
+linkModBody :: ModBodyPtr -> ModuleBodyF DeclPtr ModBodyPtr -> Expand ()
+linkModBody dest moduleBodyF =
+  modifyState $ over expanderCompletedModBody $ (<> Map.singleton dest moduleBodyF)
+
+linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr ModBodyPtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
+
+linkOneDecl :: ModBodyPtr -> Decl SplitTypePtr SchemePtr ModBodyPtr SplitCorePtr -> Expand ()
+linkOneDecl modBodyDest decl = do
+  declDest <- liftIO newDeclPtr
+  linkDecl declDest decl
+  linkModBody modBodyDest (Decl declDest)
 
 linkType :: SplitTypePtr -> TyF SplitTypePtr -> Expand ()
 linkType dest ty =
@@ -446,9 +458,9 @@ forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDeclMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> ModBodyPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
 forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
-  forkExpanderTask $ AwaitingMacro (DeclDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
+  forkExpanderTask $ AwaitingMacro (ModBodyDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -509,7 +521,7 @@ getDecl ptr =
     Just decl -> flattenDecl decl
   where
     flattenDecl ::
-      Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr ->
+      Decl SplitTypePtr SchemePtr ModBodyPtr SplitCorePtr ->
       Expand (CompleteDecl)
     flattenDecl (Define x v schPtr e) =
       linkedCore e >>=
@@ -544,7 +556,7 @@ getDecl ptr =
                              pure argTy
             pure (ident, cn, args')
     flattenDecl (Meta d) =
-      CompleteDecl . Meta <$> getDecl d
+      CompleteDecl . Meta <$> getBody d
     flattenDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case

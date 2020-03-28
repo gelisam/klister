@@ -311,7 +311,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _,
-                 Meta (view completeDecl -> Define _ _ _ _),
+                 Meta [view completeDecl -> Define _ _ _ _],
                  DefineMacros [(_, _, _)],
                  Example _ _ ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
