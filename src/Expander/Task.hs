@@ -37,10 +37,9 @@ data ExpanderTask
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | AwaitingType SplitTypePtr [AfterTypeTask]
   | ExpandDeclTree DeclTreePtr Scope Syntax DeclValidityPtr
-    -- ^ The tree node to fill, the scope, the decls, and how to notify that all
-    -- the names have been bound.
-  | ExpandDependentDeclTree DeclTreePtr Scope Syntax DeclValidityPtr
-    -- ^ Depends on the binding of the names in DeclValidityPtr
+    -- ^ The tree node to fill, the scope, the decls, and the output environment.
+  | ExpandDependentDeclTree DeclTreePtr Syntax DeclValidityPtr
+    -- ^ The tree node to fill, the decls, and the input environment.
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
@@ -48,7 +47,7 @@ data ExpanderTask
     -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
-  | EstablishConstructors DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
+  | EstablishConstructors Scope DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
   | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
   deriving (Show)
 
@@ -92,13 +91,13 @@ instance ShortShow ExpanderTask where
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
   shortShow (ExpandDeclTree _dest _sc stx ptr) = "(ExpandDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
-  shortShow (ExpandDependentDeclTree _dest _sc stx ptr) = "(ExpandDependentDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
+  shortShow (ExpandDependentDeclTree _dest stx ptr) = "(ExpandDependentDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
   shortShow (GeneralizeType e _ _) = "(GeneralizeType " ++ show e ++ " _ _)"
   shortShow (ExpandVar t d x v) = "(ExpandVar " ++ show t ++ " " ++ show d ++ " " ++ show x ++ " " ++ show v ++ ")"
-  shortShow (EstablishConstructors _ dt _) = "(EstablishConstructors " ++ show dt ++ ")"
+  shortShow (EstablishConstructors _ _ dt _) = "(EstablishConstructors " ++ show dt ++ ")"
   shortShow (AwaitingPattern _ _ _ _) = "(AwaitingPattern _ _ _ _)"
 
 instance Pretty VarInfo ExpanderTask where

@@ -37,10 +37,10 @@ module Expander.Monad
   , linkPattern
   , linkType
   , linkScheme
+  , linkDeclValidity
   , modifyState
   , moduleScope
   , newDeclValidityPtr
-  , nowValidAt
   , phaseRoot
   , saveExprType
   , saveOrigin
@@ -149,6 +149,7 @@ import Signals
 import SplitCore
 import SplitType
 import Scope
+import ScopeSet
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -243,7 +244,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
-  , _expanderDeclValidities :: !(Map DeclValidityPtr PhaseSpec)
+  , _expanderDeclValidities :: !(Map DeclValidityPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
@@ -375,6 +376,10 @@ linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> E
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
+linkDeclValidity :: DeclValidityPtr -> ScopeSet -> Expand ()
+linkDeclValidity dest scopeSet =
+  modifyState $ over expanderDeclValidities $ (<> Map.singleton dest scopeSet)
+
 linkOneDecl :: DeclTreePtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> Expand ()
 linkOneDecl declTreeDest decl = do
   declDest <- liftIO newDeclPtr
@@ -470,11 +475,12 @@ forkAwaitingDefn x n b defn t dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
 forkEstablishConstructors ::
+  Scope ->
   DeclValidityPtr ->
   Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors vp dt ctors =
-  forkExpanderTask $ EstablishConstructors vp dt ctors
+forkEstablishConstructors sc vp dt ctors =
+  forkExpanderTask $ EstablishConstructors sc vp dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -682,8 +688,3 @@ datatypeInfo datatype = do
     Nothing ->
       throwError $ InternalError $ "Unknown datatype " ++ show datatype
     Just info -> pure info
-
-
-nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
-nowValidAt ptr p =
-  modifyState $ over expanderDeclValidities $ Map.insert ptr p

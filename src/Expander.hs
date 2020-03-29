@@ -494,7 +494,7 @@ initializeKernel = do
             modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
               Env.insert var x schPtr
             forkGeneralizeType exprDest t schPtr
-            nowValidAt vp (SpecificPhase p)
+            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
         )
       , ( "datatype"
         , \ sc dest vp stx -> do
@@ -533,7 +533,7 @@ initializeKernel = do
               Just info
 
 
-            forkEstablishConstructors vp d ctors
+            forkEstablishConstructors sc vp d ctors
 
             linkOneDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
         )
@@ -554,7 +554,7 @@ initializeKernel = do
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
             linkOneDecl dest $ DefineMacros macros
-            nowValidAt vp (SpecificPhase p)
+            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
         )
       , ( "example"
         , \ sc dest vp stx -> do
@@ -568,7 +568,7 @@ initializeKernel = do
               forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
               return t
             forkGeneralizeType exprDest t sch
-            nowValidAt vp (SpecificPhase p)
+            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
         )
       , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
@@ -580,17 +580,17 @@ initializeKernel = do
               imported <- addRootScope' $ addScope' (Stx scs loc x) sc
               addImportBinding imported b
             linkOneDecl dest (Import spec)
-            nowValidAt vp AllPhases
+            linkDeclValidity vp (ScopeSet.singleUniversalScope sc)
         )
       , ( "export"
-        , \_sc dest vp stx -> do
+        , \sc dest vp stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
             p <- currentPhase
             es <- getExports exported
             modifyState $ over expanderModuleExports $ (<> es)
             linkOneDecl dest (Export exported)
-            nowValidAt vp (SpecificPhase p)
+            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
         )
       , ( "meta"
         , \sc dest vp stx -> do
@@ -1089,7 +1089,7 @@ forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
   declValidityPtr <- newDeclValidityPtr
   linkDeclTree dest (DeclTreeBranch carDest cdrDest)
   forkExpanderTask $
-    ExpandDependentDeclTree cdrDest sc
+    ExpandDependentDeclTree cdrDest
       (Syntax (Stx scs loc (List ds)))
       declValidityPtr
   forkExpandOneDecl carDest sc declValidityPtr =<< addRootScope d
@@ -1194,15 +1194,13 @@ runTask (tid, localData, task) = withLocal localData $ do
           forkExpandSyntax (ExprDest t dest) stx
     ExpandDeclTree dest sc stx vp ->
       expandOneDeclTreeNode sc dest stx vp
-    ExpandDependentDeclTree dest sc stx waitingOn -> do
+    ExpandDependentDeclTree dest stx waitingOn -> do
       readyYet <- view (expanderDeclValidities . at waitingOn) <$> getState
       case readyYet of
         Nothing ->
           stillStuck tid task
-        Just (SpecificPhase p) ->
-          forkExpandDecls dest (addScope p stx sc)
-        Just AllPhases ->
-          forkExpandDecls dest (addScope' stx sc)
+        Just scopeSet ->
+          forkExpandDecls dest (addScopes stx scopeSet)
     InterpretMacroAction dest act outerKont -> do
       interpretMacroAction act >>= \case
         Left (signal, innerKont) -> do
@@ -1250,7 +1248,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
-    EstablishConstructors vp dt ctors -> do
+    EstablishConstructors sc vp dt ctors -> do
       ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
                   perhapsArgs <- sequenceA <$> traverse linkedType argTys
                   pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
@@ -1260,7 +1258,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           for_ ready \(cn, ctor, ts) ->
             addConstructor cn dt ctor ts
           p <- currentPhase
-          nowValidAt vp (SpecificPhase p)
+          linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
     AwaitingPattern patPtr ty dest stx -> do
       view (expanderCompletedPatterns . at patPtr) <$> getState >>=
         \case

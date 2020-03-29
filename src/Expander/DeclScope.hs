@@ -2,11 +2,13 @@ module Expander.DeclScope where
 
 import Data.Unique
 
--- | A 'DeclValidityPtr' gets filled once we know at which phases an identifier
--- is bound (but before we know exactly what it is that this identifier is
--- bound to). In order to determine what a given identifier means, we must wait
--- until all the declarations listed earlier in the file have had their
--- 'DeclValidityPtr's filled.
+-- | A 'DeclValidityPtr' gets filled with a 'ScopeSet' representing an
+-- environment. Each 'Scope' in this 'ScopeSet' corresponds to an identifier
+-- which is bound in that environment, and the 'ScopeSet' indicates the phase
+-- or phases in which each 'Scope' is valid.
+--
+-- Note that 'DeclValidityPtr' gets filled once we know which _names_ get
+-- bound, the values to which they are bound may not be fully-expanded yet.
 newtype DeclValidityPtr = DeclValidityPtr Unique
   deriving (Eq, Ord)
 
