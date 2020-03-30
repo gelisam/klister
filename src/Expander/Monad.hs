@@ -187,7 +187,7 @@ data EValue
   = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
@@ -463,9 +463,9 @@ forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDeclMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclTreePtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
-forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
-  forkExpanderTask $ AwaitingMacro (DeclTreeDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ()
+forkAwaitingDeclMacro b v x mdest dest scs vp stx = do
+  forkExpanderTask $ AwaitingMacro (DeclTreeDest dest scs vp) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -475,12 +475,12 @@ forkAwaitingDefn x n b defn t dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
 forkEstablishConstructors ::
-  Scope ->
+  ScopeSet ->
   DeclValidityPtr ->
   Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors sc vp dt ctors =
-  forkExpanderTask $ EstablishConstructors sc vp dt ctors
+forkEstablishConstructors scs vp dt ctors =
+  forkExpanderTask $ EstablishConstructors scs vp dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do

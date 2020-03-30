@@ -116,9 +116,10 @@ expandModule thisMod src = do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
     declTreeDest <- liftIO $ newDeclTreePtr
+    vp <- newDeclValidityPtr
     modifyState $ set expanderModuleTop $ Just declTreeDest
     decls <- addModuleScope (view moduleContents src)
-    forkExpandDecls declTreeDest decls
+    expandDeclForms declTreeDest mempty vp decls
     expandTasks
     body <- getDeclGroup declTreeDest
     let modName = view moduleSource src
@@ -465,19 +466,21 @@ initializeKernel = do
 
                 resolveImports imports
 
-                forkExpandDecls bodyPtr body
+                vp <- newDeclValidityPtr
+                expandDeclForms bodyPtr mempty vp body
 
                 buildExports exports
                 pure ()
         )
       ]
 
-    declPrims :: [(Text, Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ())]
     declPrims =
       [ ( "define"
-        , \ sc dest vp stx -> do
+        , \ dest scs vp stx -> do
             p <- currentPhase
             Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
+            sc <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
             x <- flip addScope' sc <$> mustBeIdent varStx
             b <- freshBinding
             addDefinedBinding x b
@@ -494,15 +497,16 @@ initializeKernel = do
             modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
               Env.insert var x schPtr
             forkGeneralizeType exprDest t schPtr
-            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
+            linkDeclValidity vp (ScopeSet.insertAtPhase p sc scs)
         )
       , ( "datatype"
-        , \ sc dest vp stx -> do
-            Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
-            Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
+        , \ dest scs vp stx -> do
+            Stx stxScs loc (_ :: Syntax, more) <- mustBeCons stx
+            Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx stxScs loc (List more)))
             Stx _ _ (name, args) <- mustBeCons nameAndArgs
             typeArgs <- for (zip [0..] args) $ \(i, a) ->
               prepareTypeVar i a
+            sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
             let typeScopes = map fst typeArgs ++ [sc]
             realName <- mustBeIdent (addScope' name sc)
             p <- currentPhase
@@ -533,15 +537,16 @@ initializeKernel = do
               Just info
 
 
-            forkEstablishConstructors sc vp d ctors
+            forkEstablishConstructors (ScopeSet.insertAtPhase p sc scs) vp d ctors
 
             linkOneDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
         )
       , ( "define-macros"
-        , \ sc dest vp stx -> do
+        , \ dest scs vp stx -> do
             Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
             Stx _ _ macroDefs <- mustBeList macroList
             p <- currentPhase
+            sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
             macros <- for macroDefs $ \def -> do
               Stx _ _ (mname, mdef) <- mustHaveEntries def
               theName <- flip addScope' sc <$> mustBeIdent mname
@@ -554,36 +559,38 @@ initializeKernel = do
               bind b $ EIncompleteMacro v theName macroDest
               return (theName, v, macroDest)
             linkOneDecl dest $ DefineMacros macros
-            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
+            linkDeclValidity vp (ScopeSet.insertAtPhase p sc scs)
         )
       , ( "example"
-        , \ sc dest vp stx -> do
+        , \ dest scs vp stx -> do
             p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
             sch <- liftIO newSchemePtr
             linkOneDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
+            sc <- freshScope $ T.pack $ "For example at " ++ shortShow (stxLoc stx)
             t <- inTypeBinder do
               t <- Ty . TMetaVar <$> freshMeta
               forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
               return t
             forkGeneralizeType exprDest t sch
-            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
+            linkDeclValidity vp (ScopeSet.insertAtPhase p sc scs)
         )
       , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
-        , \sc dest vp stx -> do
-            Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
+        , \dest scs vp stx -> do
+            Stx stxScs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
             spec <- importSpec toImport
             modExports <- getImports spec
+            sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc stx)
             flip forExports_ modExports $ \p x b -> inPhase p do
-              imported <- addRootScope' $ addScope' (Stx scs loc x) sc
+              imported <- addRootScope' $ addScope' (Stx stxScs loc x) sc
               addImportBinding imported b
             linkOneDecl dest (Import spec)
-            linkDeclValidity vp (ScopeSet.singleUniversalScope sc)
+            linkDeclValidity vp (ScopeSet.insertUniversally sc scs)
         )
       , ( "export"
-        , \_sc dest vp stx -> do
+        , \dest _scs vp stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
             es <- getExports exported
@@ -592,12 +599,12 @@ initializeKernel = do
             linkDeclValidity vp mempty
         )
       , ( "meta"
-        , \sc dest vp stx -> do
+        , \dest scs vp stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
             subDest <- liftIO newDeclTreePtr
             linkOneDecl dest (Meta subDest)
             inEarlierPhase $
-              forkExpandOneDecl subDest sc vp =<< addRootScope subDecl
+              expandDeclForm subDest scs vp =<< addRootScope subDecl
         )
       ]
       where
@@ -668,6 +675,9 @@ initializeKernel = do
                 Stx _ _ y' <- mustBeIdent y
                 pure (x', y')
             getRenames _ = throwError $ NotExportSpec blame
+
+        stxLoc :: Syntax -> SrcLoc
+        stxLoc (Syntax (Stx _ srcloc _)) = srcloc
 
     exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
@@ -985,7 +995,7 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
-    addDeclPrimitive :: Text -> (Scope -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ()) -> Expand ()
+    addDeclPrimitive :: Text -> (DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ()) -> Expand ()
     addDeclPrimitive name impl = do
       let val = EPrimDeclMacro impl
       b <- freshBinding
@@ -1073,29 +1083,9 @@ addRootScope' stx = do
   return (addScope' stx rsc)
 
 
-forkExpandOneDecl :: DeclTreePtr -> Scope -> DeclValidityPtr -> Syntax -> Expand ()
-forkExpandOneDecl dest sc declValidityPtr stx = do
-  forkExpanderTask $ ExpandDeclTree dest sc stx declValidityPtr
-
-forkExpandDecls :: DeclTreePtr -> Syntax -> Expand ()
-forkExpandDecls dest (Syntax (Stx _ _ (List []))) =
-  linkDeclTree dest DeclTreeLeaf
-forkExpandDecls dest (Syntax (Stx scs loc (List (d:ds)))) = do
-  -- Create a scope for this new declaration
-  sc <- freshScope $ T.pack $ "For declaration at " ++ shortShow (stxLoc d)
-  carDest <- liftIO $ newDeclTreePtr
-  cdrDest <- liftIO $ newDeclTreePtr
-  declValidityPtr <- newDeclValidityPtr
-  linkDeclTree dest (DeclTreeBranch carDest cdrDest)
-  forkExpanderTask $
-    ExpandDependentDeclTree cdrDest
-      (Syntax (Stx scs loc (List ds)))
-      declValidityPtr
-  forkExpandOneDecl carDest sc declValidityPtr =<< addRootScope d
-  where
-    stxLoc (Syntax (Stx _ srcloc _)) = srcloc
-forkExpandDecls _dest _other =
-  error "TODO real error message - malformed module body"
+forkExpandDeclForms :: DeclTreePtr -> DeclValidityPtr -> DeclValidityPtr -> Syntax -> Expand ()
+forkExpandDeclForms dest ivp ovp stx = do
+  forkExpanderTask $ ExpandDeclForms dest ivp ovp stx
 
 
 identifierHeaded :: Syntax -> Maybe Ident
@@ -1127,8 +1117,8 @@ runTask (tid, localData, task) = withLocal localData $ do
       case dest of
         ExprDest t d ->
           expandOneExpression t d stx
-        DeclTreeDest d sc vp ->
-          expandOneDeclTreeNode sc d stx vp
+        DeclTreeDest d scs vp ->
+          expandDeclForm d scs vp stx
         TypeDest d ->
           expandOneType d stx
         PatternDest exprT scrutT d ->
@@ -1191,15 +1181,20 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just _v -> do
           bind b $ EVarMacro x
           forkExpandSyntax (ExprDest t dest) stx
-    ExpandDeclTree dest sc stx vp ->
-      expandOneDeclTreeNode sc dest stx vp
-    ExpandDependentDeclTree dest stx waitingOn -> do
-      readyYet <- view (expanderDeclValidities . at waitingOn) <$> getState
+    ExpandDeclForm dest ivp ovp stx -> do
+      readyYet <- view (expanderDeclValidities . at ivp) <$> getState
       case readyYet of
         Nothing ->
           stillStuck tid task
-        Just scopeSet ->
-          forkExpandDecls dest (addScopes stx scopeSet)
+        Just scs ->
+          expandDeclForm dest scs ovp (addScopes stx scs)
+    ExpandDeclForms dest ivp ovp stx -> do
+      readyYet <- view (expanderDeclValidities . at ivp) <$> getState
+      case readyYet of
+        Nothing ->
+          stillStuck tid task
+        Just scs ->
+          expandDeclForms dest scs ovp (addScopes stx scs)
     InterpretMacroAction dest act outerKont -> do
       interpretMacroAction act >>= \case
         Left (signal, innerKont) -> do
@@ -1247,7 +1242,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           specialize sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
-    EstablishConstructors sc vp dt ctors -> do
+    EstablishConstructors scs vp dt ctors -> do
       ctors' <- sequenceA <$> for ctors \(cn, ctor, argTys) -> do
                   perhapsArgs <- sequenceA <$> traverse linkedType argTys
                   pure (fmap (\ts -> (cn, ctor, ts)) perhapsArgs)
@@ -1256,8 +1251,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just ready -> do
           for_ ready \(cn, ctor, ts) ->
             addConstructor cn dt ctor ts
-          p <- currentPhase
-          linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
+          linkDeclValidity vp scs
     AwaitingPattern patPtr ty dest stx -> do
       view (expanderCompletedPatterns . at patPtr) <$> getState >>=
         \case
@@ -1331,8 +1325,8 @@ problemContext (TypeDest _) = TypeCtx
 problemContext (ExprDest _ _) = ExpressionCtx
 problemContext (PatternDest _ _ _) = PatternCaseCtx
 
-requireDeclarationCtx :: Syntax -> MacroDest -> Expand (Scope, DeclTreePtr, DeclValidityPtr)
-requireDeclarationCtx _ (DeclTreeDest dest sc vp) = return (sc, dest, vp)
+requireDeclarationCtx :: Syntax -> MacroDest -> Expand (ScopeSet, DeclTreePtr, DeclValidityPtr)
+requireDeclarationCtx _ (DeclTreeDest dest scs vp) = return (scs, dest, vp)
 requireDeclarationCtx stx other =
   throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
 
@@ -1399,8 +1393,8 @@ expandOneForm prob stx
         EPrimModuleMacro _ ->
           throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
         EPrimDeclMacro impl -> do
-          (sc, dest, vp) <- requireDeclarationCtx stx prob
-          impl sc dest vp stx
+          (scs, dest, vp) <- requireDeclarationCtx stx prob
+          impl dest scs vp stx
         EPrimTypeMacro impl -> do
           dest <- requireTypeCtx stx prob
           impl dest stx
@@ -1471,9 +1465,24 @@ expandOneForm prob stx
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 
-expandOneDeclTreeNode :: Scope -> DeclTreePtr -> Syntax -> DeclValidityPtr -> Expand ()
-expandOneDeclTreeNode sc dest stx vp =
-  expandOneForm (DeclTreeDest dest sc vp) stx
+expandDeclForm :: DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ()
+expandDeclForm dest scs vp stx =
+  expandOneForm (DeclTreeDest dest scs vp) stx
+
+expandDeclForms :: DeclTreePtr -> ScopeSet -> DeclValidityPtr -> Syntax -> Expand ()
+expandDeclForms dest scs vp (Syntax (Stx _ _ (List []))) = do
+  linkDeclTree dest DeclTreeLeaf
+  linkDeclValidity vp scs
+expandDeclForms dest scs vp (Syntax (Stx stxScs loc (List (d:ds)))) = do
+  carDest <- liftIO $ newDeclTreePtr
+  cdrDest <- liftIO $ newDeclTreePtr
+  carValidityPtr <- newDeclValidityPtr
+  linkDeclTree dest (DeclTreeBranch carDest cdrDest)
+  forkExpandDeclForms cdrDest carValidityPtr vp
+    (Syntax (Stx stxScs loc (List ds)))
+  expandDeclForm carDest scs carValidityPtr =<< addRootScope d
+expandDeclForms _dest _scs _vp _stx =
+  error "TODO real error message - malformed module body"
 
 
 -- | Link the destination to a literal signal object

@@ -11,7 +11,7 @@ import Expander.DeclScope
 import Module
 import Phase
 import Pretty
-import Scope
+import ScopeSet
 import ShortShow
 import Signals
 import SplitCore
@@ -23,7 +23,8 @@ import Value
 data MacroDest
   = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
-  | DeclTreeDest DeclTreePtr Scope DeclValidityPtr
+  | DeclTreeDest DeclTreePtr ScopeSet DeclValidityPtr
+    -- ^ tree node to fill, input environment, output environment
   | PatternDest Ty Ty PatternPtr
     -- ^ expression type, scrutinee type, destination pointer
   deriving Show
@@ -36,10 +37,10 @@ data ExpanderTask
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | AwaitingType SplitTypePtr [AfterTypeTask]
-  | ExpandDeclTree DeclTreePtr Scope Syntax DeclValidityPtr
-    -- ^ The tree node to fill, the scope, the decls, and the output environment.
-  | ExpandDependentDeclTree DeclTreePtr Syntax DeclValidityPtr
-    -- ^ The tree node to fill, the decls, and the input environment.
+  | ExpandDeclForm DeclTreePtr DeclValidityPtr DeclValidityPtr Syntax
+    -- ^ The tree node to fill, the input environment, the output environment, and the declaration form.
+  | ExpandDeclForms DeclTreePtr DeclValidityPtr DeclValidityPtr Syntax
+    -- ^ The tree node to fill, the input environment, the output environment, and the declaration forms.
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
@@ -47,7 +48,7 @@ data ExpanderTask
     -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
-  | EstablishConstructors Scope DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
+  | EstablishConstructors ScopeSet DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
   | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
   deriving (Show)
 
@@ -90,8 +91,8 @@ instance ShortShow ExpanderTask where
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
-  shortShow (ExpandDeclTree _dest _sc stx ptr) = "(ExpandDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
-  shortShow (ExpandDependentDeclTree _dest stx ptr) = "(ExpandDependentDeclTree " ++ T.unpack (syntaxText stx) ++ " " ++ show ptr ++ ")"
+  shortShow (ExpandDeclForm _dest ivp ovp stx) = "(ExpandDeclForm " ++ show ivp ++ " " ++ show ovp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (ExpandDeclForms _dest ivp ovp stx) = "(ExpandDeclForms " ++ show ivp ++ " " ++ show ovp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
