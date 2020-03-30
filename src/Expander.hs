@@ -583,14 +583,13 @@ initializeKernel = do
             linkDeclValidity vp (ScopeSet.singleUniversalScope sc)
         )
       , ( "export"
-        , \sc dest vp stx -> do
+        , \_sc dest vp stx -> do
             Stx _ _ (_, protoSpec) <- mustBeCons stx
             exported <- exportSpec stx protoSpec
-            p <- currentPhase
             es <- getExports exported
             modifyState $ over expanderModuleExports $ (<> es)
             linkOneDecl dest (Export exported)
-            linkDeclValidity vp (ScopeSet.singleScopeAtPhase sc p)
+            linkDeclValidity vp mempty
         )
       , ( "meta"
         , \sc dest vp stx -> do
