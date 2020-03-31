@@ -1478,6 +1478,11 @@ expandDeclForms dest scs vp (Syntax (Stx stxScs loc (List (d:ds)))) = do
   cdrDest <- liftIO $ newDeclTreePtr
   carValidityPtr <- newDeclValidityPtr
   linkDeclTree dest (DeclTreeBranch carDest cdrDest)
+
+  -- This is where the ScopeSet is threaded through: from the input scs, to the
+  -- car's expandDeclForm task, who adds some Scopes to it and writes the result
+  -- to carValidityPtr, which is read (and blocked on) by the forkExpandDeclForms
+  -- task, who adds even more Scopes and writes the result to vp.
   forkExpandDeclForms cdrDest carValidityPtr vp
     (Syntax (Stx stxScs loc (List ds)))
   expandDeclForm carDest scs carValidityPtr =<< addRootScope d
