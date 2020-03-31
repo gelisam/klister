@@ -1103,7 +1103,7 @@ expandTasks = do
       forM_ more runTask
       newTasks <- getTasks
       if taskIDs tasks  == taskIDs newTasks
-        then throwError (NoProgress (map (view _3) newTasks))
+        then return ()
         else expandTasks
   where
     taskIDs = Set.fromList . map (view _1)
