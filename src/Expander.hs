@@ -563,18 +563,16 @@ initializeKernel = do
         )
       , ( "example"
         , \ dest scs vp stx -> do
-            p <- currentPhase
             Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
             exprDest <- liftIO $ newSplitCorePtr
             sch <- liftIO newSchemePtr
             linkOneDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
-            sc <- freshScope $ T.pack $ "For example at " ++ shortShow (stxLoc stx)
             t <- inTypeBinder do
               t <- Ty . TMetaVar <$> freshMeta
-              forkExpandSyntax (ExprDest t exprDest) (addScope p expr sc)
+              forkExpandSyntax (ExprDest t exprDest) expr
               return t
             forkGeneralizeType exprDest t sch
-            linkDeclValidity vp (ScopeSet.insertAtPhase p sc scs)
+            linkDeclValidity vp scs
         )
       , ( "import"
          -- TODO Make import spec language extensible and use bindings rather than literals
