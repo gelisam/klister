@@ -95,7 +95,7 @@ mainWithOptions opts =
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
           void $ execExpand initializeKernel ctx
-          st <- execExpand (visit mn >> getState) ctx
+          st <- execExpand (fullyVisit mn >> getState) ctx
           case st of
             Left err -> prettyPrintLn err *> fail ""
             Right result ->
@@ -127,7 +127,7 @@ repl ctx startWorld = do
            Right ok ->
              do putStrLn "Parser output:"
                 T.putStrLn (syntaxText ok)
-                c <- execExpand (expandExpr ok) ctx
+                c <- execExpand (fullyExpandExpr ok) ctx
                 case c of
                   Left err -> putStr "Expander error: " *>
                               prettyPrintLn err

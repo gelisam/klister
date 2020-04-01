@@ -14,10 +14,11 @@
 {-# LANGUAGE ViewPatterns #-}
 module Expander (
   -- * Concrete expanders
-    expandModule
-  , expandExpr
+    fullyExpandExpr
+  , fullyExpandModule
   -- * Module system
   , visit
+  , fullyVisit
   -- * Expander monad
   , Expand
   , execExpand
@@ -26,6 +27,9 @@ module Expander (
   , initializeLanguage
   , currentPhase
   , expandEval
+  , expandModule
+  , expandExpr
+  , ensureAllTasksCompleted
   , ExpansionErr(..)
   , ExpanderContext
   , expanderCurrentBindingTable
@@ -96,6 +100,12 @@ expandExpr stx = do
                      , _splitCorePatterns = patterns
                      }
 
+fullyExpandExpr :: Syntax -> Expand SplitCore
+fullyExpandExpr stx = do
+  splitCore <- expandExpr stx
+  ensureAllTasksCompleted
+  pure splitCore
+
 initializeLanguage :: Stx ModuleName -> Expand ()
 initializeLanguage (Stx scs loc lang) = do
   starters <- visit lang
@@ -132,6 +142,12 @@ expandModule thisMod src = do
     modifyState $ set expanderCurrentBindingTable startBindings
     modifyState $ set expanderDefTypes startDefTypes
     return $ Expanded theModule bs
+
+fullyExpandModule :: ModuleName -> ParsedModule Syntax -> Expand CompleteModule
+fullyExpandModule modName src = do
+  completeModule <- expandModule modName src
+  ensureAllTasksCompleted
+  pure completeModule
 
 
 
@@ -230,6 +246,12 @@ visit modName = do
   return (shift i es)
   where getModuleBindings (Expanded _ bs) = bs
         getModuleBindings (KernelModule _) = mempty
+
+fullyVisit :: ModuleName -> Expand Exports
+fullyVisit modName = do
+  exports <- visit modName
+  ensureAllTasksCompleted
+  pure exports
 
 -- | Evaluate an expanded module at the current expansion phase,
 -- recursively loading its run-time dependencies.
@@ -1107,6 +1129,12 @@ expandTasks = do
         else expandTasks
   where
     taskIDs = Set.fromList . map (view _1)
+
+ensureAllTasksCompleted :: Expand ()
+ensureAllTasksCompleted = do
+  tasks <- getTasks
+  unless (null tasks) $ do
+    throwError (NoProgress (map (view _3) tasks))
 
 runTask :: (TaskID, ExpanderLocal, ExpanderTask) -> Expand ()
 runTask (tid, localData, task) = withLocal localData $ do

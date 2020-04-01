@@ -537,7 +537,7 @@ testExpander input spec = do
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             addRootScope expr >>= addModuleScope >>= expandExpr
+             addRootScope expr >>= addModuleScope >>= fullyExpandExpr
       case c of
         Left err -> assertFailure . T.unpack . pretty $ err
         Right expanded ->
@@ -557,7 +557,7 @@ testExpansionFails input okp =
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             expandExpr =<< addModuleScope =<< addRootScope expr
+             fullyExpandExpr =<< addModuleScope =<< addRootScope expr
 
       case c of
         Left err
@@ -576,7 +576,7 @@ testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+  execExpand (fullyVisit mn >> view expanderWorld <$> getState) ctx >>=
     \case
       Left err -> assertFailure (T.unpack (pretty err))
       Right w ->
@@ -597,7 +597,7 @@ testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+  execExpand (fullyVisit mn >> view expanderWorld <$> getState) ctx >>=
     \case
       Left err | p err -> return ()
                | otherwise ->
