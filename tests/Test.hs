@@ -532,12 +532,12 @@ testExpander input spec = do
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ do
+      c <- flip execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             addRootScope expr >>= addModuleScope >>= fullyExpandExpr
+             addRootScope expr >>= addModuleScope >>= expandExpr
       case c of
         Left err -> assertFailure . T.unpack . pretty $ err
         Right expanded ->
@@ -552,12 +552,12 @@ testExpansionFails input okp =
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ do
+      c <- flip execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
-             fullyExpandExpr =<< addModuleScope =<< addRootScope expr
+             expandExpr =<< addModuleScope =<< addRootScope expr
 
       case c of
         Left err
@@ -576,7 +576,8 @@ testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (fullyVisit mn >> view expanderWorld <$> getState) ctx >>=
+  (flip execExpand ctx $ completely $ do
+    visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err -> assertFailure (T.unpack (pretty err))
       Right w ->
@@ -597,7 +598,8 @@ testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (fullyVisit mn >> view expanderWorld <$> getState) ctx >>=
+  (flip execExpand ctx $ completely $ do
+    visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err | p err -> return ()
                | otherwise ->
