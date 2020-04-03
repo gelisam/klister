@@ -35,6 +35,7 @@ module Module (
   ) where
 
 import Control.Lens
+import Control.Monad.IO.Class
 import Data.Functor
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -211,8 +212,8 @@ newtype DeclTreePtr = DeclTreePtr Unique
 instance Show DeclTreePtr where
   show (DeclTreePtr u) = "(DeclTreePtr " ++ show (hashUnique u) ++ ")"
 
-newDeclTreePtr :: IO DeclTreePtr
-newDeclTreePtr = DeclTreePtr <$> newUnique
+newDeclTreePtr :: MonadIO m => m DeclTreePtr
+newDeclTreePtr = DeclTreePtr <$> liftIO newUnique
 
 
 data DeclTreeF decl next

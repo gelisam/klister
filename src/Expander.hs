@@ -116,7 +116,7 @@ expandModule thisMod src = do
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
-    declTreeDest <- liftIO $ newDeclTreePtr
+    declTreeDest <- newDeclTreePtr
     vp <- newDeclValidityPtr
     modifyState $ set expanderModuleTop $ Just declTreeDest
     decls <- addModuleScope (view moduleContents src)
@@ -464,7 +464,7 @@ initializeKernel = do
               Just _ ->
                 error "TODO throw real error - already expanding a module"
               Nothing -> do
-                bodyPtr <- liftIO newDeclTreePtr
+                bodyPtr <- newDeclTreePtr
                 modifyState $ set expanderModuleTop (Just bodyPtr)
                 Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustHaveEntries stx
                 _actualName <- mustBeIdent name
@@ -604,7 +604,7 @@ initializeKernel = do
       , ( "meta"
         , \dest vp stx -> do
             Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
-            subDest <- liftIO newDeclTreePtr
+            subDest <- newDeclTreePtr
             linkOneDecl dest (Meta subDest)
             inEarlierPhase $
               expandDeclForm subDest vp =<< addRootScope subDecl
@@ -1491,8 +1491,8 @@ expandDeclForms dest scs vp (Syntax (Stx _ _ (List []))) = do
   linkDeclTree dest DeclTreeLeaf
   linkDeclValidity vp scs
 expandDeclForms dest scs vp (Syntax (Stx stxScs loc (List (d:ds)))) = do
-  headDest <- liftIO $ newDeclTreePtr
-  tailDest <- liftIO $ newDeclTreePtr
+  headDest <- newDeclTreePtr
+  tailDest <- newDeclTreePtr
   headValidityPtr <- newDeclValidityPtr
   linkDeclTree dest (DeclTreeBranch headDest tailDest)
 
