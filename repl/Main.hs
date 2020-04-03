@@ -95,7 +95,7 @@ mainWithOptions opts =
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
           void $ execExpand initializeKernel ctx
-          st <- flip execExpand ctx $ completely $ do
+          st <- flip execExpand ctx $ do
             visit mn >> getState
           case st of
             Left err -> prettyPrintLn err *> fail ""

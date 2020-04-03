@@ -120,8 +120,9 @@ expandModule thisMod src = do
     vp <- newDeclValidityPtr
     modifyState $ set expanderModuleTop $ Just declTreeDest
     decls <- addModuleScope (view moduleContents src)
-    expandDeclForms declTreeDest mempty vp decls
-    expandTasks
+    completely do
+      expandDeclForms declTreeDest mempty vp decls
+      expandTasks
     body <- getDeclGroup declTreeDest
     let modName = view moduleSource src
     let theModule = Module { _moduleName = modName

@@ -576,7 +576,7 @@ testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  (flip execExpand ctx $ completely $ do
+  (flip execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err -> assertFailure (T.unpack (pretty err))
@@ -598,7 +598,7 @@ testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  (flip execExpand ctx $ completely $ do
+  (flip execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err | p err -> return ()
