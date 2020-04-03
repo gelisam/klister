@@ -1496,9 +1496,9 @@ expandDeclForms dest scs vp (Syntax (Stx stxScs loc (List (d:ds)))) = do
   -- car's expandDeclForm task, who adds some Scopes to it and writes the result
   -- to carValidityPtr, which is read (and blocked on) by the forkExpandDeclForms
   -- task, who adds even more Scopes and writes the result to vp.
+  expandDeclForm carDest scs carValidityPtr =<< addRootScope d
   forkExpandDeclForms cdrDest carValidityPtr vp
     (Syntax (Stx stxScs loc (List ds)))
-  expandDeclForm carDest scs carValidityPtr =<< addRootScope d
 expandDeclForms _dest _scs _vp _stx =
   error "TODO real error message - malformed module body"
 
