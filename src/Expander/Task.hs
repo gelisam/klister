@@ -23,8 +23,8 @@ import Value
 data MacroDest
   = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
-  | DeclTreeDest DeclTreePtr ScopeSet DeclValidityPtr
-    -- ^ tree node to fill, input environment, output environment
+  | DeclTreeDest DeclTreePtr DeclValidityPtr
+    -- ^ produced declaration tree, scopes introduced
   | PatternDest Ty Ty PatternPtr
     -- ^ expression type, scrutinee type, destination pointer
   deriving Show
@@ -37,10 +37,11 @@ data ExpanderTask
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | AwaitingType SplitTypePtr [AfterTypeTask]
-  | ExpandDeclForm DeclTreePtr DeclValidityPtr DeclValidityPtr Syntax
-    -- ^ The tree node to fill, the input environment, the output environment, and the declaration form.
-  | ExpandDeclForms DeclTreePtr DeclValidityPtr DeclValidityPtr Syntax
-    -- ^ The tree node to fill, the input environment, the output environment, and the declaration forms.
+  | ExpandDeclForms DeclTreePtr ScopeSet DeclValidityPtr DeclValidityPtr Syntax
+    -- ^ The produced declaration tree, some already-introduced scopes which
+    -- the syntax can already see, some to-be-introduced scopes which the will
+    -- see, a destination for all the introduced scopes, including those by the
+    -- Syntax's remaining declaration forms.
   | InterpretMacroAction MacroDest MacroAction [Closure]
   | ContinueMacroAction MacroDest Value [Closure]
   | EvalDefnAction Var Ident Phase SplitCorePtr
@@ -91,8 +92,7 @@ instance ShortShow ExpanderTask where
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
-  shortShow (ExpandDeclForm _dest ivp ovp stx) = "(ExpandDeclForm " ++ show ivp ++ " " ++ show ovp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
-  shortShow (ExpandDeclForms _dest ivp ovp stx) = "(ExpandDeclForms " ++ show ivp ++ " " ++ show ovp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (ExpandDeclForms _dest _scs waitingOn vp stx) = "(ExpandDeclForms _ " ++ show waitingOn ++ " " ++ show vp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
