@@ -603,11 +603,11 @@ initializeKernel = do
         )
       , ( "meta"
         , \dest vp stx -> do
-            Stx _ _ (_ :: Syntax, subDecl) <- mustHaveEntries stx
+            (_ :: Syntax, subDecls) <- mustHaveShape stx
             subDest <- newDeclTreePtr
             linkOneDecl dest (Meta subDest)
             inEarlierPhase $
-              expandDeclForm subDest vp =<< addRootScope subDecl
+              expandDeclForms subDest mempty vp =<< addRootScope subDecls
         )
       ]
       where
