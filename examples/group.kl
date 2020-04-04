@@ -1,0 +1,20 @@
+#lang kernel
+(import (shift kernel 1))
+
+(define a 1)
+(meta
+  (define a 10))
+(group
+  (define b a)
+  (define c b)
+  (meta
+    (define b a)
+    (define c b)))
+
+(example a)
+(example b)
+(example c)
+(meta
+  (example a)
+  (example b)
+  (example c))

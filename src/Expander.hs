@@ -609,6 +609,11 @@ initializeKernel = do
             inEarlierPhase $
               expandDeclForms subDest mempty vp =<< addRootScope subDecls
         )
+      , ( "group"
+        , \dest vp stx -> do
+            (_ :: Syntax, decls) <- mustHaveShape stx
+            expandDeclForms dest mempty vp decls
+        )
       ]
       where
         importSpec :: Syntax -> Expand ImportSpec
