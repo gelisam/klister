@@ -243,13 +243,13 @@ instance PrettyBinder VarInfo CompleteDecl where
 
 instance PrettyBinder VarInfo [CompleteDecl] where
   ppBind env decls = over _1 vsep
-                   $ foldr go (\e -> (mempty, e)) decls env
+                   $ foldr go (\e -> (mempty, e)) decls mempty
     where
       go :: CompleteDecl
          -> (Env Var () -> ([Doc VarInfo], Env Var ()))
          -> (Env Var () -> ([Doc VarInfo], Env Var ()))
-      go decl cc e = let (doc, e') = ppBind e decl
-                         (docs, e'') = cc e'
+      go decl cc e = let (doc, e') = ppBind (env <> e) decl
+                         (docs, e'') = cc (e <> e')
                      in (doc:docs, e'')
 
 
