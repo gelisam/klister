@@ -37,10 +37,10 @@ module Expander.Monad
   , linkPattern
   , linkType
   , linkScheme
-  , linkDeclValidity
+  , linkDeclOutputScopes
   , modifyState
   , moduleScope
-  , newDeclValidityPtr
+  , newDeclOutputScopesPtr
   , phaseRoot
   , saveExprType
   , saveOrigin
@@ -94,7 +94,7 @@ module Expander.Monad
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
   , expanderTypeStore
-  , expanderDeclValidities
+  , expanderDeclOutputScopes
   , expanderExpansionEnv
   , expanderExpressionTypes
   , expanderKernelBindings
@@ -175,8 +175,8 @@ instance Show TaskID where
 newTaskID :: Expand TaskID
 newTaskID = liftIO $ TaskID <$> newUnique
 
-newDeclValidityPtr :: Expand DeclValidityPtr
-newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
+newDeclOutputScopesPtr :: Expand DeclOutputScopesPtr
+newDeclOutputScopesPtr = DeclOutputScopesPtr <$> liftIO newUnique
 
 
 
@@ -187,7 +187,7 @@ data EValue
   = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
@@ -244,7 +244,7 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
-  , _expanderDeclValidities :: !(Map DeclValidityPtr ScopeSet)
+  , _expanderDeclOutputScopes :: !(Map DeclOutputScopesPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
@@ -278,7 +278,7 @@ initExpanderState = ExpanderState
   , _expanderModuleRoots = Map.empty
   , _expanderKernelBindings = mempty
   , _expanderKernelExports = noExports
-  , _expanderDeclValidities = Map.empty
+  , _expanderDeclOutputScopes = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
   , _expanderCurrentDatatypes = Map.empty
@@ -376,9 +376,9 @@ linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> E
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
 
-linkDeclValidity :: DeclValidityPtr -> ScopeSet -> Expand ()
-linkDeclValidity dest scopeSet =
-  modifyState $ over expanderDeclValidities $ (<> Map.singleton dest scopeSet)
+linkDeclOutputScopes :: DeclOutputScopesPtr -> ScopeSet -> Expand ()
+linkDeclOutputScopes dest scopeSet =
+  modifyState $ over expanderDeclOutputScopes $ (<> Map.singleton dest scopeSet)
 
 linkOneDecl :: DeclTreePtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> Expand ()
 linkOneDecl declTreeDest decl = do
@@ -463,9 +463,9 @@ forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDeclMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclTreePtr -> DeclValidityPtr -> Syntax -> Expand ()
-forkAwaitingDeclMacro b v x mdest dest vp stx = do
-  forkExpanderTask $ AwaitingMacro (DeclTreeDest dest vp) (TaskAwaitMacro b v x [mdest] mdest stx)
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
+forkAwaitingDeclMacro b v x mdest dest outScopesDest stx = do
+  forkExpanderTask $ AwaitingMacro (DeclTreeDest dest outScopesDest) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -476,11 +476,11 @@ forkAwaitingDefn x n b defn t dest stx =
 
 forkEstablishConstructors ::
   ScopeSet ->
-  DeclValidityPtr ->
+  DeclOutputScopesPtr ->
   Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors scs vp dt ctors =
-  forkExpanderTask $ EstablishConstructors scs vp dt ctors
+forkEstablishConstructors scs outScopesDest dt ctors =
+  forkExpanderTask $ EstablishConstructors scs outScopesDest dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do

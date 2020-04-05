@@ -23,7 +23,7 @@ import Value
 data MacroDest
   = ExprDest Ty SplitCorePtr
   | TypeDest SplitTypePtr
-  | DeclTreeDest DeclTreePtr DeclValidityPtr
+  | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
   | PatternDest Ty Ty PatternPtr
     -- ^ expression type, scrutinee type, destination pointer
@@ -37,7 +37,7 @@ data ExpanderTask
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
   | AwaitingType SplitTypePtr [AfterTypeTask]
-  | ExpandDeclForms DeclTreePtr ScopeSet DeclValidityPtr DeclValidityPtr Syntax
+  | ExpandDeclForms DeclTreePtr ScopeSet DeclOutputScopesPtr DeclOutputScopesPtr Syntax
     -- ^ The produced declaration tree, some already-introduced scopes which
     -- the syntax can already see, some to-be-introduced scopes which the will
     -- see, a destination for all the introduced scopes, including those by the
@@ -49,7 +49,7 @@ data ExpanderTask
     -- ^ The expression whose type should be generalized, and the place to put the resulting scheme
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
-  | EstablishConstructors ScopeSet DeclValidityPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
+  | EstablishConstructors ScopeSet DeclOutputScopesPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
   | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
   deriving (Show)
 
@@ -92,7 +92,7 @@ instance ShortShow ExpanderTask where
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
   shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
-  shortShow (ExpandDeclForms _dest _scs waitingOn vp stx) = "(ExpandDeclForms _ " ++ show waitingOn ++ " " ++ show vp ++ " " ++ T.unpack (syntaxText stx) ++ ")"
+  shortShow (ExpandDeclForms _dest _scs waitingOn outScopesDest stx) = "(ExpandDeclForms _ " ++ show waitingOn ++ " " ++ show outScopesDest ++ " " ++ T.unpack (syntaxText stx) ++ ")"
   shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
   shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
   shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
