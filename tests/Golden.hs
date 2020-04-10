@@ -61,8 +61,8 @@ expandFile :: FilePath -> WriterT Text IO (ModuleName, ExpanderState)
 expandFile file = do
   moduleName <- liftIO $ moduleNameFromPath file
   ctx <- liftIO $ mkInitContext moduleName
-  void $ liftIO $ execExpand initializeKernel ctx
-  st <- liftIO $ execExpand (visit moduleName >> getState) ctx
+  void $ liftIO $ execExpand ctx initializeKernel
+  st <- liftIO $ execExpand ctx (visit moduleName >> getState)
   case st of
     Left err -> liftIO $ prettyPrintLn err *> fail ""
     Right result ->

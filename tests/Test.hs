@@ -534,7 +534,7 @@ testExpander input spec = do
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ completely $ do
+      c <- execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
@@ -554,7 +554,7 @@ testExpansionFails input okp =
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ completely $ do
+      c <- execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
@@ -577,8 +577,8 @@ testFile :: FilePath -> (Module [] CompleteDecl -> [Value] -> Assertion) -> Asse
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
-  void $ execExpand initializeKernel ctx
-  (flip execExpand ctx $ do
+  void $ execExpand ctx initializeKernel
+  (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err -> assertFailure (T.unpack (pretty err))
@@ -599,8 +599,8 @@ testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
-  void $ execExpand initializeKernel ctx
-  (flip execExpand ctx $ do
+  void $ execExpand ctx initializeKernel
+  (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err | p err -> return ()

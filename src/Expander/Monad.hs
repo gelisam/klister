@@ -162,8 +162,8 @@ newtype Expand a = Expand
   }
   deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO, MonadReader ExpanderContext)
 
-execExpand :: Expand a -> ExpanderContext -> IO (Either ExpansionErr a)
-execExpand act ctx = runExceptT $ runReaderT (runExpand act) ctx
+execExpand :: ExpanderContext -> Expand a -> IO (Either ExpansionErr a)
+execExpand ctx act = runExceptT $ runReaderT (runExpand act) ctx
 
 
 newtype TaskID = TaskID Unique
