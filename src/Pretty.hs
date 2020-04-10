@@ -241,6 +241,18 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedList core) where
 instance PrettyBinder VarInfo CompleteDecl where
   ppBind env (CompleteDecl d) = ppBind env d
 
+instance PrettyBinder VarInfo [CompleteDecl] where
+  ppBind env decls = over _1 vsep
+                   $ foldr go (\e -> (mempty, e)) decls mempty
+    where
+      go :: CompleteDecl
+         -> (Env Var () -> ([Doc VarInfo], Env Var ()))
+         -> (Env Var () -> ([Doc VarInfo], Env Var ()))
+      go decl cc e = let (doc, e') = ppBind (env <> e) decl
+                         (docs, e'') = cc (e <> e')
+                     in (doc:docs, e'')
+
+
 instance Pretty VarInfo (Scheme Ty) where
   pp env (Scheme 0 t) =
     pp env t

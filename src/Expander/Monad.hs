@@ -21,7 +21,7 @@ module Expander.Monad
   , freshScope
   , freshVar
   , freshMacroVar
-  , getBody
+  , getDeclGroup
   , getDecl
   , getState
   , inEarlierPhase
@@ -30,15 +30,17 @@ module Expander.Monad
   , linkedCore
   , linkedScheme
   , linkedType
+  , linkDeclTree
   , linkDecl
+  , linkOneDecl
   , linkExpr
   , linkPattern
   , linkType
   , linkScheme
+  , linkDeclOutputScopes
   , modifyState
   , moduleScope
-  , newDeclValidityPtr
-  , nowValidAt
+  , newDeclOutputScopesPtr
   , phaseRoot
   , saveExprType
   , saveOrigin
@@ -83,7 +85,7 @@ module Expander.Monad
   , expanderCompletedPatterns
   , expanderCompletedDecls
   , expanderCompletedTypes
-  , expanderCompletedModBody
+  , expanderCompletedDeclTrees
   , expanderCompletedSchemes
   , expanderCurrentBindingTable
   , expanderCurrentConstructors
@@ -92,7 +94,7 @@ module Expander.Monad
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
   , expanderTypeStore
-  , expanderDeclPhases
+  , expanderDeclOutputScopes
   , expanderExpansionEnv
   , expanderExpressionTypes
   , expanderKernelBindings
@@ -147,6 +149,7 @@ import Signals
 import SplitCore
 import SplitType
 import Scope
+import ScopeSet
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -172,8 +175,8 @@ instance Show TaskID where
 newTaskID :: Expand TaskID
 newTaskID = liftIO $ TaskID <$> newUnique
 
-newDeclValidityPtr :: Expand DeclValidityPtr
-newDeclValidityPtr = DeclValidityPtr <$> liftIO newUnique
+newDeclOutputScopesPtr :: Expand DeclOutputScopesPtr
+newDeclOutputScopesPtr = DeclOutputScopesPtr <$> liftIO newUnique
 
 
 
@@ -184,7 +187,7 @@ data EValue
   = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
-  | EPrimDeclMacro (Scope -> DeclPtr -> DeclValidityPtr -> Syntax -> Expand ())
+  | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
@@ -232,16 +235,16 @@ data ExpanderState = ExpanderState
   , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
   , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
-  , _expanderCompletedModBody :: !(Map.Map ModBodyPtr (ModuleBodyF DeclPtr ModBodyPtr))
-  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr))
-  , _expanderModuleTop :: !(Maybe ModBodyPtr)
+  , _expanderCompletedDeclTrees :: !(Map.Map DeclTreePtr (DeclTreeF DeclPtr DeclTreePtr))
+  , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr))
+  , _expanderModuleTop :: !(Maybe DeclTreePtr)
   , _expanderModuleImports :: !Imports
   , _expanderModuleExports :: !Exports
   , _expanderPhaseRoots :: !(Map Phase Scope)
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
-  , _expanderDeclPhases :: !(Map DeclValidityPtr PhaseSpec)
+  , _expanderDeclOutputScopes :: !(Map DeclOutputScopesPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
   , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
@@ -266,7 +269,7 @@ initExpanderState = ExpanderState
   , _expanderCompletedPatterns = Map.empty
   , _expanderPatternBinders = Map.empty
   , _expanderCompletedTypes = Map.empty
-  , _expanderCompletedModBody = Map.empty
+  , _expanderCompletedDeclTrees = Map.empty
   , _expanderCompletedDecls = Map.empty
   , _expanderModuleTop = Nothing
   , _expanderModuleImports = noImports
@@ -275,7 +278,7 @@ initExpanderState = ExpanderState
   , _expanderModuleRoots = Map.empty
   , _expanderKernelBindings = mempty
   , _expanderKernelExports = noExports
-  , _expanderDeclPhases = Map.empty
+  , _expanderDeclOutputScopes = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
   , _expanderCurrentDatatypes = Map.empty
@@ -365,9 +368,23 @@ linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 
-linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr -> Expand ()
+linkDeclTree :: DeclTreePtr -> DeclTreeF DeclPtr DeclTreePtr -> Expand ()
+linkDeclTree dest declTreeF =
+  modifyState $ over expanderCompletedDeclTrees $ (<> Map.singleton dest declTreeF)
+
+linkDecl :: DeclPtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> Expand ()
 linkDecl dest decl =
   modifyState $ over expanderCompletedDecls $ (<> Map.singleton dest decl)
+
+linkDeclOutputScopes :: DeclOutputScopesPtr -> ScopeSet -> Expand ()
+linkDeclOutputScopes dest scopeSet =
+  modifyState $ over expanderDeclOutputScopes $ (<> Map.singleton dest scopeSet)
+
+linkOneDecl :: DeclTreePtr -> Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr -> Expand ()
+linkOneDecl declTreeDest decl = do
+  declDest <- liftIO newDeclPtr
+  linkDecl declDest decl
+  linkDeclTree declTreeDest (DeclTreeAtom declDest)
 
 linkType :: SplitTypePtr -> TyF SplitTypePtr -> Expand ()
 linkType dest ty =
@@ -446,9 +463,9 @@ forkAwaitingMacro b v x mdest dest stx =
   forkExpanderTask $ AwaitingMacro dest (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDeclMacro ::
-  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclPtr -> Scope -> DeclValidityPtr ->  Syntax -> Expand ()
-forkAwaitingDeclMacro b v x mdest dest sc ph stx = do
-  forkExpanderTask $ AwaitingMacro (DeclDest dest sc ph) (TaskAwaitMacro b v x [mdest] mdest stx)
+  Binding -> MacroVar -> Ident -> SplitCorePtr -> DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
+forkAwaitingDeclMacro b v x mdest dest outScopesDest stx = do
+  forkExpanderTask $ AwaitingMacro (DeclTreeDest dest outScopesDest) (TaskAwaitMacro b v x [mdest] mdest stx)
 
 forkAwaitingDefn ::
   Var -> Ident -> Binding -> SplitCorePtr ->
@@ -458,11 +475,12 @@ forkAwaitingDefn x n b defn t dest stx =
   forkExpanderTask $ AwaitingDefn x n b defn t dest stx
 
 forkEstablishConstructors ::
-  DeclValidityPtr ->
+  ScopeSet ->
+  DeclOutputScopesPtr ->
   Datatype -> [(Ident, Constructor, [SplitTypePtr])] ->
   Expand ()
-forkEstablishConstructors pdest dt ctors =
-  forkExpanderTask $ EstablishConstructors pdest dt ctors
+forkEstablishConstructors scs outScopesDest dt ctors =
+  forkExpanderTask $ EstablishConstructors scs outScopesDest dt ctors
 
 forkInterpretMacroAction :: MacroDest -> MacroAction -> [Closure] -> Expand ()
 forkInterpretMacroAction dest act kont = do
@@ -490,26 +508,28 @@ dependencies slot =
     Nothing -> pure [slot]
     Just c -> foldMap id <$> traverse dependencies c
 
-getBody :: ModBodyPtr -> Expand [CompleteDecl]
-getBody ptr =
-  (view (expanderCompletedModBody . at ptr) <$> getState) >>=
+getDeclGroup :: DeclTreePtr -> Expand [CompleteDecl]
+getDeclGroup ptr =
+  (view (expanderCompletedDeclTrees . at ptr) <$> getState) >>=
   \case
     Nothing -> throwError $ InternalError "Incomplete module after expansion"
-    Just Done -> pure []
-    Just (Decl decl next) ->
-      (:) <$> getDecl decl <*> getBody next
+    Just DeclTreeLeaf -> pure []
+    Just (DeclTreeAtom decl) ->
+      (:[]) <$> getDecl decl
+    Just (DeclTreeBranch l r) ->
+      (++) <$> getDeclGroup l <*> getDeclGroup r
 
 getDecl :: DeclPtr -> Expand CompleteDecl
 getDecl ptr =
   (view (expanderCompletedDecls . at ptr) <$> getState) >>=
   \case
     Nothing -> throwError $ InternalError "Missing decl after expansion"
-    Just decl -> flattenDecl decl
+    Just decl -> zonkDecl decl
   where
-    flattenDecl ::
-      Decl SplitTypePtr SchemePtr DeclPtr SplitCorePtr ->
+    zonkDecl ::
+      Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr ->
       Expand (CompleteDecl)
-    flattenDecl (Define x v schPtr e) =
+    zonkDecl (Define x v schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -518,20 +538,20 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing scheme after expansion"
             Just sch -> pure $ CompleteDecl $ Define x v sch e'
-    flattenDecl (DefineMacros macros) =
+    zonkDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
       for macros \(x, v, e) ->
         linkedCore e >>=
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
-    flattenDecl (Data x dn arity ctors) =
-      CompleteDecl . Data x dn arity <$> traverse flattenCtor ctors
+    zonkDecl (Data x dn arity ctors) =
+      CompleteDecl . Data x dn arity <$> traverse zonkCtor ctors
         where
-          flattenCtor ::
+          zonkCtor ::
             (Ident, Constructor, [SplitTypePtr]) ->
             Expand (Ident, Constructor, [Ty])
-          flattenCtor (ident, cn, args) = do
+          zonkCtor (ident, cn, args) = do
             args' <- for args $
                        \ptr' ->
                          linkedType ptr' >>=
@@ -541,9 +561,9 @@ getDecl ptr =
                            Just argTy ->
                              pure argTy
             pure (ident, cn, args')
-    flattenDecl (Meta d) =
-      CompleteDecl . Meta <$> getDecl d
-    flattenDecl (Example loc schPtr e) =
+    zonkDecl (Meta d) =
+      CompleteDecl . Meta <$> getDeclGroup d
+    zonkDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing expr after expansion"
@@ -552,8 +572,8 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
             Just sch -> pure $ CompleteDecl $ Example loc sch e'
-    flattenDecl (Import spec) = return $ CompleteDecl $ Import spec
-    flattenDecl (Export x) = return $ CompleteDecl $ Export x
+    zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
+    zonkDecl (Export x) = return $ CompleteDecl $ Export x
 
 currentBindingLevel :: Expand BindingLevel
 currentBindingLevel = do
@@ -668,8 +688,3 @@ datatypeInfo datatype = do
     Nothing ->
       throwError $ InternalError $ "Unknown datatype " ++ show datatype
     Just info -> pure info
-
-
-nowValidAt :: DeclValidityPtr -> PhaseSpec -> Expand ()
-nowValidAt ptr p =
-  modifyState $ over expanderDeclPhases $ Map.insert ptr p

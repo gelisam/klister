@@ -97,6 +97,22 @@ flipScope p = adjustScope go
 addScope' :: HasScopes a => a -> Scope -> a
 addScope' = adjustScope ScopeSet.insertUniversally
 
+addScopes :: HasScopes a => a -> ScopeSet -> a
+addScopes a0 scopeSet
+  = let a1 = addUniversalScopes a0 scopeSet
+        a2 = addSpecificScopes a1 scopeSet
+    in a2
+  where
+    addUniversalScopes :: HasScopes a => a -> ScopeSet -> a
+    addUniversalScopes =
+      foldlOf (to ScopeSet.contents . _1 . folded)
+              addScope'
+
+    addSpecificScopes :: HasScopes a => a -> ScopeSet -> a
+    addSpecificScopes =
+      ifoldlOf (to ScopeSet.contents .> _2 .> ifolded <. folded)
+               addScope
+
 
 syntaxE :: Syntax -> ExprF Syntax
 syntaxE (Syntax (Stx _ _ e)) = e

@@ -4,10 +4,13 @@
 
 
 [meta
+  [define return
+    [lambda [e]
+      [pure e]]]
   [define m-impl
     [lambda [s]
       (syntax-case s
-        [[list [_ e]] [pure e]])]]]
+        [[list [_ e]] [return e]])]]]
 
 [define-macros ([m m-impl])]
 

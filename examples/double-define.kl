@@ -1,0 +1,12 @@
+#lang kernel
+
+(import "define-syntax-rule.kl")
+
+(define-syntax-rule (double-define x y value)
+  (group
+    (define x value)
+    (define y value)))
+
+(double-define a b 1)
+(example a)
+(example b)

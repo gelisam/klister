@@ -6,6 +6,8 @@ module ScopeSet (
   -- * Scope Sets and their construction
     ScopeSet
   , empty
+  , singleScopeAtPhase
+  , singleUniversalScope
   -- * Queries
   , size
   , member
@@ -62,6 +64,12 @@ scopes p scs = view universalScopes scs `Set.union`
 
 size :: Phase -> ScopeSet -> Int
 size p = Set.size . scopes p
+
+singleScopeAtPhase :: Scope -> Phase -> ScopeSet
+singleScopeAtPhase sc p = insertAtPhase p sc mempty
+
+singleUniversalScope :: Scope -> ScopeSet
+singleUniversalScope sc = insertUniversally sc mempty
 
 insertAtPhase :: Phase -> Scope -> ScopeSet -> ScopeSet
 insertAtPhase p sc = set (phaseScopes . at p . non Set.empty . at sc)

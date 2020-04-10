@@ -1,6 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 
-module Phase (Phase, phaseNum, runtime, prior, PhaseSpec(..), Phased(..)) where
+module Phase (Phase, phaseNum, runtime, prior, Phased(..)) where
 
 import Control.Lens
 import Numeric.Natural
@@ -13,9 +13,6 @@ makePrisms ''Phase
 
 instance ShortShow Phase where
   shortShow (Phase i) = "p" ++ show i
-
-data PhaseSpec = AllPhases | SpecificPhase !Phase
-makePrisms ''PhaseSpec
 
 runtime :: Phase
 runtime = Phase 0

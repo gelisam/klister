@@ -48,6 +48,7 @@ mustBeModName (Syntax (Stx scs srcloc (Id "kernel"))) =
   return (Stx scs srcloc (KernelName kernelName))
 mustBeModName other = throwError (NotModName other)
 
+
 class FixedLengthList a where
   mustHaveEntries :: Syntax -> Expand (Stx a)
 
@@ -80,3 +81,38 @@ instance FixedLengthList [Syntax] where
   mustHaveEntries (Syntax (Stx scs srcloc (List xs))) =
     return (Stx scs srcloc xs)
   mustHaveEntries other = throwError (NotList other)
+
+
+class MustHaveShape a where
+  mustHaveShape :: Syntax -> Expand a
+
+instance MustHaveShape Syntax where
+  mustHaveShape = pure
+
+instance MustHaveShape () where
+  mustHaveShape (Syntax (Stx _ _ (List []))) = do
+    pure ()
+  mustHaveShape other@(Syntax (Stx _ _ (List (_:_)))) = do
+    throwError (NotEmpty other)
+  mustHaveShape other = throwError (NotList other)
+
+instance ( MustHaveShape car
+         , MustHaveShape cdr
+         )
+        => MustHaveShape (car, cdr) where
+  mustHaveShape (Syntax (Stx scs srcloc (List (x:xs)))) = do
+    car <- mustHaveShape x
+    cdr <- mustHaveShape (Syntax (Stx scs srcloc (List xs)))
+    pure (car, cdr)
+  mustHaveShape other@(Syntax (Stx _ _ (List []))) = do
+    throwError (NotCons other)
+  mustHaveShape other = throwError (NotList other)
+
+instance MustHaveShape a => MustHaveShape [a] where
+  mustHaveShape (Syntax (Stx _ _ (List []))) = do
+    pure []
+  mustHaveShape (Syntax (Stx scs srcloc (List (x:xs)))) = do
+    car <- mustHaveShape x
+    cdr <- mustHaveShape (Syntax (Stx scs srcloc (List xs)))
+    pure (car : cdr)
+  mustHaveShape other = throwError (NotList other)

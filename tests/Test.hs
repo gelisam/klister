@@ -311,11 +311,13 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _,
-                 Meta (view completeDecl -> Define _ _ _ _),
+                 Meta [ view completeDecl -> Define _ _ _ _
+                      , view completeDecl -> Define _ _ _ _
+                      ],
                  DefineMacros [(_, _, _)],
                  Example _ _ ex] ->
                   assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
-                _ -> assertFailure "Expected an import, a meta-def, a macro def, and an example"
+                _ -> assertFailure "Expected an import, two meta-defs, a macro def, and an example"
           )
         , ( "examples/imports-shifted-macro.kl"
           , \m _ ->
@@ -532,7 +534,7 @@ testExpander input spec = do
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ do
+      c <- flip execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
@@ -552,7 +554,7 @@ testExpansionFails input okp =
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
-      c <- flip execExpand ctx $ do
+      c <- flip execExpand ctx $ completely $ do
              initializeKernel
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
@@ -576,7 +578,8 @@ testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+  (flip execExpand ctx $ do
+    visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err -> assertFailure (T.unpack (pretty err))
       Right w ->
@@ -597,7 +600,8 @@ testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
   void $ execExpand initializeKernel ctx
-  execExpand (visit mn >> view expanderWorld <$> getState) ctx >>=
+  (flip execExpand ctx $ do
+    visit mn >> view expanderWorld <$> getState) >>=
     \case
       Left err | p err -> return ()
                | otherwise ->

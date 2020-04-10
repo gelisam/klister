@@ -31,3 +31,5 @@
   (lambda (x y) body))
 
 (example ((lambda2 x y y) 'foo 'bar))  -- 'bar
+
+(export define-syntax-rule)
