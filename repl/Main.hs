@@ -95,7 +95,7 @@ mainWithOptions opts =
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
           void $ execExpand ctx initializeKernel
-          st <- execExpand ctx $ do
+          st <- execExpand ctx $ completely $ do
             visit mn
             getState
           case st of
