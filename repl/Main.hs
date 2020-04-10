@@ -96,7 +96,8 @@ mainWithOptions opts =
           ctx <- mkInitContext mn
           void $ execExpand ctx initializeKernel
           st <- execExpand ctx $ do
-            visit mn >> getState
+            visit mn
+            getState
           case st of
             Left err -> prettyPrintLn err *> fail ""
             Right result ->
