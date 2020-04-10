@@ -1479,7 +1479,7 @@ expandOneForm prob stx
 
 
 -- | Each declaration form fills a node in the declaration tree, and also fills
--- a DeclOutputScopesPtr with the scopes they introduce, so that later code can
+-- a DeclOutputScopesPtr with the scopes it introduces, so that later code can
 -- see the newly-bound names.
 expandDeclForm :: DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
 expandDeclForm dest outScopesDest stx =
@@ -1503,7 +1503,7 @@ expandDeclForms dest scs outScopesDest (Syntax (Stx stxScs loc (List (d:ds)))) =
 
   -- The head declaration will fill the headValidityPtr with the scopes it
   -- introduces, and then the ExpandDeclForms task will fill outScopesDest with
-  -- the combination of scs, headValidityPtr's scopes, and the scopes indroduced
+  -- the combination of scs, headValidityPtr's scopes, and the scopes introduced
   -- by the tail's declarations.
   expandDeclForm headDest headValidityPtr =<< addRootScope d
   forkExpanderTask $ ExpandDeclForms tailDest scs headValidityPtr outScopesDest (Syntax (Stx stxScs loc (List ds)))
