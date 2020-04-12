@@ -51,17 +51,15 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Unique
-import Numeric.Natural
 import System.Directory
 
 import Binding
-import Binding.Info
 import Control.Lens.IORef
 import Core
 import Datatype
 import qualified Env
 import Evaluator
+import qualified Expander.Primitives as Prims
 import Expander.DeclScope
 import Expander.Syntax
 import Expander.Monad
@@ -71,14 +69,12 @@ import ModuleName
 import Parser
 import Phase
 import Pretty
-import Scope
 import ScopeSet (ScopeSet)
 import Signals
 import ShortShow
 import SplitCore
 import SplitType
 import Syntax
-import Syntax.SrcLoc
 import Type
 import Value
 import World
@@ -135,9 +131,6 @@ expandModule thisMod src = do
     modifyState $ set expanderDefTypes startDefTypes
     return $ Expanded theModule bs
 
-
-
-
 loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
 loadModuleFile modName =
   case moduleNameToPath modName of
@@ -160,6 +153,7 @@ loadModuleFile modName =
             addExpandedModule m
 
          return (m, es)
+
 
 getExports :: ExportSpec -> Expand Exports
 getExports (ExportIdents idents) = do
@@ -294,8 +288,8 @@ evalMod (Expanded em _) = execWriterT $ do
         Import spec -> lift $ getImports spec >> pure () -- for side effect of evaluating module
         Export _ -> pure ()
 
-freshBinding :: Expand Binding
-freshBinding = Binding <$> liftIO newUnique
+
+
 
 getEValue :: Binding -> Expand EValue
 getEValue b = do
@@ -308,38 +302,8 @@ getEValue b = do
 getTasks :: Expand [(TaskID, ExpanderLocal, ExpanderTask)]
 getTasks = view expanderTasks <$> getState
 
-setTasks :: [(TaskID, ExpanderLocal, ExpanderTask)] -> Expand ()
-setTasks = modifyState . set expanderTasks
-
 clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
-
-currentTransformerEnv :: Expand TEnv
-currentTransformerEnv = do
-  phase <- currentPhase
-  globalEnv <- view (expanderWorld . worldTransformerEnvironments . at phase . non Env.empty) <$>
-               getState
-  localEnv <- view (expanderCurrentTransformerEnvs . at phase . non Env.empty) <$>
-              getState
-  return (globalEnv <> localEnv)
-
-currentEnv :: Expand VEnv
-currentEnv = do
-  phase <- currentPhase
-  globalEnv <-  maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
-  localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
-  return (globalEnv <> localEnv)
-
-
-expandEval :: Eval a -> Expand a
-expandEval evalAction = do
-  env <- currentEnv
-  out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
-  case out of
-    Left err -> do
-      p <- currentPhase
-      throwError $ MacroEvaluationError p err
-    Right val -> return val
 
 visibleBindings :: Expand BindingTable
 visibleBindings = do
@@ -348,31 +312,6 @@ visibleBindings = do
   return (globals <> locals)
 
 
--- | Add a binding to the current module's table
-addBinding :: Ident -> Binding -> BindingInfo SrcLoc -> Expand ()
-addBinding (Stx scs _ name) b info = do
-  modifyState $ over (expanderCurrentBindingTable . at name) $
-    (Just . ((scs, b, info) :) . fromMaybe [])
-
-addImportBinding :: Ident -> Binding -> Expand ()
-addImportBinding x@(Stx _ loc _) b =
-  addBinding x b (Imported loc)
-
-addDefinedBinding :: Ident -> Binding -> Expand ()
-addDefinedBinding x@(Stx _ loc _) b =
-  addBinding x b (Defined loc)
-
-addLocalBinding :: Ident -> Binding -> Expand ()
-addLocalBinding x@(Stx _ loc _) b =
-  addBinding x b (BoundLocally loc)
-
-
-bind :: Binding -> EValue -> Expand ()
-bind b v =
-  modifyState $
-  over expanderExpansionEnv $
-  \(ExpansionEnv env) ->
-    ExpansionEnv $ Map.insert b v env
 
 
 allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
@@ -410,17 +349,6 @@ resolve stx@(Stx scs srcLoc x) = do
          return (snd best)
 
 
-
-resolveImports :: Syntax -> Expand ()
-resolveImports _ = pure () -- TODO
-
-buildExports :: Syntax -> Expand ()
-buildExports _ = pure ()
-
-kernelExports :: Expand Exports
-kernelExports = view expanderKernelExports <$> getState
-
-
 initializeKernel :: Expand ()
 initializeKernel = do
   traverse_ (uncurry addExprPrimitive) exprPrims
@@ -431,566 +359,57 @@ initializeKernel = do
   where
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
     typePrims =
-      let baseType =
-            \name ctor ->
-              (name, \ dest stx -> do
-                       _actualName <- mustBeIdent stx
-                       linkType dest ctor)
-      in [ baseType "Bool" TBool
-         , baseType "Unit" TUnit
-         , baseType "Syntax" TSyntax
-         , baseType "Signal" TSignal
-         , ( "->"
-           , \ dest stx -> do
-               Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
-               argDest <- scheduleType arg
-               retDest <- scheduleType ret
-               linkType dest (TFun argDest retDest)
-           )
-         , ( "Macro"
-           , \ dest stx -> do
-               Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
-               tDest <- scheduleType t
-               linkType dest (TMacro tDest)
-           )
-         ]
+      [ ("Bool", Prims.baseType TBool)
+      , ("Unit", Prims.baseType TUnit)
+      , ("Syntax", Prims.baseType TSyntax)
+      , ("Signal", Prims.baseType TSignal)
+      , ("->", Prims.arrowType)
+      , ("Macro", Prims.macroType)
+      ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
-    modPrims =
-      [ ( "#%module"
-        , \ stx ->
-            view expanderModuleTop <$> getState >>=
-            \case
-              Just _ ->
-                error "TODO throw real error - already expanding a module"
-              Nothing -> do
-                bodyPtr <- newDeclTreePtr
-                modifyState $ set expanderModuleTop (Just bodyPtr)
-                Stx _ _ (_ :: Syntax, name, imports, body, exports) <- mustHaveEntries stx
-                _actualName <- mustBeIdent name
-
-                resolveImports imports
-
-                outScopesDest <- newDeclOutputScopesPtr
-                expandDeclForms bodyPtr mempty outScopesDest body
-
-                buildExports exports
-                pure ()
-        )
-      ]
+    modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
     declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
     declPrims =
-      [ ( "define"
-        , \ dest outScopesDest stx -> do
-            p <- currentPhase
-            Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
-            sc <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
-            x <- flip addScope' sc <$> mustBeIdent varStx
-            b <- freshBinding
-            addDefinedBinding x b
-            var <- freshVar
-            exprDest <- liftIO $ newSplitCorePtr
-            bind b (EIncompleteDefn var x exprDest)
-            schPtr <- liftIO $ newSchemePtr
-            linkOneDecl dest (Define x var schPtr exprDest)
-            t <- inTypeBinder do
-              t <- Ty . TMetaVar <$> freshMeta
-              forkExpandSyntax (ExprDest t exprDest) expr
-              return t
-            ph <- currentPhase
-            modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
-              Env.insert var x schPtr
-            forkGeneralizeType exprDest t schPtr
-            linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
-        )
-      , ( "datatype"
-        , \ dest outScopesDest stx -> do
-            Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
-            Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
-            Stx _ _ (name, args) <- mustBeCons nameAndArgs
-            typeArgs <- for (zip [0..] args) $ \(i, a) ->
-              prepareTypeVar i a
-            sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
-            let typeScopes = map fst typeArgs ++ [sc]
-            realName <- mustBeIdent (addScope' name sc)
-            p <- currentPhase
-            let arity = length args
-            d <- freshDatatype realName
-            addDatatype realName d (fromIntegral arity)
-
-            ctors <- for ctorSpecs \ spec -> do
-              Stx _ _ (cn, ctorArgs) <- mustBeCons spec
-              realCN <- mustBeIdent cn
-              ctor <- freshConstructor realCN
-              let ctorArgs' = [ foldr (flip (addScope p)) t typeScopes
-                              | t <- ctorArgs
-                              ]
-              argTypes <- traverse scheduleType ctorArgs'
-              return (realCN, ctor, argTypes)
-
-            let info =
-                  DatatypeInfo
-                  { _datatypeArity = fromIntegral arity
-                  , _datatypeConstructors =
-                    [ ctor | (_, ctor, _) <- ctors ]
-                  }
-            modifyState $
-              set (expanderCurrentDatatypes .
-                   at p . non Map.empty .
-                   at d) $
-              Just info
-
-
-            forkEstablishConstructors (ScopeSet.singleScopeAtPhase sc p) outScopesDest d ctors
-
-            linkOneDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
-        )
-      , ( "define-macros"
-        , \ dest outScopesDest stx -> do
-            Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
-            Stx _ _ macroDefs <- mustBeList macroList
-            p <- currentPhase
-            sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
-            macros <- for macroDefs $ \def -> do
-              Stx _ _ (mname, mdef) <- mustHaveEntries def
-              theName <- flip addScope' sc <$> mustBeIdent mname
-              b <- freshBinding
-              addDefinedBinding theName b
-              macroDest <- inEarlierPhase $
-                             schedule (Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax)))))
-                               (addScope p mdef sc)
-              v <- freshMacroVar
-              bind b $ EIncompleteMacro v theName macroDest
-              return (theName, v, macroDest)
-            linkOneDecl dest $ DefineMacros macros
-            linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
-        )
-      , ( "example"
-        , \ dest outScopesDest stx -> do
-            Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
-            exprDest <- liftIO $ newSplitCorePtr
-            sch <- liftIO newSchemePtr
-            linkOneDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
-            t <- inTypeBinder do
-              t <- Ty . TMetaVar <$> freshMeta
-              forkExpandSyntax (ExprDest t exprDest) expr
-              return t
-            forkGeneralizeType exprDest t sch
-            linkDeclOutputScopes outScopesDest mempty
-        )
-      , ( "import"
-         -- TODO Make import spec language extensible and use bindings rather than literals
-        , \dest outScopesDest stx -> do
-            Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries stx
-            spec <- importSpec toImport
-            modExports <- getImports spec
-            sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc stx)
-            flip forExports_ modExports $ \p x b -> inPhase p do
-              imported <- addRootScope' $ addScope' (Stx scs loc x) sc
-              addImportBinding imported b
-            linkOneDecl dest (Import spec)
-            linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)
-        )
-      , ( "export"
-        , \dest outScopesDest stx -> do
-            Stx _ _ (_, protoSpec) <- mustBeCons stx
-            exported <- exportSpec stx protoSpec
-            es <- getExports exported
-            modifyState $ over expanderModuleExports $ (<> es)
-            linkOneDecl dest (Export exported)
-            linkDeclOutputScopes outScopesDest mempty
-        )
-      , ( "meta"
-        , \dest outScopesDest stx -> do
-            (_ :: Syntax, subDecls) <- mustHaveShape stx
-            subDest <- newDeclTreePtr
-            linkOneDecl dest (Meta subDest)
-            inEarlierPhase $
-              expandDeclForms subDest mempty outScopesDest =<< addRootScope subDecls
-        )
-      , ( "group"
-        , \dest outScopesDest stx -> do
-            (_ :: Syntax, decls) <- mustHaveShape stx
-            expandDeclForms dest mempty outScopesDest decls
-        )
+      [ ("define", Prims.define)
+      , ("datatype", Prims.datatype)
+      , ("define-macros", Prims.defineMacros)
+      , ("example", Prims.example)
+      , ("import", primImportModule)
+      , ("export", primExport)
+      , ("meta", Prims.meta expandDeclForms)
+      , ("group", Prims.group expandDeclForms)
       ]
-      where
-        importSpec :: Syntax -> Expand ImportSpec
-        importSpec (Syntax (Stx scs srcloc (String s))) =
-          ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
-        importSpec (Syntax (Stx scs srcloc (Id "kernel"))) =
-          return $ ImportModule (Stx scs srcloc (KernelName kernelName))
-        importSpec stx@(Syntax (Stx _ _ (List elts)))
-          | (Syntax (Stx _ _ (Id "only")) : spec : names) <- elts = do
-              subSpec <- importSpec spec
-              ImportOnly subSpec <$> traverse mustBeIdent names
-          | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
-              subSpec <- importSpec spec
-              RenameImports subSpec <$> traverse getRename renamings
-          | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Sig (Signal i)))] <- elts = do
-              subSpec <- importSpec spec
-              return $ ShiftImports subSpec (fromIntegral i)
-          | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
-            subSpec <- importSpec spec
-            Stx _ _ p <- mustBeIdent prefix
-            return $ PrefixImports subSpec p
-          | otherwise = throwError $ NotImportSpec stx
-          where
-            getRename s = do
-              Stx _ _ (old', new') <- mustHaveEntries s
-              old <- mustBeIdent old'
-              new <- mustBeIdent new'
-              return (old, new)
-        importSpec other = throwError $ NotImportSpec other
-
-        exportSpec :: Syntax -> [Syntax] -> Expand ExportSpec
-        exportSpec blame elts
-          | [Syntax (Stx scs' srcloc'  (List ((getIdent -> Just (Stx _ _ kw)) : args)))] <- elts =
-              case kw of
-                "rename" ->
-                  case args of
-                    (rens : more) -> do
-                      pairs <- getRenames rens
-                      spec <- exportSpec blame more
-                      return $ ExportRenamed spec pairs
-                    _ -> throwError $ NotExportSpec blame
-                "prefix" ->
-                  case args of
-                    ((syntaxE -> String pref) : more) -> do
-                      spec <- exportSpec blame more
-                      return $ ExportPrefixed spec pref
-                    _ -> throwError $ NotExportSpec blame
-                "shift" ->
-                  case args of
-                    (Syntax (Stx _ _ (Sig (Signal i))) : more) -> do
-                      spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
-                      if i >= 0
-                        then return $ ExportShifted spec (fromIntegral i)
-                        else throwError $ NotExportSpec blame
-                    _ -> throwError $ NotExportSpec blame
-                _ -> throwError $ NotExportSpec blame
-          | Just xs <- traverse getIdent elts = return (ExportIdents xs)
-          | otherwise = throwError $ NotExportSpec blame
-          where
-            getIdent (Syntax (Stx scs loc (Id x))) = pure (Stx scs loc x)
-            getIdent _ = empty
-            getRenames :: Syntax -> Expand [(Text, Text)]
-            getRenames (syntaxE -> List rens) =
-              for rens $ \stx -> do
-                Stx _ _ (x, y) <- mustHaveEntries stx
-                Stx _ _ x' <- mustBeIdent x
-                Stx _ _ y' <- mustBeIdent y
-                pure (x', y')
-            getRenames _ = throwError $ NotExportSpec blame
-
-        stxLoc :: Syntax -> SrcLoc
-        stxLoc (Syntax (Stx _ srcloc _)) = srcloc
 
     exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
-      [ ( "oops"
-        , \ _t _dest stx -> throwError (InternalError $ "oops" ++ show stx)
-        )
-      , ( "the"
-        , \ t dest stx -> do
-            Stx _ _ (_, ty, expr) <- mustHaveEntries stx
-            tyDest <- scheduleType ty
-            -- TODO add type to elaborated program? Or not?
-            forkAwaitingType tyDest [TypeThenUnify dest t, TypeThenExpandExpr dest expr]
-        )
-      , ( "let"
-        , \ t dest stx -> do
-            Stx _ _ (_, b, body) <- mustHaveEntries stx
-            Stx _ _ (x, def) <- mustHaveEntries b
-            (sc, x', coreX) <- prepareVar x
-            p <- currentPhase
-            psc <- phaseRoot
-            (defDest, xTy) <- inTypeBinder do
-              xt <- Ty . TMetaVar <$> freshMeta
-              defDest <- schedule xt def
-              return (defDest, xt)
-            sch <- liftIO $ newSchemePtr
-            forkGeneralizeType defDest xTy sch
-            bodyDest <- withLocalVarType x' coreX sch $
-                          schedule t $ addScope p (addScope p body sc) psc
-            linkExpr dest $ CoreLet x' coreX defDest bodyDest
-        )
-      , ( "flet"
-        , \ t dest stx -> do
-            ft <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
-            xt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
-            rt <- inTypeBinder $ Ty . TMetaVar <$> freshMeta
-            fsch <- trivialScheme ft
-            xsch <- trivialScheme xt
-            Stx _ _ (_, b, body) <- mustHaveEntries stx
-            Stx _ _ (f, args, def) <- mustHaveEntries b
-            Stx _ _ x <- mustHaveEntries args
-            (fsc, f', coreF) <- prepareVar f
-            (xsc, x', coreX) <- prepareVar x
-            p <- currentPhase
-            psc <- phaseRoot
-            defDest <- inTypeBinder $
-                       withLocalVarType f' coreF fsch $
-                       withLocalVarType x' coreX xsch $
-                       schedule rt $
-                       addScope p (addScope p (addScope p def fsc) xsc) psc
-            unify dest ft (Ty (TFun xt rt))
-            sch <- liftIO newSchemePtr
-            forkGeneralizeType defDest ft sch
-            bodyDest <- withLocalVarType f' coreF sch $
-                        schedule t $
-                        addScope p (addScope p body fsc) psc
-            linkExpr dest $ CoreLetFun f' coreF x' coreX defDest bodyDest
-        )
-      , ( "lambda"
-        , \ t dest stx -> do
-            Stx _ _ (_, arg, body) <- mustHaveEntries stx
-            Stx _ _ theArg <- mustHaveEntries arg
-            (sc, arg', coreArg) <- prepareVar theArg
-            p <- currentPhase
-            psc <- phaseRoot
-            argT <- Ty . TMetaVar <$> freshMeta
-            retT <- Ty . TMetaVar <$> freshMeta
-            unify dest t (Ty (TFun argT retT))
-            sch <- trivialScheme argT
-            bodyDest <-
-              withLocalVarType arg' coreArg sch $
-                schedule retT $ addScope p (addScope p body sc) psc
-            linkExpr dest $ CoreLam arg' coreArg bodyDest
-        )
-      , ( "#%app"
-        , \ t dest stx -> do
-            argT <- Ty . TMetaVar <$> freshMeta
-            Stx _ _ (_, fun, arg) <- mustHaveEntries stx
-            funDest <- schedule (Ty (TFun argT t)) fun
-            argDest <- schedule argT arg
-            linkExpr dest $ CoreApp funDest argDest
-        )
-      , ( "pure"
-        , \ t dest stx -> do
-            Stx _ _ (_ :: Syntax, v) <- mustHaveEntries stx
-            innerT <- Ty . TMetaVar <$> freshMeta
-            unify dest (Ty (TMacro innerT)) t
-            argDest <- schedule innerT v
-            linkExpr dest $ CorePure argDest
-        )
-      , ( ">>="
-        , \ t dest stx -> do
-            a <- Ty . TMetaVar <$> freshMeta
-            b <- Ty . TMetaVar <$> freshMeta
-            Stx _ _ (_, act, cont) <- mustHaveEntries stx
-            actDest <- schedule (Ty (TMacro a)) act
-            contDest <- schedule (Ty (TFun a (Ty (TMacro b)))) cont
-            unify dest t (Ty (TMacro b))
-            linkExpr dest $ CoreBind actDest contDest
-        )
-      , ( "syntax-error"
-        , \ t dest stx -> do
-            a <- Ty . TMetaVar <$> freshMeta
-            unify dest t (Ty (TMacro a))
-            Stx scs srcloc (_, args) <- mustBeCons stx
-            Stx _ _ (msg, locs) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
-            msgDest <- schedule (Ty TSyntax) msg
-            locDests <- traverse (schedule (Ty TSyntax)) locs
-            linkExpr dest $ CoreSyntaxError (SyntaxError locDests msgDest)
-        )
-      , ( "send-signal"
-        , \ t dest stx -> do
-            unify dest t (Ty (TMacro (Ty TUnit)))
-            Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
-            sigDest <- schedule (Ty TSignal) sig
-            linkExpr dest $ CoreSendSignal sigDest
-        )
-      , ( "wait-signal"
-        , \ t dest stx -> do
-            unify dest t (Ty (TMacro (Ty TUnit)))
-            Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
-            sigDest <- schedule (Ty TSignal) sig
-            linkExpr dest $ CoreWaitSignal sigDest
-        )
-      , ( "bound-identifier=?"
-        , \ t dest stx -> do
-            unify dest t (Ty (TMacro (Ty TBool)))
-            Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
-            newE <- CoreIdentEq Bound <$> schedule (Ty TSyntax) id1 <*> schedule (Ty TSyntax) id2
-            linkExpr dest newE
-        )
-      , ( "free-identifier=?"
-        , \ t dest stx -> do
-            unify dest t (Ty (TMacro (Ty TBool)))
-            Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
-            newE <- CoreIdentEq Free <$> schedule (Ty TSyntax) id1 <*> schedule (Ty TSyntax) id2
-            linkExpr dest newE
-        )
-      , ( "quote"
-        , \ t dest stx -> do
-            unify dest (Ty TSyntax) t
-            Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
-            linkExpr dest $ CoreSyntax quoted
-        )
-      , ( "if"
-        , \ t dest stx -> do
-            Stx _ _ (_ :: Syntax, b, true, false) <- mustHaveEntries stx
-            linkExpr dest =<< CoreIf <$> schedule (Ty TBool) b <*> schedule t true <*> schedule t false
-        )
-      , ( "ident"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, someId) <- mustHaveEntries stx
-            x@(Stx _ _ _) <- mustBeIdent someId
-            linkExpr dest $ CoreIdentifier x
-        )
-      , ( "ident-syntax"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, someId, source) <- mustHaveEntries stx
-            idDest <- schedule (Ty TSyntax) someId
-            sourceDest <- schedule (Ty TSyntax) source
-            linkExpr dest $ CoreIdent $ ScopedIdent idDest sourceDest
-        )
-      , ( "empty-list-syntax"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, source) <- mustHaveEntries stx
-            sourceDest <- schedule (Ty TSyntax) source
-            linkExpr dest $ CoreEmpty $ ScopedEmpty sourceDest
-        )
-      , ( "cons-list-syntax"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, car, cdr, source) <- mustHaveEntries stx
-            carDest <- schedule (Ty TSyntax) car
-            cdrDest <- schedule (Ty TSyntax) cdr
-            sourceDest <- schedule (Ty TSyntax) source
-            linkExpr dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
-        )
-      , ( "list-syntax"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, list, source) <- mustHaveEntries stx
-            Stx _ _ listItems <- mustHaveEntries list
-            listDests <- traverse (schedule (Ty TSyntax)) listItems
-            sourceDest <- schedule (Ty TSyntax) source
-            linkExpr dest $ CoreList $ ScopedList listDests sourceDest
-        )
-      , ( "replace-loc"
-        , \ t dest stx -> do
-            unify dest t (Ty (TSyntax))
-            Stx _ _ (_ :: Syntax, loc, valStx) <- mustHaveEntries stx
-            locDest <- schedule (Ty TSyntax) loc
-            valStxDest <- schedule (Ty TSyntax) valStx
-            linkExpr dest $ CoreReplaceLoc locDest valStxDest
-        )
-      , ( "syntax-case"
-        , \ t dest stx -> do
-            Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
-            Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
-            scrutDest <- schedule (Ty TSyntax) scrutinee
-            patternDests <- traverse (mustHaveEntries >=> expandPatternCase t) patterns
-            linkExpr dest $ CoreCase scrutDest patternDests
-        )
-      , ( "let-syntax"
-        , \ t dest stx -> do
-            Stx _ loc (_ :: Syntax, macro, body) <- mustHaveEntries stx
-            Stx _ _ (mName, mdef) <- mustHaveEntries macro
-            sc <- freshScope $ T.pack $ "Scope for let-syntax at " ++ shortShow loc
-            m <- mustBeIdent mName
-            p <- currentPhase
-            -- Here, the binding occurrence of the macro gets the
-            -- fresh scope at all phases, but later, the scope is only
-            -- added to the correct phase in potential use sites.
-            -- This prevents the body of the macro (in an earlier
-            -- phase) from being able to refer to the macro itself.
-            let m' = addScope' m sc
-            b <- freshBinding
-            addLocalBinding m' b
-            v <- freshMacroVar
-            macroDest <- inEarlierPhase $ do
-              psc <- phaseRoot
-              schedule (Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax)))))
-                (addScope (prior p) mdef psc)
-            forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
-        )
-      , ( "log"
-        , \ t dest stx -> do
-            unify dest (Ty (TMacro (Ty TUnit))) t
-            Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
-            msgDest <- schedule (Ty TSyntax) message
-            linkExpr dest $ CoreLog msgDest
-        )
-      , ( "case"
-        , \ t dest stx -> do
-            Stx _ _ (_, scrut, cases) <- mustBeConsCons stx
-            a <- Ty . TMetaVar <$> freshMeta
-            scrutineeDest <- schedule a scrut
-            cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
-            linkExpr dest $ CoreDataCase scrutineeDest cases'
-        )
+      [ ("oops", Prims.oops)
+      , ("the", Prims.the)
+      , ("let", Prims.letExpr)
+      , ("flet", Prims.flet)
+      , ("lambda", Prims.lambda)
+      , ("#%app", Prims.app)
+      , ("pure", Prims.pureMacro)
+      , (">>=", Prims.bindMacro)
+      , ("syntax-error", Prims.syntaxError)
+      , ("send-signal", Prims.sendSignal)
+      , ("wait-signal", Prims.waitSignal)
+      , ("bound-identifier=?", Prims.identEqual Bound)
+      , ("free-identifier=?", Prims.identEqual Free)
+      , ("quote", Prims.quote)
+      , ("if", Prims.conditional)
+      , ("ident", Prims.ident)
+      , ("ident-syntax", Prims.identSyntax)
+      , ("empty-list-syntax", Prims.emptyListSyntax)
+      , ("cons-list-syntax", Prims.consListSyntax)
+      , ("list-syntax", Prims.listSyntax)
+      , ("replace-loc", Prims.replaceLoc)
+      , ("syntax-case", Prims.syntaxCase)
+      , ("let-syntax", Prims.letSyntax)
+      , ("log", Prims.log)
+      , ("case", Prims.dataCase)
       ]
-
-
-    expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
-    -- TODO match case keywords hygienically
-    expandPatternCase t (Stx _ _ (lhs, rhs)) = do
-      p <- currentPhase
-      sch <- trivialScheme (Ty TSyntax)
-      case lhs of
-        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "ident")),
-                               patVar])) -> do
-          (sc, x', var) <- prepareVar patVar
-          let rhs' = addScope p rhs sc
-          rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
-          let patOut = SyntaxPatternIdentifier x' var
-          return (patOut, rhsDest)
-        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
-                               Syntax (Stx _ _ (List vars))])) -> do
-          varInfo <- traverse prepareVar vars
-          let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
-          rhsDest <- withLocalVarTypes [(var, ident, sch) | (_, ident, var) <- varInfo] $
-                       schedule t rhs'
-          let patOut = SyntaxPatternList [(ident, var) | (_, ident, var) <- varInfo]
-          return (patOut, rhsDest)
-        Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "cons")),
-                               car,
-                               cdr])) -> do
-          (sc, car', carVar) <- prepareVar car
-          (sc', cdr', cdrVar) <- prepareVar cdr
-          let rhs' = addScope p (addScope p rhs sc) sc'
-          rhsDest <- withLocalVarTypes [(carVar, car', sch), (cdrVar, cdr', sch)] $
-                       schedule t rhs'
-          let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
-          return (patOut, rhsDest)
-        Syntax (Stx _ _ (List [])) -> do
-          rhsDest <- schedule t rhs
-          return (SyntaxPatternEmpty, rhsDest)
-        Syntax (Stx _ _ (Id "_")) -> do
-          rhsDest <- schedule t rhs
-          return (SyntaxPatternAny, rhsDest)
-        other ->
-          throwError $ UnknownPattern other
-
-    scheduleType :: Syntax -> Expand SplitTypePtr
-    scheduleType stx = do
-      dest <- liftIO newSplitTypePtr
-      forkExpandType dest stx
-      return dest
-
-
-    addDatatype :: Ident -> Datatype -> Natural -> Expand ()
-    addDatatype name dt arity = do
-      name' <- addRootScope' name
-      let val = EPrimTypeMacro \dest stx -> do
-                  Stx _ _ (me, args) <- mustBeCons stx
-                  _ <- mustBeIdent me
-                  if length args /= fromIntegral arity
-                    then throwError $ WrongDatatypeArity stx dt arity (length args)
-                    else do
-                      argDests <- traverse scheduleType args
-                      linkType dest $ TDatatype dt argDests
-      b <- freshBinding
-      addDefinedBinding name' b
-      bind b val
 
 
     addToKernel name p b =
@@ -1025,78 +444,103 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
-varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
-varPrepHelper varStx = do
-  sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
-  x <- mustBeIdent varStx
-  p <- currentPhase
-  psc <- phaseRoot
-  let x' = addScope' (addScope p x sc) psc
-  b <- freshBinding
-  addLocalBinding x' b
-  return (sc, x', b)
+
+-- TODO Make import spec language extensible and use bindings rather
+-- than literals
+primImportModule :: DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
+primImportModule dest outScopesDest importStx = do
+  Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries importStx
+  spec <- importSpec toImport
+  modExports <- getImports spec
+  sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
+  flip forExports_ modExports $ \p x b -> inPhase p do
+    imported <- addRootScope' $ addScope' (Stx scs loc x) sc
+    addImportBinding imported b
+  linkOneDecl dest (Import spec)
+  linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)
+  where
+    importSpec :: Syntax -> Expand ImportSpec
+    importSpec (Syntax (Stx scs srcloc (String s))) =
+      ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
+    importSpec (Syntax (Stx scs srcloc (Id "kernel"))) =
+      return $ ImportModule (Stx scs srcloc (KernelName kernelName))
+    importSpec stx@(Syntax (Stx _ _ (List elts)))
+      | (Syntax (Stx _ _ (Id "only")) : spec : names) <- elts = do
+          subSpec <- importSpec spec
+          ImportOnly subSpec <$> traverse mustBeIdent names
+      | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
+          subSpec <- importSpec spec
+          RenameImports subSpec <$> traverse getRename renamings
+      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Sig (Signal i)))] <- elts = do
+          subSpec <- importSpec spec
+          return $ ShiftImports subSpec (fromIntegral i)
+      | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
+        subSpec <- importSpec spec
+        Stx _ _ p <- mustBeIdent prefix
+        return $ PrefixImports subSpec p
+      | otherwise = throwError $ NotImportSpec stx
+    importSpec other = throwError $ NotImportSpec other
+    getRename s = do
+      Stx _ _ (old', new') <- mustHaveEntries s
+      old <- mustBeIdent old'
+      new <- mustBeIdent new'
+      return (old, new)
+
+primExport :: DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
+primExport dest outScopesDest stx = do
+  Stx _ _ (_, protoSpec) <- mustBeCons stx
+  exported <- exportSpec stx protoSpec
+  es <- getExports exported
+  modifyState $ over expanderModuleExports $ (<> es)
+  linkOneDecl dest (Export exported)
+  linkDeclOutputScopes outScopesDest mempty
+  where
+    exportSpec :: Syntax -> [Syntax] -> Expand ExportSpec
+    exportSpec blame elts
+      | [Syntax (Stx scs' srcloc'  (List ((getIdent -> Just (Stx _ _ kw)) : args)))] <- elts =
+          case kw of
+            "rename" ->
+              case args of
+                (rens : more) -> do
+                  pairs <- getRenames blame rens
+                  spec <- exportSpec blame more
+                  return $ ExportRenamed spec pairs
+                _ -> throwError $ NotExportSpec blame
+            "prefix" ->
+              case args of
+                ((syntaxE -> String pref) : more) -> do
+                  spec <- exportSpec blame more
+                  return $ ExportPrefixed spec pref
+                _ -> throwError $ NotExportSpec blame
+            "shift" ->
+              case args of
+                (Syntax (Stx _ _ (Sig (Signal i))) : more) -> do
+                  spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
+                  if i >= 0
+                    then return $ ExportShifted spec (fromIntegral i)
+                    else throwError $ NotExportSpec blame
+                _ -> throwError $ NotExportSpec blame
+            _ -> throwError $ NotExportSpec blame
+      | Just xs <- traverse getIdent elts = return (ExportIdents xs)
+      | otherwise = throwError $ NotExportSpec blame
 
 
-prepareVar :: Syntax -> Expand (Scope, Ident, Var)
-prepareVar varStx = do
-  (sc, x', b) <- varPrepHelper varStx
-  var <- freshVar
-  bind b (EVarMacro var)
-  return (sc, x', var)
+    getIdent (Syntax (Stx scs loc (Id x))) = pure (Stx scs loc x)
+    getIdent _ = empty
 
-prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
-prepareTypeVar i varStx = do
-  (sc, α, b) <- varPrepHelper varStx
-  bind b (ETypeVar i)
-  return (sc, α)
-
-
-schedule :: Ty -> Syntax -> Expand SplitCorePtr
-schedule t stx@(Syntax (Stx _ loc _)) = do
-  dest <- liftIO newSplitCorePtr
-  saveOrigin dest loc
-  forkExpandSyntax (ExprDest t dest) stx
-  return dest
-
-scheduleDataPattern ::
-  Ty -> Ty ->
-  Stx (Syntax, Syntax) ->
-  Expand (PatternPtr, SplitCorePtr)
-scheduleDataPattern exprTy scrutTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = do
-  dest <- liftIO newPatternPtr
-  forkExpandSyntax (PatternDest exprTy scrutTy dest) patStx
-  rhsDest <- liftIO newSplitCorePtr
-  saveOrigin rhsDest loc
-  forkExpanderTask $ AwaitingPattern dest exprTy rhsDest rhsStx
-  return (dest, rhsDest)
-
-
-addModuleScope :: HasScopes a => a -> Expand a
-addModuleScope stx = do
-  mn <- view (expanderLocal . expanderModuleName) <$> ask
-  sc <- moduleScope mn
-  return $ addScope' stx sc
-
--- | Add the current phase's root scope at the current phase
-addRootScope :: HasScopes a => a -> Expand a
-addRootScope stx = do
-  p <- currentPhase
-  rsc <- phaseRoot
-  return (addScope p stx rsc)
-
--- | Add the current phase's root scope at all phases (for binding occurrences)
-addRootScope' :: HasScopes a => a -> Expand a
-addRootScope' stx = do
-  rsc <- phaseRoot
-  return (addScope' stx rsc)
-
+    getRenames _blame (syntaxE -> List rens) =
+      for rens $ \renStx -> do
+        Stx _ _ (x, y) <- mustHaveEntries renStx
+        Stx _ _ x' <- mustBeIdent x
+        Stx _ _ y' <- mustBeIdent y
+        pure (x', y')
+    getRenames blame _ = throwError $ NotExportSpec blame
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
 identifierHeaded (Syntax (Stx _ _ (List (h:_))))
   | (Syntax (Stx scs srcloc (Id x))) <- h = Just (Stx scs srcloc x)
 identifierHeaded _ = Nothing
-
 
 expandTasks :: Expand ()
 expandTasks = do
@@ -1113,16 +557,6 @@ expandTasks = do
   where
     taskIDs = Set.fromList . map (view _1)
 
-completely :: Expand a -> Expand a
-completely body = do
-  oldTasks <- getTasks
-  clearTasks
-  a <- body
-  remainingTasks <- getTasks
-  unless (null remainingTasks) $ do
-    throwError (NoProgress (map (view _3) remainingTasks))
-  setTasks oldTasks
-  pure a
 
 runTask :: (TaskID, ExpanderLocal, ExpanderTask) -> Expand ()
 runTask (tid, localData, task) = withLocal localData $ do
@@ -1391,7 +825,7 @@ expandOneForm prob stx
               if length patVars /= length argTypes
                 then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
                 else do
-                  varInfo <- traverse prepareVar patVars
+                  varInfo <- traverse Prims.prepareVar patVars
                   modifyState $
                     set (expanderPatternBinders . at dest) $
                     Just [ (sc, name, x, t)
@@ -1589,47 +1023,3 @@ interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right (ValueBool False) -- TODO unit type
 
-class UnificationErrorBlame a where
-  getBlameLoc :: a -> Expand (Maybe SrcLoc)
-
-instance UnificationErrorBlame SrcLoc where
-  getBlameLoc = pure . pure
-
-instance UnificationErrorBlame SplitCorePtr where
-  getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
-
--- The expected type is first, the received is second
-unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
-unify blame t1 t2 = do
-  t1' <- normType t1
-  t2' <- normType t2
-  unify' (unTy t1') (unTy t2')
-
-  where
-    unify' :: TyF Ty -> TyF Ty -> Expand ()
-    -- Rigid-rigid
-    unify' TBool TBool = pure ()
-    unify' TUnit TUnit = pure ()
-    unify' TSyntax TSyntax = pure ()
-    unify' TSignal TSignal = pure ()
-    unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
-    unify' (TMacro a) (TMacro b) = unify blame a b
-    unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
-      | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
-
-    -- Flex-flex
-    unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
-      l1 <- view varLevel <$> derefType ptr1
-      l2 <- view varLevel <$> derefType ptr2
-      if | ptr1 == ptr2 -> pure ()
-         | l1 < l2 -> linkToType ptr1 t2
-         | otherwise -> linkToType ptr2 t1
-
-    -- Flex-rigid
-    unify' (TMetaVar ptr1) _ = linkToType ptr1 t2
-    unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
-
-    -- Mismatch
-    unify' expected received = do
-      loc <- getBlameLoc blame
-      throwError $ TypeMismatch loc (Ty expected) (Ty received)

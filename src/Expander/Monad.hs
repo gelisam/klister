@@ -9,13 +9,26 @@ module Expander.Monad
   , module Expander.DeclScope
   -- * The expander monad
   , Expand(..)
+  , addBinding
+  , addImportBinding
+  , addDefinedBinding
+  , addLocalBinding
+  , addRootScope
+  , addRootScope'
+  , addModuleScope
+  , bind
+  , completely
   , constructorInfo
+  , currentEnv
   , currentPhase
   , currentBindingLevel
+  , currentTransformerEnv
   , datatypeInfo
   , inTypeBinder
   , dependencies
   , execExpand
+  , expandEval
+  , freshBinding
   , freshConstructor
   , freshDatatype
   , freshScope
@@ -27,6 +40,7 @@ module Expander.Monad
   , inEarlierPhase
   , inPhase
   , isExprChecked
+  , kernelExports
   , linkedCore
   , linkedScheme
   , linkedType
@@ -67,6 +81,7 @@ module Expander.Monad
   , forkExpanderTask
   , forkInterpretMacroAction
   , stillStuck
+  , schedule
   -- * Implementation parts
   , SyntacticCategory(..)
   , ExpansionEnv(..)
@@ -123,6 +138,7 @@ import Data.Foldable
 import Data.IORef
 import Data.Map (Map)
 import qualified Data.Map as Map
+import Data.Maybe
 import Data.Monoid
 import qualified Data.Set as Set
 import Data.Text (Text)
@@ -132,10 +148,12 @@ import Data.Unique
 import Numeric.Natural
 
 import Binding
+import Binding.Info
 import Control.Lens.IORef
 import Core
 import Datatype
 import Env
+import Evaluator
 import Expander.DeclScope
 import Expander.Error
 import Expander.Task
@@ -312,6 +330,8 @@ freshScope why = do
   modifyState $ over expanderNextScopeNum $ (+ 1)
   return (Scope n why)
 
+freshBinding :: Expand Binding
+freshBinding = Binding <$> liftIO newUnique
 
 withLocal :: ExpanderLocal -> Expand a -> Expand a
 withLocal localData = Expand . local (set expanderLocal localData) . runExpand
@@ -688,3 +708,106 @@ datatypeInfo datatype = do
     Nothing ->
       throwError $ InternalError $ "Unknown datatype " ++ show datatype
     Just info -> pure info
+
+bind :: Binding -> EValue -> Expand ()
+bind b v =
+  modifyState $
+  over expanderExpansionEnv $
+  \(ExpansionEnv env) ->
+    ExpansionEnv $ Map.insert b v env
+
+-- | Add a binding to the current module's table
+addBinding :: Ident -> Binding -> BindingInfo SrcLoc -> Expand ()
+addBinding (Stx scs _ name) b info = do
+  modifyState $ over (expanderCurrentBindingTable . at name) $
+    (Just . ((scs, b, info) :) . fromMaybe [])
+
+addImportBinding :: Ident -> Binding -> Expand ()
+addImportBinding x@(Stx _ loc _) b =
+  addBinding x b (Imported loc)
+
+addDefinedBinding :: Ident -> Binding -> Expand ()
+addDefinedBinding x@(Stx _ loc _) b =
+  addBinding x b (Defined loc)
+
+addLocalBinding :: Ident -> Binding -> Expand ()
+addLocalBinding x@(Stx _ loc _) b =
+  addBinding x b (BoundLocally loc)
+
+addModuleScope :: HasScopes a => a -> Expand a
+addModuleScope stx = do
+  mn <- view (expanderLocal . expanderModuleName) <$> ask
+  sc <- moduleScope mn
+  return $ addScope' stx sc
+
+-- | Add the current phase's root scope at the current phase
+addRootScope :: HasScopes a => a -> Expand a
+addRootScope stx = do
+  p <- currentPhase
+  rsc <- phaseRoot
+  return (addScope p stx rsc)
+
+-- | Add the current phase's root scope at all phases (for binding occurrences)
+addRootScope' :: HasScopes a => a -> Expand a
+addRootScope' stx = do
+  rsc <- phaseRoot
+  return (addScope' stx rsc)
+
+-- | Schedule an expression expansion task, returning the pointer to
+-- which it will be written.
+schedule :: Ty -> Syntax -> Expand SplitCorePtr
+schedule t stx@(Syntax (Stx _ loc _)) = do
+  dest <- liftIO newSplitCorePtr
+  saveOrigin dest loc
+  forkExpandSyntax (ExprDest t dest) stx
+  return dest
+
+kernelExports :: Expand Exports
+kernelExports = view expanderKernelExports <$> getState
+
+completely :: Expand a -> Expand a
+completely body = do
+  oldTasks <- getTasks
+  clearTasks
+  a <- body
+  remainingTasks <- getTasks
+  unless (null remainingTasks) $ do
+    throwError (NoProgress (map (view _3) remainingTasks))
+  setTasks oldTasks
+  pure a
+
+getTasks :: Expand [(TaskID, ExpanderLocal, ExpanderTask)]
+getTasks = view expanderTasks <$> getState
+
+setTasks :: [(TaskID, ExpanderLocal, ExpanderTask)] -> Expand ()
+setTasks = modifyState . set expanderTasks
+
+clearTasks :: Expand ()
+clearTasks = modifyState $ set expanderTasks []
+
+expandEval :: Eval a -> Expand a
+expandEval evalAction = do
+  env <- currentEnv
+  out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
+  case out of
+    Left err -> do
+      p <- currentPhase
+      throwError $ MacroEvaluationError p err
+    Right val -> return val
+
+currentTransformerEnv :: Expand TEnv
+currentTransformerEnv = do
+  phase <- currentPhase
+  globalEnv <- view (expanderWorld . worldTransformerEnvironments . at phase . non Env.empty) <$>
+               getState
+  localEnv <- view (expanderCurrentTransformerEnvs . at phase . non Env.empty) <$>
+              getState
+  return (globalEnv <> localEnv)
+
+currentEnv :: Expand VEnv
+currentEnv = do
+  phase <- currentPhase
+  globalEnv <-  maybe Env.empty id . view (expanderWorld . worldEnvironments . at phase) <$> getState
+  localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
+  return (globalEnv <> localEnv)
+

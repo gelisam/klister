@@ -1,4 +1,5 @@
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
 module Expander.TC where
 
@@ -12,6 +13,8 @@ import Numeric.Natural
 
 import Expander.Monad
 import Core
+import SplitCore
+import Syntax.SrcLoc
 import Type
 import World
 
@@ -181,3 +184,48 @@ makeTypeMetas 0 =
   pure []
 makeTypeMetas n =
   (:) <$> (Ty . TMetaVar <$> freshMeta) <*> makeTypeMetas (n - 1)
+
+class UnificationErrorBlame a where
+  getBlameLoc :: a -> Expand (Maybe SrcLoc)
+
+instance UnificationErrorBlame SrcLoc where
+  getBlameLoc = pure . pure
+
+instance UnificationErrorBlame SplitCorePtr where
+  getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
+
+-- The expected type is first, the received is second
+unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
+unify blame t1 t2 = do
+  t1' <- normType t1
+  t2' <- normType t2
+  unify' (unTy t1') (unTy t2')
+
+  where
+    unify' :: TyF Ty -> TyF Ty -> Expand ()
+    -- Rigid-rigid
+    unify' TBool TBool = pure ()
+    unify' TUnit TUnit = pure ()
+    unify' TSyntax TSyntax = pure ()
+    unify' TSignal TSignal = pure ()
+    unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
+    unify' (TMacro a) (TMacro b) = unify blame a b
+    unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
+      | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
+
+    -- Flex-flex
+    unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
+      l1 <- view varLevel <$> derefType ptr1
+      l2 <- view varLevel <$> derefType ptr2
+      if | ptr1 == ptr2 -> pure ()
+         | l1 < l2 -> linkToType ptr1 t2
+         | otherwise -> linkToType ptr2 t1
+
+    -- Flex-rigid
+    unify' (TMetaVar ptr1) _ = linkToType ptr1 t2
+    unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
+
+    -- Mismatch
+    unify' expected received = do
+      loc <- getBlameLoc blame
+      throwError $ TypeMismatch loc (Ty expected) (Ty received)

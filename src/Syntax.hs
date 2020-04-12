@@ -113,6 +113,8 @@ addScopes a0 scopeSet
       ifoldlOf (to ScopeSet.contents .> _2 .> ifolded <. folded)
                addScope
 
+stxLoc :: Syntax -> SrcLoc
+stxLoc (Syntax (Stx _ srcloc _)) = srcloc
 
 syntaxE :: Syntax -> ExprF Syntax
 syntaxE (Syntax (Stx _ _ e)) = e
