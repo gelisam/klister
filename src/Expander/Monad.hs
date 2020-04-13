@@ -67,6 +67,9 @@ module Expander.Monad
   , mkInitContext
   -- ** Tasks
   , module Expander.Task
+  , clearTasks
+  , getTasks
+  , setTasks
   , forkAwaitingDefn
   , forkAwaitingMacro
   , forkAwaitingDeclMacro

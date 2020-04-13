@@ -299,12 +299,6 @@ getEValue b = do
     Nothing -> throwError (InternalError ("No such binding: " ++ show b))
 
 
-getTasks :: Expand [(TaskID, ExpanderLocal, ExpanderTask)]
-getTasks = view expanderTasks <$> getState
-
-clearTasks :: Expand ()
-clearTasks = modifyState $ set expanderTasks []
-
 visibleBindings :: Expand BindingTable
 visibleBindings = do
   globals <- view expanderGlobalBindingTable <$> getState
