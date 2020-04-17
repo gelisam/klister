@@ -125,6 +125,8 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
                             pp (env <> env') rhs])
             cases
          ]
+  pp env (CoreError what) =
+    text "error" <+> pp env what
   pp env (CorePure arg) =
     text "pure" <+> pp env arg
   pp env (CoreBind act k) =

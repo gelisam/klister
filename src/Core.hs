@@ -96,6 +96,7 @@ data CoreF pat core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
   | CoreDataCase core [(pat, core)]
+  | CoreError core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
@@ -324,6 +325,10 @@ instance (ShortShow pat, ShortShow core) =>
    ++ shortShow scrut
    ++ " "
    ++ intercalate ", " (map shortShow cases)
+   ++ ")"
+  shortShow (CoreError what)
+    = "(Error "
+   ++ shortShow what
    ++ ")"
   shortShow (CorePure x)
     = "(Pure "

@@ -47,7 +47,7 @@
   "How to highlight Klister build-in operators."
   :group 'klister)
 
-(defcustom klister-command "klister-repl"
+(defcustom klister-command "klister"
   "The command to run to execute Klister."
   :type 'string
   :group 'klister)
