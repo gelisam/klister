@@ -379,6 +379,7 @@ initializeKernel = do
     exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
       [ ("oops", Prims.oops)
+      , ("error", Prims.err)
       , ("the", Prims.the)
       , ("let", Prims.letExpr)
       , ("flet", Prims.flet)

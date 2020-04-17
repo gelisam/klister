@@ -99,7 +99,7 @@ mainWithOptions opts =
             visit mn
             getState
           case st of
-            Left err -> prettyPrintLn err *> fail ""
+            Left err -> prettyPrintLn err *> exitFailure
             Right result ->
               pure (mn, ctx, result)
 

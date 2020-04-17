@@ -18,6 +18,7 @@ module Expander.Primitives
   , consListSyntax
   , dataCase
   , emptyListSyntax
+  , err
   , flet
   , ident
   , identEqual
@@ -198,6 +199,12 @@ type ExprPrim = Ty -> SplitCorePtr -> Syntax -> Expand ()
 
 oops :: ExprPrim
 oops _t _dest stx = throwError (InternalError $ "oops" ++ show stx)
+
+err :: ExprPrim
+err _t dest stx = do
+  Stx _ _ (_ :: Syntax, msg) <- mustHaveEntries stx
+  msgDest <- schedule (Ty TSyntax) msg
+  linkExpr dest $ CoreError msgDest
 
 the :: ExprPrim
 the t dest stx = do

@@ -1,0 +1,6 @@
+#lang kernel
+
+(define fail (lambda (msg) (error msg)))
+
+(example fail)
+

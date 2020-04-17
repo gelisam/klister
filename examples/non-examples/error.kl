@@ -1,0 +1,4 @@
+#lang kernel
+
+(example (error '"It went wrong."))
+

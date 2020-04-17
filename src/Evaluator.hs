@@ -14,6 +14,7 @@ import qualified Data.Text as T
 
 import Core
 import Env
+import ShortShow
 import Signals
 import Syntax
 import Syntax.SrcLoc
@@ -34,6 +35,7 @@ data EvalError
   = EvalErrorUnbound Var
   | EvalErrorType TypeError
   | EvalErrorCase Value
+  | EvalErrorUser Syntax
   deriving (Eq, Show)
 makePrisms ''EvalError
 
@@ -43,10 +45,15 @@ evalErrorText (EvalErrorType (TypeError expected got)) =
   "Wrong type. Expected a " <> expected <> " but got a " <> got
 evalErrorText (EvalErrorCase val) =
   "Didn't match any pattern: " <> valueText val
+evalErrorText (EvalErrorUser what) =
+  T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
+  syntaxText what
 
 newtype Eval a = Eval
    { runEval :: ReaderT VEnv (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad, MonadReader VEnv, MonadError EvalError)
+   deriving (Functor, Applicative, Monad,
+             MonadReader VEnv, MonadError EvalError,
+             MonadIO)
 
 withEnv :: VEnv -> Eval a -> Eval a
 withEnv = local . const
@@ -116,6 +123,9 @@ eval (Core (CoreCtor c args)) =
 eval (Core (CoreDataCase scrut cases)) = do
   value <- eval scrut
   doDataCase value cases
+eval (Core (CoreError what)) = do
+  msg <- evalAsSyntax what
+  throwError $ EvalErrorUser msg
 eval (Core (CorePure arg)) = do
   value <- eval arg
   pure $ ValueMacroAction
