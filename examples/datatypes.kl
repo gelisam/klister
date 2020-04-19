@@ -94,5 +94,21 @@
     [(ø) 27]
     [(å) 28])))
 
+(define vowel?
+  (lambda (letter)
+    (case letter
+      [(a) #true]
+      [(e) #true]
+      [(i) #true]
+      [(o) #true]
+      [(u) #true]
+      [(y) #true]
+      [(æ) #true]
+      [(ø) #true]
+      [(å) #true]
+      [(else x) #false])))
+(example vowel?)
+(example (vowel? (y)))
+(example (vowel? (x)))
 
 (export Nat zero add1)

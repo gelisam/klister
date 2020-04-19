@@ -41,6 +41,8 @@ module Expander.Primitives
   , arrowType
   , baseType
   , macroType
+  -- * Pattern primitives
+  , elsePattern
   -- * Module primitives
   , makeModule
   -- * Local primitives
@@ -480,6 +482,20 @@ makeModule expandDeclForms stx =
 
       pure ()
 
+--------------
+-- Patterns --
+--------------
+
+type PatternPrim = Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+
+elsePattern :: PatternPrim
+elsePattern _exprTy scrutTy dest stx = do
+  Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
+  ty <- trivialScheme scrutTy
+  (sc, x, v) <- prepareVar var
+  modifyState $ set (expanderPatternBinders . at dest) $
+    Just [(sc, x, v, ty)]
+  linkPattern dest $ AnyConstructor x v
 
 -------------
 -- Helpers --
