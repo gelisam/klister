@@ -205,7 +205,7 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
   deriving (Semigroup, Monoid)
 
 data EValue
-  = EPrimMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
+  = EPrimExprMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
