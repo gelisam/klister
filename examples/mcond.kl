@@ -1,0 +1,23 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define-macros
+  ([mcond
+    (lambda (stx)
+      (syntax-case stx
+        [(cons mc cases)
+         (syntax-case cases
+           [()
+            (pure `(syntax-error ,(replace-loc mc ''"No more cases")))]
+           [(cons c cs)
+            (syntax-case c
+              [(list (condition result))
+               (pure
+                (quasiquote/loc c
+                  (>>= ,condition
+                       (lambda (x)
+                         (if x ,result ,(cons-list-syntax mc cs stx))))))])])]))]))
+
+(export mcond)
