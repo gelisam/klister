@@ -349,6 +349,7 @@ initializeKernel = do
   traverse_ (uncurry addModulePrimitive) modPrims
   traverse_ (uncurry addDeclPrimitive) declPrims
   traverse_ (uncurry addTypePrimitive) typePrims
+  traverse_ (uncurry addPatternPrimitive) patternPrims
 
   where
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
@@ -406,9 +407,19 @@ initializeKernel = do
       , ("case", Prims.dataCase)
       ]
 
+    patternPrims :: [(Text, Ty -> Ty -> PatternPtr -> Syntax -> Expand ())]
+    patternPrims = [("else", Prims.elsePattern)]
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
+
+    addPatternPrimitive ::
+      Text -> (Ty -> Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()
+    addPatternPrimitive name impl = do
+      let val = EPrimPatternMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
 
     addModulePrimitive :: Text -> (Syntax -> Expand ()) -> Expand ()
     addModulePrimitive name impl = do
@@ -782,6 +793,12 @@ requireTypeCtx _ (TypeDest dest) = return dest
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
+requirePatternCtx :: Syntax -> MacroDest -> Expand (Ty, Ty, PatternPtr)
+requirePatternCtx _ (PatternDest exprTy scrutTy dest) =
+  return (exprTy, scrutTy, dest)
+requirePatternCtx stx other =
+  throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
+
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
 expandOneForm prob stx
@@ -840,6 +857,9 @@ expandOneForm prob stx
         EPrimTypeMacro impl -> do
           dest <- requireTypeCtx stx prob
           impl dest stx
+        EPrimPatternMacro impl -> do
+          (exprTy, scrutTy, dest) <- requirePatternCtx stx prob
+          impl exprTy scrutTy dest stx
         EVarMacro var -> do
           (t, dest) <- requireExpressionCtx stx prob
           case syntaxE stx of

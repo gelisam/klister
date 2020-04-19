@@ -6,3 +6,6 @@
 #<closure> : (Nat → (Nat → Nat))
 (add1 (add1 (add1 (add1 (add1 (zero)))))) : Nat
 #<closure> : (Alphabet → Signal)
+#<closure> : (Alphabet → Bool)
+#true : Bool
+#false : Bool
