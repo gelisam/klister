@@ -1,0 +1,22 @@
+#lang "n-ary-app.kl"
+
+(import (shift "free-identifier-case.kl" 1))
+
+(define-macros
+  ([test
+    (lambda (stx)
+     (syntax-case stx
+       [(list (_ x))
+        (free-identifier-case x
+          [if (pure '1)]
+          [else (pure '2)]
+          [define (pure '3)]
+          [#%app (pure '4)]
+          [(else y) (pure y)])]))]))
+
+(define hello 32)
+(example (test if))
+(example (test else))
+(example (test define))
+(example (test #%app))
+(example (test hello))

@@ -1,0 +1,49 @@
+#lang "n-ary-app.kl"
+
+(import "let.kl")
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(meta
+  (define identifier?
+    (lambda (x)
+      (syntax-case x
+        [(ident x) #t]
+        [_ #f]))))
+
+(define-macros
+  ([free-identifier-case
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ body)
+         (syntax-case body
+           [(cons scrut cases)
+            (pure
+             (quasiquote/loc stx
+               (let (x ,scrut) (free-identifier-case-aux x ,cases))))])]))]
+   [free-identifier-case-aux
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ scrut cases))
+          (syntax-case cases
+            [() (pure '(syntax-error '"Nothing matched"))]
+            [(cons c cs)
+             (syntax-case c
+               [(list (test val))
+                (syntax-case test
+                  [(list (e x))
+                   (>>= (free-identifier=? e 'else)
+                        (lambda (eq)
+                          (if eq
+                              (pure (quasiquote/loc c (let (,x ,scrut) ,val)))
+                              (syntax-error test))))]
+                  [(ident id)
+                   (pure
+                    (quasiquote/loc c
+                     (>>= (free-identifier=? ,scrut ',id)
+                          (lambda (eq)
+                            (if eq
+                                ,val
+                                (free-identifier-case-aux ,scrut ,cs))))))])])])]))]))
+
+(export free-identifier-case)

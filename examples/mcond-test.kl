@@ -1,0 +1,20 @@
+#lang "n-ary-app.kl"
+
+(import (shift "mcond.kl" 1))
+
+(define-macros
+  ([test
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ id))
+         (mcond
+          [(free-identifier=? id 'if) (pure '1)]
+          [(free-identifier=? id 'else) (pure '2)]
+          [(free-identifier=? id 'lambda) (pure '3)]
+          [(pure #t) (pure '4)])]))]))
+
+(example (test if))
+(example (test else))
+(example (test lambda))
+(example (test define))
+(example (test argh))
