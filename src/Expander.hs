@@ -434,7 +434,7 @@ initializeKernel = do
 
     addExprPrimitive :: Text -> (Ty -> SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addExprPrimitive name impl = do
-      let val = EPrimMacro impl
+      let val = EPrimExprMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -789,7 +789,7 @@ expandOneForm prob stx
       b <- resolve =<< addRootScope ident
       v <- getEValue b
       case v of
-        EPrimMacro impl -> do
+        EPrimExprMacro impl -> do
           (t, dest) <- requireExpressionCtx stx prob
           impl t dest stx
           saveExprType dest t
