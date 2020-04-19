@@ -118,8 +118,9 @@ instance Pretty VarInfo ExpansionErr where
              [] -> mempty
              more -> text "Additional locations:" <> line <> vsep [pp env loc | Syntax (Stx _ loc _) <- more]
   pp env (MacroEvaluationError p err) =
-    hang 4 $ group $ text "Error during macro evaluation at phase" <+> pp env p <>
-    text ":" <> line <> text (evalErrorText err)
+    hang 4 $ group $
+    vsep [text "Error at phase" <+> pp env p <> text ":",
+          pp env err]
   pp env (ValueNotMacro val) =
     text "Not a macro monad value:" <+> pp env val
   pp env (ValueNotSyntax val) =

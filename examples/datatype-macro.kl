@@ -48,7 +48,4 @@
 (example (case (reverse null) [null 'a]))
 
 (example (case (reverse (list 1 2 3)) [(head x) x]))
-
-
-
          

@@ -24,7 +24,7 @@ import Binding.Info
 import Core
 import Datatype
 import Env
-import Evaluator (EvalResult(..))
+import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
 import Module
 import ModuleName
 import Phase
@@ -125,6 +125,8 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
                             pp (env <> env') rhs])
             cases
          ]
+  pp env (CoreError what) =
+    text "error" <+> pp env what
   pp env (CorePure arg) =
     text "pure" <+> pp env arg
   pp env (CoreBind act k) =
@@ -535,6 +537,15 @@ instance Pretty VarInfo loc => Pretty VarInfo (BindingInfo loc) where
   pp env (BoundLocally loc) = pp env loc <> text ":" <+> text "local"
   pp env (Defined loc) = pp env loc <> text ":" <+> text "defined"
   pp env (Imported loc) = pp env loc <> text ":" <+> text "import"
+
+instance Pretty VarInfo EvalError where
+  pp env (EvalErrorUnbound x) = text "Unbound:" <+> pp env (Core (CoreVar x))
+  pp _env (EvalErrorType (TypeError expected got)) =
+    text "Expected a(n)" <+> text expected <+> "but got a(n)" <+> text got
+  pp env (EvalErrorCase val) =
+    group $ hang 2 $ vsep [text "No case matched:", pp env val]
+  pp env (EvalErrorUser (Syntax (Stx _ loc msg))) =
+    group $ hang 2 $ vsep [pp env loc <> ":", pp env msg]
 
 instance Pretty VarInfo EvalResult where
   pp env (EvalResult loc valEnv coreExpr sch val) =
