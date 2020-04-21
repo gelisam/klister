@@ -283,7 +283,6 @@ typeVarNames =
 
 
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
-  pp _ TUnit = text "Unit"
   pp _ TBool = text "Bool"
   pp _ TSyntax = text "Syntax"
   pp _ TSignal = text "Signal"

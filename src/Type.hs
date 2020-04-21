@@ -22,8 +22,7 @@ instance Show MetaPtr where
   show (MetaPtr i) = "(MetaPtr " ++ show (hashUnique i) ++ ")"
 
 data TyF t
-  = TUnit
-  | TBool
+  = TBool
   | TSyntax
   | TSignal
   | TFun t t

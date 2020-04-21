@@ -41,6 +41,7 @@ module Expander.Primitives
   , arrowType
   , baseType
   , macroType
+  , primitiveDatatype
   -- * Pattern primitives
   , elsePattern
   -- * Module primitives
@@ -53,6 +54,7 @@ import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad.Except
 import qualified Data.Map as Map
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Numeric.Natural
@@ -66,6 +68,7 @@ import Expander.Monad
 import Expander.Syntax
 import Expander.TC
 import Module
+import ModuleName
 import Phase
 import Scope
 import ScopeSet (ScopeSet)
@@ -314,14 +317,14 @@ syntaxError t dest stx = do
 
 sendSignal :: ExprPrim
 sendSignal t dest stx = do
-  unify dest t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Unit" [])))
   Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
   sigDest <- schedule (Ty TSignal) sig
   linkExpr dest $ CoreSendSignal sigDest
 
 waitSignal :: ExprPrim
 waitSignal t dest stx = do
-  unify dest t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Unit" [])))
   Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
   sigDest <- schedule (Ty TSignal) sig
   linkExpr dest $ CoreWaitSignal sigDest
@@ -424,7 +427,7 @@ letSyntax t dest stx = do
 
 log :: ExprPrim
 log t dest stx = do
-  unify dest (Ty (TMacro (Ty TUnit))) t
+  unify dest (Ty (TMacro (primitiveDatatype "Unit" []))) t
   Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
   msgDest <- schedule (Ty TSyntax) message
   linkExpr dest $ CoreLog msgDest
@@ -593,3 +596,11 @@ prepareVar varStx = do
   var <- freshVar
   bind b (EVarMacro var)
   return (sc, x', var)
+
+primitiveDatatype :: Text -> [Ty] -> Ty
+primitiveDatatype name args =
+  let dt = Datatype { _datatypeModule = KernelName kernelName
+                    , _datatypeName = DatatypeName name
+                    }
+  in Ty $ TDatatype dt args
+

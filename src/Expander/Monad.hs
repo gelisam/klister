@@ -821,3 +821,4 @@ scheduleType stx = do
   dest <- liftIO newSplitTypePtr
   forkExpandType dest stx
   return dest
+

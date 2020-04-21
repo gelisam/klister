@@ -9,6 +9,7 @@ import qualified Data.Text as T
 import Core
 import Datatype
 import Env
+import ModuleName
 import Signals
 import Syntax
 
@@ -33,6 +34,11 @@ data Value
   | ValueBool Bool
   | ValueCtor Constructor [Value]
   deriving (Eq, Show)
+
+primitiveCtor :: Text -> [Value] -> Value
+primitiveCtor name args =
+  let ctor = Constructor (KernelName kernelName) (ConstructorName name)
+  in ValueCtor ctor args
 
 valueText :: Value -> Text
 valueText (ValueClosure _) = "#<closure>"

@@ -357,7 +357,6 @@ initializeKernel = do
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
     typePrims =
       [ ("Bool", Prims.baseType TBool)
-      , ("Unit", Prims.baseType TUnit)
       , ("Syntax", Prims.baseType TSyntax)
       , ("Signal", Prims.baseType TSignal)
       , ("->", Prims.arrowType)
@@ -366,7 +365,9 @@ initializeKernel = do
 
     datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
     datatypePrims =
-      [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])]) ]
+      [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
+      , ("Unit", 0, [("unit", [])])
+      ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
@@ -644,7 +645,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Nothing -> do
           stillStuck tid task
         Just () -> do
-          let result = ValueSignal signal  -- TODO: return unit instead
+          let result = primitiveCtor "unit" []
           forkContinueMacroAction dest result kont
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
@@ -1051,7 +1052,7 @@ interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
   setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-  pure $ Right $ ValueSignal signal  -- TODO: return unit instead
+  pure $ Right $ primitiveCtor "unit" []
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
 interpretMacroAction (MacroActionIdentEq how v1 v2) = do
@@ -1086,5 +1087,5 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
         Bound -> "bound-identifier=?"
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
-  pure $ Right (ValueBool False) -- TODO unit type
+  pure $ Right $ primitiveCtor "unit" []
 
