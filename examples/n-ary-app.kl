@@ -2,7 +2,17 @@
 
 [import [shift (only kernel cons-list-syntax lambda pure quote syntax-case list-syntax export import) 1]]
 
-
+(define-macros
+  ([if
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ c t f))
+         (pure
+          (list-syntax
+           ('case c
+             (list-syntax ['(true) t] t)
+             (list-syntax ['(false) f] f))
+           stx))]))]))
 
 [define-macros
   -- (my-app f foo bar baz) => (((f foo) bar) baz)
@@ -103,7 +113,8 @@
 
 
 (export #%module #%app
-        const lambda define example define-macros quote meta if
+        const lambda define example define-macros quote meta
+        if true false
         error
         let flet
         import export

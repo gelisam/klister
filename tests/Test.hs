@@ -76,13 +76,11 @@ operationTests =
     let sc = Scope 42 "Test suite"
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
-        expr = Core (CoreIf (Core (CoreBool True))
-                            (Core (CoreSyntax stx))
-                            (Core (CoreBool False)))
+        expr = Core (CoreApp (Core (CoreSignal (Signal 2)))
+                             (Core (CoreSyntax stx)))
     in case shift 1 expr of
-         Core (CoreIf (Core (CoreBool True))
-                      (Core (CoreSyntax stx'))
-                      (Core (CoreBool False))) ->
+         Core (CoreApp (Core (CoreSignal (Signal 2)))
+                       (Core (CoreSyntax stx'))) ->
            case stx' of
              Syntax (Stx scs' _ (Id "hey")) ->
                if scs' == ScopeSet.insertAtPhase (prior runtime) sc ScopeSet.empty
@@ -235,16 +233,6 @@ miniTests =
               NoProgress [AwaitingSignal _ (Signal 1) _] -> True
               _ -> False
           )
-        , ( "Mismatching types in if"
-          , "[if #t [lambda [x] x] #f]"
-          , \case
-              TypeMismatch _ t1 t2 ->
-                case (t1, t2) of
-                  (Ty TBool, Ty (TFun _ _)) -> True
-                  (Ty (TFun _ _), Ty TBool) -> True
-                  _ -> False
-              _ -> False
-          )
         ]
       ]
 
@@ -272,8 +260,8 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               filter (\case {(Example _ _ _) -> True; _ -> False}) &
               \case
                 [Example _ _ e1, Example _ _ e2] -> do
-                  assertAlphaEq "first example" e1 (Core (CoreBool True))
-                  assertAlphaEq "second example" e2 (Core (CoreBool False))
+                  assertAlphaEq "first example" e1 (Core (corePrimitiveCtor "true" []))
+                  assertAlphaEq "second example" e2 (Core (corePrimitiveCtor "false" []))
                 _ -> assertFailure "Expected two examples"
           )
         , ( "examples/lang.kl"
@@ -324,7 +312,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
               view moduleBody m & map (view completeDecl) &
               \case
                 [Import _, Import _, DefineMacros [(_, _, _)], Example _ _ ex] ->
-                  assertAlphaEq "Example is #f" ex (Core (CoreBool False))
+                  assertAlphaEq "Example is (false)" ex (Core (corePrimitiveCtor "false" []))
                 _ -> assertFailure "Expected import, import, macro, example"
           )
         , ( "examples/macro-body-shift.kl"
@@ -717,7 +705,7 @@ genCoreF subgen varGen =
         <*> sameVars (constructor False True False)
         <*> sameVars (constructor False False True)
       nonRecursive =
-        [ CoreBool <$> Gen.bool
+        [ (\b -> corePrimitiveCtor (if b then "true" else "false") []) <$> Gen.bool
         , CoreSignal . Signal <$> Gen.int range1024
         ] ++ map (fmap CoreVar) (maybeToList varGen)
       recursive =
@@ -732,7 +720,7 @@ genCoreF subgen varGen =
         -- , CoreSyntax Syntax
         -- , CoreCase sameVars [(Pattern, core)]
         -- , CoreIdentifier Ident
-        , ternary CoreIf
+        -- , CoreDataCase core [(ConstructorPattern, core)]
         -- , CoreIdent (ScopedIdent core)
         -- , CoreEmpty (ScopedEmpty core)
         -- , CoreCons (ScopedCons core)

@@ -8,7 +8,9 @@
           ((list (_ x y))
            (>>= (bound-identifier=? x y)
                 (lambda (bool)
-                  (pure (if bool ''t ''f))))))))))
+                  (pure (case bool
+                          [(true) ''t]
+                          [(false) ''f]))))))))))
 
 (example (m x x))
 (example (m x y))

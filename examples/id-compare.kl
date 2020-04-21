@@ -10,7 +10,9 @@
                [[list [_ x]]
                 [>>= [free-identifier=? [quote thing] x]
                      [lambda [ok]
-                       [if ok [pure [quote #true]] [pure [quote #false]]]]]])]])]
+                       [case ok
+                        [(true) [pure [quote (true)]]]
+                        [(false) [pure [quote (false)]]]]]]])]])]
 
 
 

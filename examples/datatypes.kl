@@ -39,7 +39,7 @@
       [(left a) (right a)]
       [(right b) (left b)])))
 
-(example (flop (left #true)))
+(example (flop (left (true))))
 (example (flop (right (:: (add1 (zero)) (nil)))))
 
 (define plus
@@ -97,16 +97,16 @@
 (define vowel?
   (lambda (letter)
     (case letter
-      [(a) #true]
-      [(e) #true]
-      [(i) #true]
-      [(o) #true]
-      [(u) #true]
-      [(y) #true]
-      [(æ) #true]
-      [(ø) #true]
-      [(å) #true]
-      [(else x) #false])))
+      [(a) (true)]
+      [(e) (true)]
+      [(i) (true)]
+      [(o) (true)]
+      [(u) (true)]
+      [(y) (true)]
+      [(æ) (true)]
+      [(ø) (true)]
+      [(å) (true)]
+      [(else x) (false)])))
 (example vowel?)
 (example (vowel? (y)))
 (example (vowel? (x)))

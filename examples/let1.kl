@@ -16,4 +16,4 @@
              [pure `[[lambda [,idt] ,body] ,expr]]])])]])]
 
 [define id [lambda [x] x]]
-[example [let1 [my-id id] [my-id #f]]]
+[example [let1 [my-id id] [my-id (false)]]]

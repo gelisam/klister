@@ -6,3 +6,8 @@
 
 (example (unit))
 (example (the (Unit) (unit)))
+
+(example (true))
+(example (false))
+(example (the (Bool) (true)))
+

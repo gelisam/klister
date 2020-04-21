@@ -8,8 +8,8 @@
   (define identifier?
     (lambda (x)
       (syntax-case x
-        [(ident x) #t]
-        [_ #f]))))
+        [(ident x) (true)]
+        [_ (false)]))))
 
 (define-macros
   ([free-identifier-case

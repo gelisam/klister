@@ -5,4 +5,4 @@
 
 [define-macros ([m [lambda [stx] [pure [id-m [pure [quote fun]]]]]])]
 
-[example (m #true)]
+[example (m (true))]

@@ -30,7 +30,6 @@ data ExprF a
   = Id Text
   | String Text
   | Sig Signal
-  | Bool Bool
   | List [a]
   deriving (Eq, Functor, Show)
 makePrisms ''ExprF
@@ -71,7 +70,6 @@ instance HasScopes Syntax where
       mapRec (Id x) = Id x
       mapRec (String str) = String str
       mapRec (Sig s) = Sig s
-      mapRec (Bool b) = Bool b
       mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
 
 instance Phased (Stx Text) where
@@ -125,7 +123,6 @@ syntaxText (Syntax (Stx _ _ e)) = go e
     go (Id x) = x
     go (String str) = T.pack $ show str
     go (Sig s) = T.pack (show s)
-    go (Bool b) = if b then "#true" else "#false"
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
 
 instance AlphaEq a => AlphaEq (Stx a) where
@@ -156,7 +153,6 @@ instance ShortShow a => ShortShow (Stx a) where
 instance ShortShow a => ShortShow (ExprF a) where
   shortShow (Id x) = shortShow x
   shortShow (String s) = show s
-  shortShow (Bool b) = if b then "#true" else "#false"
   shortShow (List xs) = shortShow xs
   shortShow (Sig s) = shortShow s
 

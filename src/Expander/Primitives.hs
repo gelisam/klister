@@ -14,7 +14,6 @@ module Expander.Primitives
   -- * Expression primitives
   , app
   , bindMacro
-  , conditional
   , consListSyntax
   , dataCase
   , emptyListSyntax
@@ -331,7 +330,7 @@ waitSignal t dest stx = do
 
 identEqual :: HowEq -> ExprPrim
 identEqual how t dest stx = do
-  unify dest t (Ty (TMacro (Ty TBool)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Bool" [])))
   Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
   newE <- CoreIdentEq how <$> schedule (Ty TSyntax) id1 <*> schedule (Ty TSyntax) id2
   linkExpr dest newE
@@ -341,11 +340,6 @@ quote t dest stx = do
   unify dest (Ty TSyntax) t
   Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
-
-conditional :: ExprPrim
-conditional t dest stx = do
-  Stx _ _ (_ :: Syntax, b, true, false) <- mustHaveEntries stx
-  linkExpr dest =<< CoreIf <$> schedule (Ty TBool) b <*> schedule t true <*> schedule t false
 
 ident :: ExprPrim
 ident t dest stx = do

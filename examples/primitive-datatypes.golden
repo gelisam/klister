@@ -3,3 +3,6 @@
 (remove) : ScopeAction
 (unit) : Unit
 (unit) : Unit
+(true) : Bool
+(false) : Bool
+(true) : Bool
