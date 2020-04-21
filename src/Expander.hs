@@ -47,6 +47,7 @@ import Data.List (nub)
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
+import Numeric.Natural
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -350,6 +351,7 @@ initializeKernel = do
   traverse_ (uncurry addDeclPrimitive) declPrims
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
+  traverse_ addDatatypePrimitive datatypePrims
 
   where
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
@@ -361,6 +363,10 @@ initializeKernel = do
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
       ]
+
+    datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
+    datatypePrims =
+      [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])]) ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
@@ -412,6 +418,50 @@ initializeKernel = do
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
+
+    addDatatypePrimitive :: (Text, Natural, [(Text, [Ty])]) -> Expand ()
+    addDatatypePrimitive (name, arity, ctors) = do
+      let dn = DatatypeName name
+      let dt = Datatype
+                 { _datatypeModule = KernelName kernelName
+                 , _datatypeName = dn
+                 }
+      let val = EPrimTypeMacro \dest stx -> do
+            Stx _ _ (me, args) <- mustBeCons stx
+            _ <- mustBeIdent me
+            if length args /= fromIntegral arity
+              then throwError $ WrongDatatypeArity stx dt arity (length args)
+              else do
+                argDests <- traverse scheduleType args
+                linkType dest $ TDatatype dt argDests
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+      ctors' <- for ctors \(ctorName, args) -> do
+        let cn = ConstructorName ctorName
+        let ctor = Constructor { _constructorModule = KernelName kernelName
+                               , _constructorName = cn
+                               }
+        let cInfo = ConstructorInfo { _ctorArguments = args
+                                    , _ctorDatatype = dt
+                                    }
+        modifyState $
+          over (expanderWorld . worldConstructors . at runtime . non Map.empty) $
+          Map.insert ctor cInfo
+        cb <- freshBinding
+        bind cb $ EConstructor ctor
+        addToKernel ctorName runtime cb
+        pure ctor
+
+      let info =
+            DatatypeInfo
+            { _datatypeArity = arity
+            , _datatypeConstructors = ctors'
+            }
+      modifyState $
+        over (expanderWorld . worldDatatypes . at runtime . non Map.empty) $
+        Map.insert dt info
+
 
     addPatternPrimitive ::
       Text -> (Ty -> Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()

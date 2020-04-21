@@ -85,6 +85,7 @@ module Expander.Monad
   , forkInterpretMacroAction
   , stillStuck
   , schedule
+  , scheduleType
   -- * Implementation parts
   , SyntacticCategory(..)
   , ExpansionEnv(..)
@@ -815,3 +816,8 @@ currentEnv = do
   localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
   return (globalEnv <> localEnv)
 
+scheduleType :: Syntax -> Expand SplitTypePtr
+scheduleType stx = do
+  dest <- liftIO newSplitTypePtr
+  forkExpandType dest stx
+  return dest

@@ -1,0 +1,3 @@
+(flip) : ScopeAction
+(add) : ScopeAction
+(remove) : ScopeAction

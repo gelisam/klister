@@ -1,0 +1,7 @@
+#lang kernel
+
+(example (flip))
+(example (add))
+(example (remove))
+
+

@@ -516,12 +516,6 @@ addDatatype name dt arity = do
   addDefinedBinding name' b
   bind b val
 
-scheduleType :: Syntax -> Expand SplitTypePtr
-scheduleType stx = do
-  dest <- liftIO newSplitTypePtr
-  forkExpandType dest stx
-  return dest
-
 
 expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
 -- TODO match case keywords hygienically
