@@ -1,0 +1,16 @@
+#lang "n-ary-app.kl"
+
+(import "lambda-case.kl")
+
+(datatype (Pair A B)
+  (pair A B))
+
+(define fst
+  (lambda-case
+    [(pair x _) x]))
+
+(define snd
+  (lambda-case
+    [(pair _ y) y]))
+
+(export Pair pair fst snd)

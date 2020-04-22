@@ -256,11 +256,11 @@ evalMod (Expanded em _) = execWriterT $ do
           val <- lift $ expandEval (eval e)
           p <- lift currentPhase
           lift $ modifyState $
-            over (expanderWorld . worldTypeContexts . at p . non Env.empty) $
-            Env.insert n x ptr
+            over (expanderWorld . worldTypeContexts . at p) $
+            Just . maybe (Env.singleton n x ptr) (Env.insert n x ptr)
           lift $ modifyState $
-            over (expanderWorld . worldEnvironments . at p . non Env.empty) $
-              Env.insert n x val
+            over (expanderWorld . worldEnvironments . at p) $
+            Just . maybe (Env.singleton n x val) (Env.insert n x val)
         Data _ dn arity ctors -> do
           p <- lift currentPhase
           let mn = view moduleName em
@@ -290,8 +290,8 @@ evalMod (Expanded em _) = execWriterT $ do
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
             v <- expandEval (eval e)
             modifyState $
-              over (expanderWorld . worldTransformerEnvironments . at p . non Env.empty) $
-                Env.insert n x v
+              over (expanderWorld . worldTransformerEnvironments . at p) $
+              Just . maybe (Env.singleton n x v) (Env.insert n x v)
         Meta decls -> do
           ((), out) <- lift $ inEarlierPhase (runWriterT $ traverse_ evalDecl decls)
           tell out
@@ -419,6 +419,7 @@ initializeKernel = do
       , ("syntax-case", Prims.syntaxCase)
       , ("let-syntax", Prims.letSyntax)
       , ("log", Prims.log)
+      , ("make-introducer", Prims.makeIntroducer)
       , ("case", Prims.dataCase)
       ]
 
@@ -1094,3 +1095,13 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right $ primitiveCtor "unit" []
+interpretMacroAction MacroActionIntroducer = do
+  sc <- freshScope "User introduction scope"
+  pure $ Right $
+    ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
+    ValueSyntax
+      case view (constructorName . constructorNameText) ctor of
+        "add" -> addScope' stx sc
+        "flip" -> flipScope' stx sc
+        "remove" -> removeScope' stx sc
+        _ -> error "Impossible!"

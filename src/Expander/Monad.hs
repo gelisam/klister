@@ -809,9 +809,9 @@ expandEval evalAction = do
 currentTransformerEnv :: Expand TEnv
 currentTransformerEnv = do
   phase <- currentPhase
-  globalEnv <- view (expanderWorld . worldTransformerEnvironments . at phase . non Env.empty) <$>
+  globalEnv <- fromMaybe Env.empty . view (expanderWorld . worldTransformerEnvironments . at phase) <$>
                getState
-  localEnv <- view (expanderCurrentTransformerEnvs . at phase . non Env.empty) <$>
+  localEnv <- fromMaybe Env.empty . view (expanderCurrentTransformerEnvs . at phase) <$>
               getState
   return (globalEnv <> localEnv)
 

@@ -36,7 +36,7 @@ data EvalError
   | EvalErrorType TypeError
   | EvalErrorCase Value
   | EvalErrorUser Syntax
-  deriving (Eq, Show)
+  deriving (Show)
 makePrisms ''EvalError
 
 evalErrorText :: EvalError -> Text
@@ -75,16 +75,16 @@ data EvalResult =
              , resultType :: Scheme Ty
              , resultValue :: Value
              }
-  deriving (Eq, Show)
 
 apply :: Closure -> Value -> Eval Value
-apply (Closure {..}) value = do
+apply (FO (FOClosure {..})) value = do
   let env = Env.insert _closureVar
                        _closureIdent
                        value
                        _closureEnv
-  withEnv env $ do
+  withEnv env $
     eval _closureBody
+apply (HO prim) value = pure (prim value)
 
 eval :: Core -> Eval Value
 eval (Core (CoreVar var)) = do
@@ -99,7 +99,7 @@ eval (Core (CoreLet ident var def body)) = do
 eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
   env <- ask
   let vFun =
-        ValueClosure $ Closure
+        ValueClosure $ FO $ FOClosure
           { _closureEnv = Env.insert funVar funIdent vFun env
           , _closureIdent = argIdent
           , _closureVar = argVar
@@ -108,7 +108,7 @@ eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
   withEnv (Env.insert funVar funIdent vFun env) (eval body)
 eval (Core (CoreLam ident var body)) = do
   env <- ask
-  pure $ ValueClosure $ Closure
+  pure $ ValueClosure $ FO $ FOClosure
     { _closureEnv   = env
     , _closureIdent = ident
     , _closureVar   = var
@@ -152,6 +152,8 @@ eval (Core (CoreIdentEq how e1 e2)) =
 eval (Core (CoreLog msg)) = do
   msgVal <- evalAsSyntax msg
   return $ ValueMacroAction (MacroActionLog msgVal)
+eval (Core CoreMakeIntroducer) =
+  return $ ValueMacroAction MacroActionIntroducer
 eval (Core (CoreSignal signal)) =
   pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do
@@ -227,7 +229,7 @@ evalAsClosure :: Core -> Eval Closure
 evalAsClosure core = do
   value <- eval core
   case value of
-    ValueClosure closure -> do
+    ValueClosure closure ->
       pure closure
     other -> evalErrorType "function" other
 

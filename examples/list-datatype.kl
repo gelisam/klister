@@ -1,0 +1,7 @@
+#lang "n-ary-app.kl"
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(export List nil ::)

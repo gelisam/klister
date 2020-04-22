@@ -18,6 +18,7 @@ module ScopeSet (
   , insertUniversally
   , deleteAtPhase
   , deleteUniversally
+  , flipUniversally
   ) where
 
 import Control.Lens
@@ -98,6 +99,13 @@ deleteUniversally sc = set (phaseScopes . each . at sc)
                            Nothing
                      . set (universalScopes . at sc)
                            Nothing
+
+flipUniversally :: Scope -> ScopeSet -> ScopeSet
+flipUniversally sc = over (phaseScopes . each . at sc) flipper .
+                     over (universalScopes . at sc) flipper
+  where
+    flipper (Just ()) = Nothing
+    flipper Nothing = Just ()
 
 contents :: ScopeSet -> (Set Scope, Map Phase (Set Scope))
 contents scs = (view universalScopes scs, view phaseScopes scs)

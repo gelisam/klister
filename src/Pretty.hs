@@ -146,6 +146,8 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
           Bound -> "bound-identifier=?"
   pp env (CoreLog msg) =
     group (hang 2 (vsep ["log", pp env msg]))
+  pp _env CoreMakeIntroducer =
+    text "make-introducer"
   pp env (CoreSyntax stx) =
     pp env stx
   pp env (CoreCase scrut pats) =
@@ -456,7 +458,9 @@ instance Pretty VarInfo MacroAction where
   pp env (MacroActionPure v) =
     text "pure" <+> pp env v
   pp env (MacroActionBind v k) =
-    group (group (pp env v <> line <> text ">>=") <> line <> pp env k)
+    group $
+      group (pp env v <> line <> text ">>=") <> line <>
+      pp env k
   pp env (MacroActionSyntaxError err) =
     text "syntax-error" <+> pp env err
   pp _env (MacroActionSendSignal s) =
@@ -472,6 +476,8 @@ instance Pretty VarInfo MacroAction where
           Bound -> "bound-identifier=?"
   pp env (MacroActionLog stx) =
     hang 2 $ group $ vsep [text "log", pp env stx]
+  pp _env MacroActionIntroducer =
+    text "make-introducer"
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)

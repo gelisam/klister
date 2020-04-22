@@ -114,12 +114,14 @@
 
 (export #%module #%app
         const lambda define example define-macros quote meta
-        if true false
+        Bool if true false
         error
         let flet
         import export
         >>= pure syntax-error syntax-case
         list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log
+        free-identifier=? bound-identifier=? log make-introducer
+        Unit unit
+        ScopeAction flip add remove
         datatype case else)
 

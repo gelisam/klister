@@ -26,6 +26,7 @@ module Expander.Primitives
   , letExpr
   , letSyntax
   , listSyntax
+  , makeIntroducer
   , Expander.Primitives.log
   , oops
   , pureMacro
@@ -418,6 +419,18 @@ letSyntax t dest stx = do
     schedule (Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax)))))
       (addScope (prior p) mdef psc)
   forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
+
+makeIntroducer :: ExprPrim
+makeIntroducer t dest stx = do
+  Stx _ _ mName <- mustHaveEntries stx
+  _ <- mustBeIdent mName
+  unify dest theType t
+  linkExpr dest $ CoreMakeIntroducer
+
+  where
+    theType =
+      Ty $ TMacro $ Ty $ TFun (primitiveDatatype "ScopeAction" []) $
+      Ty $ TFun (Ty TSyntax) (Ty TSyntax)
 
 log :: ExprPrim
 log t dest stx = do
