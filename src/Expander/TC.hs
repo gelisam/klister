@@ -157,8 +157,6 @@ generalizeType ty = do
     genVars ::
       [MetaPtr] -> TyF Ty ->
       StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
-    genVars _ TUnit = pure TUnit
-    genVars _ TBool = pure TBool
     genVars _ TSyntax = pure TSyntax
     genVars _ TSignal = pure TSignal
     genVars vars (TFun dom ran) =
@@ -204,8 +202,6 @@ unify blame t1 t2 = do
   where
     unify' :: TyF Ty -> TyF Ty -> Expand ()
     -- Rigid-rigid
-    unify' TBool TBool = pure ()
-    unify' TUnit TUnit = pure ()
     unify' TSyntax TSyntax = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d

@@ -14,7 +14,6 @@ module Expander.Primitives
   -- * Expression primitives
   , app
   , bindMacro
-  , conditional
   , consListSyntax
   , dataCase
   , emptyListSyntax
@@ -41,6 +40,7 @@ module Expander.Primitives
   , arrowType
   , baseType
   , macroType
+  , primitiveDatatype
   -- * Pattern primitives
   , elsePattern
   -- * Module primitives
@@ -53,6 +53,7 @@ import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad.Except
 import qualified Data.Map as Map
+import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
 import Numeric.Natural
@@ -66,6 +67,7 @@ import Expander.Monad
 import Expander.Syntax
 import Expander.TC
 import Module
+import ModuleName
 import Phase
 import Scope
 import ScopeSet (ScopeSet)
@@ -314,21 +316,21 @@ syntaxError t dest stx = do
 
 sendSignal :: ExprPrim
 sendSignal t dest stx = do
-  unify dest t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Unit" [])))
   Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
   sigDest <- schedule (Ty TSignal) sig
   linkExpr dest $ CoreSendSignal sigDest
 
 waitSignal :: ExprPrim
 waitSignal t dest stx = do
-  unify dest t (Ty (TMacro (Ty TUnit)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Unit" [])))
   Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
   sigDest <- schedule (Ty TSignal) sig
   linkExpr dest $ CoreWaitSignal sigDest
 
 identEqual :: HowEq -> ExprPrim
 identEqual how t dest stx = do
-  unify dest t (Ty (TMacro (Ty TBool)))
+  unify dest t (Ty (TMacro (primitiveDatatype "Bool" [])))
   Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
   newE <- CoreIdentEq how <$> schedule (Ty TSyntax) id1 <*> schedule (Ty TSyntax) id2
   linkExpr dest newE
@@ -338,11 +340,6 @@ quote t dest stx = do
   unify dest (Ty TSyntax) t
   Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
-
-conditional :: ExprPrim
-conditional t dest stx = do
-  Stx _ _ (_ :: Syntax, b, true, false) <- mustHaveEntries stx
-  linkExpr dest =<< CoreIf <$> schedule (Ty TBool) b <*> schedule t true <*> schedule t false
 
 ident :: ExprPrim
 ident t dest stx = do
@@ -424,7 +421,7 @@ letSyntax t dest stx = do
 
 log :: ExprPrim
 log t dest stx = do
-  unify dest (Ty (TMacro (Ty TUnit))) t
+  unify dest (Ty (TMacro (primitiveDatatype "Unit" []))) t
   Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
   msgDest <- schedule (Ty TSyntax) message
   linkExpr dest $ CoreLog msgDest
@@ -516,12 +513,6 @@ addDatatype name dt arity = do
   addDefinedBinding name' b
   bind b val
 
-scheduleType :: Syntax -> Expand SplitTypePtr
-scheduleType stx = do
-  dest <- liftIO newSplitTypePtr
-  forkExpandType dest stx
-  return dest
-
 
 expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
 -- TODO match case keywords hygienically
@@ -599,3 +590,11 @@ prepareVar varStx = do
   var <- freshVar
   bind b (EVarMacro var)
   return (sc, x', var)
+
+primitiveDatatype :: Text -> [Ty] -> Ty
+primitiveDatatype name args =
+  let dt = Datatype { _datatypeModule = KernelName kernelName
+                    , _datatypeName = DatatypeName name
+                    }
+  in Ty $ TDatatype dt args
+

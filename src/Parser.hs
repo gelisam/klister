@@ -43,7 +43,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> ident <|> signal <|> bool <|> string <|> quoted <|> quasiquoted <|> unquoted
+expr = list <|> ident <|> signal <|> string <|> quoted <|> quasiquoted <|> unquoted
 
 ident :: Parser Syntax
 ident =
@@ -69,14 +69,6 @@ manyStx p =
   do Located loc xs <- located (many p)
      return $ Syntax $ Stx ScopeSet.empty loc (List xs)
 
-
-bool :: Parser Syntax
-bool =
-  do Located loc b <- located (Bool <$> (true <|> false))
-     return $ Syntax $ Stx ScopeSet.empty loc b
-  where
-    true  = (literal "#true" <|> literal "#t")  $> True
-    false = (literal "#false" <|> literal "#f") $> False
 
 string :: Parser Syntax
 string =

@@ -164,17 +164,6 @@ eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
        $ Syntax
        $ Stx scopeSet srcLoc
        $ Id name
-eval (Core (CoreBool b)) = pure $ ValueBool b
-eval (Core (CoreIf b t f)) =
-  eval b >>=
-  \case
-    ValueBool True -> eval t
-    ValueBool False -> eval f
-    other ->
-      throwError $ EvalErrorType $ TypeError
-        { _typeErrorExpected = "boolean"
-        , _typeErrorActual   = describeVal other
-        }
 eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   identSyntax <- evalAsSyntax ident
   case identSyntax of
@@ -189,11 +178,6 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "id"
             , _typeErrorActual   = "string"
-            }
-        Bool _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "boolean"
             }
         List _ ->
           throwError $ EvalErrorType $ TypeError
@@ -213,11 +197,6 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "list"
             , _typeErrorActual   = "string"
-            }
-        Bool _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "boolean"
             }
         Id _ ->
           throwError $ EvalErrorType $ TypeError

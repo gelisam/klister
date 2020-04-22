@@ -1,4 +1,4 @@
-#[n-ary-app.kl:90.18-90.19]<a> : Syntax
+#[n-ary-app.kl:100.18-100.19]<a> : Syntax
 #<closure> : ∀α β. ((α → β) → (α → β))
 #<closure> : ∀α. (α → α)
 #<closure> : ∀α. (α → α)

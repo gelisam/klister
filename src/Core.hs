@@ -10,10 +10,12 @@ import Control.Monad
 import Data.Bifunctor.TH
 import Data.List
 import Data.Foldable
+import Data.Text (Text)
 import Data.Unique
 
 import Alpha
 import Datatype
+import ModuleName
 import Phase
 import ShortShow
 import Signals
@@ -109,8 +111,6 @@ data CoreF pat core
   | CoreCase core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
   | CoreSignal Signal
-  | CoreBool Bool
-  | CoreIf core core core
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
@@ -121,6 +121,11 @@ makePrisms ''CoreF
 deriveBifunctor ''CoreF
 deriveBifoldable ''CoreF
 deriveBitraversable ''CoreF
+
+corePrimitiveCtor :: Text -> [a] -> CoreF pat a
+corePrimitiveCtor name args =
+  let ctor = Constructor (KernelName kernelName) (ConstructorName name)
+  in CoreCtor ctor args
 
 instance (Phased pat, Phased core) => Phased (CoreF pat core) where
   shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
@@ -188,14 +193,6 @@ instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
   alphaCheck (CoreSignal s1)
              (CoreSignal s2) =
     guard $ s1 == s2
-  alphaCheck (CoreBool b1)
-             (CoreBool b2) =
-    guard $ b1 == b2
-  alphaCheck (CoreIf b1 t1 f1)
-             (CoreIf b2 t2 f2) = do
-    alphaCheck b1 b2
-    alphaCheck t1 t2
-    alphaCheck f1 f2
   alphaCheck (CoreIdent scopedIdent1)
              (CoreIdent scopedIdent2) = do
     alphaCheck scopedIdent1 scopedIdent2
@@ -208,6 +205,10 @@ instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
   alphaCheck (CoreList scopedVec1)
              (CoreList scopedVec2) = do
     alphaCheck scopedVec1 scopedVec2
+  alphaCheck (CoreCtor ctor1 args1)
+             (CoreCtor ctor2 args2) = do
+    alphaCheck ctor1 ctor2
+    alphaCheck args1 args2
   alphaCheck _ _ = notAlphaEquivalent
 
 
@@ -374,12 +375,6 @@ instance (ShortShow pat, ShortShow core) =>
    ++ ")"
   shortShow (CoreSignal signal)
     = shortShow signal
-  shortShow (CoreBool b)
-    = if b then "#true" else "#false"
-  shortShow (CoreIf b t f)
-    = "(if " ++ shortShow b ++ " " ++
-      shortShow t ++ " " ++
-      shortShow f ++ ")"
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
    ++ shortShow scopedIdent

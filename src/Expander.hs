@@ -47,6 +47,7 @@ import Data.List (nub)
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
+import Numeric.Natural
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -230,9 +231,18 @@ visit modName = do
 -- | Evaluate an expanded module at the current expansion phase,
 -- recursively loading its run-time dependencies.
 evalMod :: CompleteModule -> Expand [EvalResult]
-evalMod (KernelModule _) =
+evalMod (KernelModule _) = do
   -- Builtins go here, suitably shifted. There are no built-in values
-  -- yet, only built-in syntax, but this may change.
+  -- yet, only built-in syntax and datatypes, but this may change.
+  p <- currentPhase
+  dts <- view expanderKernelDatatypes <$> getState
+  modifyState $
+    over (expanderWorld . worldDatatypes . at p . non Map.empty) $
+    Map.union dts
+  ctors <- view expanderKernelConstructors <$> getState
+  modifyState $
+    over (expanderWorld . worldConstructors . at p . non Map.empty) $
+    Map.union ctors
   return []
 evalMod (Expanded em _) = execWriterT $ do
     traverseOf_ (moduleBody . each) evalDecl em
@@ -350,16 +360,22 @@ initializeKernel = do
   traverse_ (uncurry addDeclPrimitive) declPrims
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
+  traverse_ addDatatypePrimitive datatypePrims
 
   where
     typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
     typePrims =
-      [ ("Bool", Prims.baseType TBool)
-      , ("Unit", Prims.baseType TUnit)
-      , ("Syntax", Prims.baseType TSyntax)
+      [ ("Syntax", Prims.baseType TSyntax)
       , ("Signal", Prims.baseType TSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
+      ]
+
+    datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
+    datatypePrims =
+      [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
+      , ("Unit", 0, [("unit", [])])
+      , ("Bool", 0, [("true", []), ("false", [])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -394,7 +410,6 @@ initializeKernel = do
       , ("bound-identifier=?", Prims.identEqual Bound)
       , ("free-identifier=?", Prims.identEqual Free)
       , ("quote", Prims.quote)
-      , ("if", Prims.conditional)
       , ("ident", Prims.ident)
       , ("ident-syntax", Prims.identSyntax)
       , ("empty-list-syntax", Prims.emptyListSyntax)
@@ -412,6 +427,50 @@ initializeKernel = do
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
+
+    addDatatypePrimitive :: (Text, Natural, [(Text, [Ty])]) -> Expand ()
+    addDatatypePrimitive (name, arity, ctors) = do
+      let dn = DatatypeName name
+      let dt = Datatype
+                 { _datatypeModule = KernelName kernelName
+                 , _datatypeName = dn
+                 }
+      let val = EPrimTypeMacro \dest stx -> do
+            Stx _ _ (me, args) <- mustBeCons stx
+            _ <- mustBeIdent me
+            if length args /= fromIntegral arity
+              then throwError $ WrongDatatypeArity stx dt arity (length args)
+              else do
+                argDests <- traverse scheduleType args
+                linkType dest $ TDatatype dt argDests
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+      ctors' <- for ctors \(ctorName, args) -> do
+        let cn = ConstructorName ctorName
+        let ctor = Constructor { _constructorModule = KernelName kernelName
+                               , _constructorName = cn
+                               }
+        let cInfo = ConstructorInfo { _ctorArguments = args
+                                    , _ctorDatatype = dt
+                                    }
+        modifyState $
+          over expanderKernelConstructors $
+          Map.insert ctor cInfo
+        cb <- freshBinding
+        bind cb $ EConstructor ctor
+        addToKernel ctorName runtime cb
+        pure ctor
+
+      let info =
+            DatatypeInfo
+            { _datatypeArity = arity
+            , _datatypeConstructors = ctors'
+            }
+      modifyState $
+        over expanderKernelDatatypes $
+        Map.insert dt info
+
 
     addPatternPrimitive ::
       Text -> (Ty -> Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()
@@ -594,7 +653,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Nothing -> do
           stillStuck tid task
         Just () -> do
-          let result = ValueSignal signal  -- TODO: return unit instead
+          let result = primitiveCtor "unit" []
           forkContinueMacroAction dest result kont
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
@@ -867,7 +926,6 @@ expandOneForm prob stx
               forkExpandVar t dest stx var
             String _ -> error "Impossible - string not ident"
             Sig _ -> error "Impossible - signal not ident"
-            Bool _ -> error "Impossible - boolean not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar i -> do
           dest <- requireTypeCtx stx prob
@@ -918,10 +976,6 @@ expandOneForm prob stx
           Sig s -> do
             unify dest (Ty TSignal) t
             expandLiteralSignal dest s
-            saveExprType dest t
-          Bool b -> do
-            unify dest (Ty TBool) t
-            linkExpr dest (CoreBool b)
             saveExprType dest t
           String s -> expandLiteralString dest s
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
@@ -1001,7 +1055,7 @@ interpretMacroAction (MacroActionSyntaxError syntaxError) = do
   throwError $ MacroRaisedSyntaxError syntaxError
 interpretMacroAction (MacroActionSendSignal signal) = do
   setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-  pure $ Right $ ValueSignal signal  -- TODO: return unit instead
+  pure $ Right $ primitiveCtor "unit" []
 interpretMacroAction (MacroActionWaitSignal signal) = do
   pure $ Left (signal, [])
 interpretMacroAction (MacroActionIdentEq how v1 v2) = do
@@ -1014,27 +1068,29 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
         \case
           -- Ambiguous bindings should not crash the comparison -
           -- they're just not free-identifier=?.
-          Ambiguous _ _ _ -> return $ Right $ ValueBool $ False
+          Ambiguous _ _ _ -> return $ Right $ primitiveCtor "false" []
           -- Similarly, things that are not yet bound are just not
           -- free-identifier=?
-          Unknown _ -> return $ Right $ ValueBool $ False
+          Unknown _ -> return $ Right $ primitiveCtor "false" []
           e -> throwError e
     Bound ->
-      return $ Right $ ValueBool $
-        view stxValue id1 == view stxValue id2 &&
-        view stxScopeSet id1 == view stxScopeSet id2
+      return $ Right $ flip primitiveCtor [] $
+        if view stxValue id1 == view stxValue id2 &&
+           view stxScopeSet id1 == view stxScopeSet id2
+          then "true" else "false"
   where
     getIdent (ValueSyntax stx) = mustBeIdent stx
     getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
     compareFree id1 id2 = do
       b1 <- resolve id1
       b2 <- resolve id2
-      return $ Right $ ValueBool $ b1 == b2
+      return $ Right $
+        flip primitiveCtor [] $
+        if b1 == b2 then "true" else "false"
     opName =
       case how of
         Free  -> "free-identifier=?"
         Bound -> "bound-identifier=?"
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
-  pure $ Right (ValueBool False) -- TODO unit type
-
+  pure $ Right $ primitiveCtor "unit" []

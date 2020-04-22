@@ -85,6 +85,7 @@ module Expander.Monad
   , forkInterpretMacroAction
   , stillStuck
   , schedule
+  , scheduleType
   -- * Implementation parts
   , SyntacticCategory(..)
   , ExpansionEnv(..)
@@ -117,6 +118,8 @@ module Expander.Monad
   , expanderExpressionTypes
   , expanderKernelBindings
   , expanderKernelExports
+  , expanderKernelDatatypes
+  , expanderKernelConstructors
   , expanderModuleExports
   , expanderModuleImports
   , expanderModuleName
@@ -266,6 +269,8 @@ data ExpanderState = ExpanderState
   , _expanderModuleRoots :: !(Map ModuleName Scope)
   , _expanderKernelBindings :: !BindingTable
   , _expanderKernelExports :: !Exports
+  , _expanderKernelDatatypes :: !(Map Datatype DatatypeInfo)
+  , _expanderKernelConstructors :: !(Map Constructor (ConstructorInfo Ty))
   , _expanderDeclOutputScopes :: !(Map DeclOutputScopesPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
@@ -300,6 +305,8 @@ initExpanderState = ExpanderState
   , _expanderModuleRoots = Map.empty
   , _expanderKernelBindings = mempty
   , _expanderKernelExports = noExports
+  , _expanderKernelDatatypes = mempty
+  , _expanderKernelConstructors = mempty
   , _expanderDeclOutputScopes = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
@@ -815,3 +822,8 @@ currentEnv = do
   localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
   return (globalEnv <> localEnv)
 
+scheduleType :: Syntax -> Expand SplitTypePtr
+scheduleType stx = do
+  dest <- liftIO newSplitTypePtr
+  forkExpandType dest stx
+  return dest

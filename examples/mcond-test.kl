@@ -11,7 +11,7 @@
           [(free-identifier=? id 'if) (pure '1)]
           [(free-identifier=? id 'else) (pure '2)]
           [(free-identifier=? id 'lambda) (pure '3)]
-          [(pure #t) (pure '4)])]))]))
+          [(pure (true)) (pure '4)])]))]))
 
 (example (test if))
 (example (test else))

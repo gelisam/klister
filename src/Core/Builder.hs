@@ -35,8 +35,3 @@ sendSig = return . Core . CoreSendSignal
 waitSig :: Core -> IO Core
 waitSig = return . Core . CoreWaitSignal
 
-bool :: Bool -> IO Core
-bool b = return $ Core $ CoreBool b
-
-iF :: IO Core -> IO Core -> IO Core -> IO Core
-iF b t f = Core <$> (CoreIf <$> b <*> t <*> f)
