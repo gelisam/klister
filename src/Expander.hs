@@ -110,6 +110,7 @@ expandModule thisMod src = do
   startBindings <- view expanderCurrentBindingTable <$> getState
   modifyState $ set expanderCurrentBindingTable mempty
   startDefTypes <- view expanderDefTypes <$> getState
+  modifyState $ set expanderDefTypes mempty
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
@@ -206,7 +207,7 @@ visit modName = do
     do world <- view expanderWorld <$> getState
        case view (worldModules . at modName) world of
          Just m -> do
-           let es = maybe noExports id (view (worldExports . at modName) world)
+           let es = fromMaybe noExports $ view (worldExports . at modName) world
            return (m, es)
          Nothing ->
            inPhase runtime $
