@@ -112,14 +112,17 @@
 [example (compose* id id id)]
 
 
-(export #%module #%app
-        const lambda define example define-macros quote meta
+(export #%module
+        the
+        const  define example define-macros quote meta
+        -> lambda #%app
         Bool if true false
         error
         let flet
         import export
+        Macro
         >>= pure syntax-error syntax-case
-        list-syntax cons-list-syntax empty-list-syntax replace-loc
+        Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
         free-identifier=? bound-identifier=? log make-introducer
         Unit unit
         ScopeAction flip add remove

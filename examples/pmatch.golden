@@ -1,0 +1,12 @@
+#[pmatch.kl:115.32-115.33]<t> : Syntax
+#[pmatch.kl:116.36-116.37]<t> : Syntax
+#[pmatch.kl:117.29-117.30]<t> : Syntax
+#[pmatch.kl:118.48-118.49]<t> : Syntax
+(zero) : Nat
+(zero) : Nat
+(zero) : Nat
+(zero) : Nat
+(add1 (zero)) : Nat
+(:: (pair #[pmatch.kl:143.34-143.35]<Signal 1> Signal 1)
+    (:: (pair #[pmatch.kl:143.50-143.51]<Signal 2> Signal 2)
+        (:: (pair #[pmatch.kl:143.66-143.67]<Signal 3> Signal 3) (nil)))) : (List (Pair Syntax Signal))
