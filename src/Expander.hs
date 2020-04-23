@@ -147,8 +147,11 @@ loadModuleFile modName =
                 \case
                   Left err -> throwError $ ReaderError err
                   Right stx -> return stx
+         startExports <- view expanderModuleExports <$> getState
+         modifyState $ set expanderModuleExports noExports
          m <- expandModule modName stx
          es <- view expanderModuleExports <$> getState
+         modifyState $ set expanderModuleExports startExports
 
          modifyState $ over expanderWorld $
             set (worldExports . at modName) (Just es) .
@@ -521,7 +524,7 @@ primImportModule dest outScopesDest importStx = do
   modExports <- getImports spec
   sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
   flip forExports_ modExports $ \p x b -> inPhase p do
-    imported <- addRootScope' $ addScope' (Stx scs loc x) sc
+    imported <- addModuleScope =<< addRootScope' (addScope' (Stx scs loc x) sc)
     addImportBinding imported b
   linkOneDecl dest (Import spec)
   linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)

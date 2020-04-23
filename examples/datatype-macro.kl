@@ -3,6 +3,7 @@
 (import (shift "n-ary-app.kl" 1))
 (import (shift "lispy-do.kl" 1))
 (import (shift "let.kl" 1))
+(import (shift "quasiquote.kl" 1))
 (import (shift (only "list.kl" map) 1))
 
 
