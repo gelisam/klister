@@ -450,7 +450,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/non-examples/type-errors.kl"
           , \case
-              TypeMismatch (Just _) _ _ -> True
+              TypeMismatch (Just _) _ _ _ -> True
               _ -> False
           )
         ]
