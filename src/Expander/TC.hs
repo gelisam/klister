@@ -192,9 +192,12 @@ instance UnificationErrorBlame SrcLoc where
 instance UnificationErrorBlame SplitCorePtr where
   getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
 
--- The expected type is first, the received is second
 unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
-unify blame t1 t2 = do
+unify loc t1 t2 = unifyWithBlame (loc, t1, t2) 0 t1 t2
+
+-- The expected type is first, the received is second
+unifyWithBlame :: UnificationErrorBlame blame => (blame, Ty, Ty) -> Natural -> Ty -> Ty -> Expand ()
+unifyWithBlame blame depth t1 t2 = do
   t1' <- normType t1
   t2' <- normType t2
   unify' (unTy t1') (unTy t2')
@@ -204,10 +207,10 @@ unify blame t1 t2 = do
     -- Rigid-rigid
     unify' TSyntax TSyntax = pure ()
     unify' TSignal TSignal = pure ()
-    unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
-    unify' (TMacro a) (TMacro b) = unify blame a b
+    unify' (TFun a c) (TFun b d) = unifyWithBlame blame (depth + 1) b a >> unifyWithBlame blame (depth + 1) c d
+    unify' (TMacro a) (TMacro b) = unifyWithBlame blame (depth + 1) a b
     unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
-      | dt1 == dt2 = traverse_ (uncurry (unify blame)) (zip args1 args2)
+      | dt1 == dt2 = traverse_ (uncurry (unifyWithBlame blame (depth + 1))) (zip args1 args2)
 
     -- Flex-flex
     unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
@@ -223,5 +226,13 @@ unify blame t1 t2 = do
 
     -- Mismatch
     unify' expected received = do
-      loc <- getBlameLoc blame
-      throwError $ TypeMismatch loc (Ty expected) (Ty received)
+      let (here, outerExpected, outerReceived) = blame
+      loc <- getBlameLoc here
+      e' <- normAll $ Ty expected
+      r' <- normAll $ Ty received
+      if depth == 0
+        then throwError $ TypeMismatch loc e' r' Nothing
+        else do
+          outerE' <- normAll outerExpected
+          outerR' <- normAll outerReceived
+          throwError $ TypeMismatch loc outerE' outerR' (Just (e', r'))

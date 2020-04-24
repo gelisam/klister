@@ -46,7 +46,8 @@ data ExpansionErr
   | ReaderError Text
   | WrongMacroContext Syntax MacroContext MacroContext
   | NotValidType Syntax
-  | TypeMismatch (Maybe SrcLoc) Ty Ty
+  | TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
+    -- ^ Blame for constraint, expected, got, and specific part that doesn't match
   | OccursCheckFailed MetaPtr Ty
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
@@ -150,17 +151,27 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
-  pp env (TypeMismatch loc expected got) =
+  pp env (TypeMismatch loc expected got specifically) =
     group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
                                          , maybe (text "unknown location") (pp env) loc <> text "."
                                          ]
-                 , group $ vsep [ group $ hang 2 $ vsep [ text "Expected"
-                                                        , pp env expected
-                                                        ]
-                                , group $ hang 2 $ vsep [ text "but got"
-                                                        , pp env got
-                                                        ]
-                                ]
+                 , group $ vsep $
+                   [ group $ hang 2 $ vsep [ text "Expected"
+                                           , pp env expected
+                                           ]
+                   , group $ hang 2 $ vsep [ text "but got"
+                                           , pp env got
+                                           ]
+                   ] ++
+                   case specifically of
+                     Nothing -> []
+                     Just (expected', got') ->
+                       [ hang 2 $ group $ vsep [text "Specifically,"
+                                               , group (vsep [ pp env expected'
+                                                             , text "doesn't match" <+> pp env got'
+                                                             ])
+                                               ]
+                       ]
                  ]
 
   pp env (OccursCheckFailed ptr ty) =
