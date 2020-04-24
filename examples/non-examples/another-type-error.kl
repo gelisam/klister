@@ -1,0 +1,17 @@
+#lang kernel
+
+
+
+(datatype (Wrap A) (wrap A))
+(datatype (Both A) (both A A))
+(datatype (Throth A) (throth A A A))
+
+(example (let (x (wrap (wrap (wrap (wrap (wrap (wrap 'foo)))))))
+           (let (f (lambda (x) (lambda (y) (both x y))))
+             ((f x) (wrap 'bar)))))
+
+
+(example (let (x (wrap (wrap (wrap (wrap (wrap (wrap 'foo)))))))
+           (let (f (lambda (x) (lambda (y) (lambda (z) (throth x y z)))))
+             (((f x) (wrap 'bar)) (wrap (wrap 'spinach))))))
+

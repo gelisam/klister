@@ -86,6 +86,9 @@ module Expander.Monad
   , stillStuck
   , schedule
   , scheduleType
+  -- * Type errors
+  , typeError
+  , withoutTypeErrors
   -- * Implementation parts
   , SyntacticCategory(..)
   , ExpansionEnv(..)
@@ -142,6 +145,7 @@ import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Foldable
 import Data.IORef
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
@@ -277,6 +281,7 @@ data ExpanderState = ExpanderState
   , _expanderCurrentDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
   , _expanderCurrentConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
   , _expanderCurrentBindingTable :: !BindingTable
+  , _expanderCurrentTypeCheckErrors :: [TypeCheckError]
   , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
   , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
   , _expanderTypeStore :: !(TypeStore Ty)
@@ -313,6 +318,7 @@ initExpanderState = ExpanderState
   , _expanderCurrentDatatypes = Map.empty
   , _expanderCurrentConstructors = Map.empty
   , _expanderCurrentBindingTable = mempty
+  , _expanderCurrentTypeCheckErrors = mempty
   , _expanderExpressionTypes = Map.empty
   , _expanderCompletedSchemes = Map.empty
   , _expanderTypeStore = mempty
@@ -777,7 +783,7 @@ kernelExports :: Expand Exports
 kernelExports = view expanderKernelExports <$> getState
 
 completely :: Expand a -> Expand a
-completely body = do
+completely body = withoutTypeErrors do
   oldTasks <- getTasks
   clearTasks
   a <- body
@@ -827,3 +833,20 @@ scheduleType stx = do
   dest <- liftIO newSplitTypePtr
   forkExpandType dest stx
   return dest
+
+typeError :: TypeCheckError -> Expand ()
+typeError err =
+  modifyState $ over expanderCurrentTypeCheckErrors (err:)
+
+withoutTypeErrors :: Expand a -> Expand a
+withoutTypeErrors act = do
+  x <- act
+  noTypeErrors
+  pure x
+
+  where
+    noTypeErrors = do
+      errs <- view expanderCurrentTypeCheckErrors <$> getState
+      case errs of
+        [] -> pure ()
+        (e:es) -> throwError $ TypeCheckErrors (e :| es)
