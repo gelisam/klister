@@ -48,13 +48,18 @@ data ExpansionErr
   | ReaderError Text
   | WrongMacroContext Syntax MacroContext MacroContext
   | NotValidType Syntax
-  | TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
-    -- ^ Blame for constraint, expected, got, and specific part that doesn't match
-  | OccursCheckFailed MetaPtr Ty
+  | TypeCheckError TypeCheckError
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
   | WrongDatatypeArity Syntax Datatype Natural Int
   deriving (Show)
+
+data TypeCheckError
+  = TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
+    -- ^ Blame for constraint, expected, got, and specific part that doesn't match
+  | OccursCheckFailed MetaPtr Ty
+  deriving (Show)
+
 
 data MacroContext
   = ExpressionCtx
@@ -155,6 +160,24 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
+  pp env (TypeCheckError err) = pp env err
+  pp env (WrongArgCount stx ctor wanted got) =
+    hang 2 $
+    vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
+         , text "Wanted" <+> viaShow wanted
+         , text "Got" <+> viaShow got
+         , text "At" <+> align (pp env stx)
+         ]
+  pp env (NotAConstructor stx) =
+    hang 2 $ group $ vsep [text "Not a constructor in", pp env stx]
+  pp env (WrongDatatypeArity stx dt arity got) =
+    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env dt
+                  , text "Wanted" <+> viaShow arity
+                  , text "Got" <+> viaShow got
+                  , text "In" <+> align (pp env stx)
+                  ]
+
+instance Pretty VarInfo TypeCheckError where
   pp env (TypeMismatch loc expected got specifically) =
     group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
                                          , maybe (text "unknown location") (pp env) loc <> text "."
@@ -182,21 +205,7 @@ instance Pretty VarInfo ExpansionErr where
     hang 2 $ group $ vsep [ text "Occurs check failed:"
                           , group (vsep [viaShow ptr, "≠", pp env ty])
                           ]
-  pp env (WrongArgCount stx ctor wanted got) =
-    hang 2 $
-    vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
-         , text "Wanted" <+> viaShow wanted
-         , text "Got" <+> viaShow got
-         , text "At" <+> align (pp env stx)
-         ]
-  pp env (NotAConstructor stx) =
-    hang 2 $ group $ vsep [text "Not a constructor in", pp env stx]
-  pp env (WrongDatatypeArity stx dt arity got) =
-    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env dt
-                  , text "Wanted" <+> viaShow arity
-                  , text "Got" <+> viaShow got
-                  , text "In" <+> align (pp env stx)
-                  ]
+
 
 instance Pretty VarInfo MacroContext where
   pp _env ExpressionCtx = text "an expression"

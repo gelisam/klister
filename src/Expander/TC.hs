@@ -73,7 +73,7 @@ occursCheck ptr t = do
   if ptr `elem` free
     then do
       t' <- normAll t
-      throwError $ OccursCheckFailed ptr t'
+      throwError $ TypeCheckError $ OccursCheckFailed ptr t'
     else pure ()
 
 pruneLevel :: Traversable f => BindingLevel -> f MetaPtr -> Expand ()
@@ -233,8 +233,8 @@ unifyWithBlame blame depth t1 t2 = do
       e' <- normAll $ Ty expected
       r' <- normAll $ Ty received
       if depth == 0
-        then throwError $ TypeMismatch loc e' r' Nothing
+        then throwError $ TypeCheckError $ TypeMismatch loc e' r' Nothing
         else do
           outerE' <- normAll outerExpected
           outerR' <- normAll outerReceived
-          throwError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
+          throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
