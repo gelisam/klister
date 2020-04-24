@@ -26,6 +26,7 @@ module Expander.Primitives
   , letExpr
   , letSyntax
   , listSyntax
+  , makeIntroducer
   , Expander.Primitives.log
   , oops
   , pureMacro
@@ -395,7 +396,7 @@ syntaxCase t dest stx = do
   Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
   scrutDest <- schedule (Ty TSyntax) scrutinee
   patternDests <- traverse (mustHaveEntries >=> expandPatternCase t) patterns
-  linkExpr dest $ CoreCase scrutDest patternDests
+  linkExpr dest $ CoreCase loc scrutDest patternDests
 
 letSyntax :: ExprPrim
 letSyntax t dest stx = do
@@ -419,6 +420,18 @@ letSyntax t dest stx = do
       (addScope (prior p) mdef psc)
   forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
 
+makeIntroducer :: ExprPrim
+makeIntroducer t dest stx = do
+  Stx _ _ mName <- mustHaveEntries stx
+  _ <- mustBeIdent mName
+  unify dest theType t
+  linkExpr dest $ CoreMakeIntroducer
+
+  where
+    theType =
+      Ty $ TMacro $ Ty $ TFun (primitiveDatatype "ScopeAction" []) $
+      Ty $ TFun (Ty TSyntax) (Ty TSyntax)
+
 log :: ExprPrim
 log t dest stx = do
   unify dest (Ty (TMacro (primitiveDatatype "Unit" []))) t
@@ -428,11 +441,11 @@ log t dest stx = do
 
 dataCase :: ExprPrim
 dataCase t dest stx = do
-  Stx _ _ (_, scrut, cases) <- mustBeConsCons stx
+  Stx _ loc (_, scrut, cases) <- mustBeConsCons stx
   a <- Ty . TMetaVar <$> freshMeta
   scrutineeDest <- schedule a scrut
   cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
-  linkExpr dest $ CoreDataCase scrutineeDest cases'
+  linkExpr dest $ CoreDataCase loc scrutineeDest cases'
 
 ---------------------
 -- Type Primitives --

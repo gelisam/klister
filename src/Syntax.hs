@@ -92,8 +92,15 @@ flipScope p = adjustScope go
       | ScopeSet.member p sc scs = ScopeSet.deleteAtPhase p sc scs
       | otherwise                = ScopeSet.insertAtPhase p sc scs
 
+flipScope' :: HasScopes a => a -> Scope -> a
+flipScope' = adjustScope ScopeSet.flipUniversally
+
 addScope' :: HasScopes a => a -> Scope -> a
 addScope' = adjustScope ScopeSet.insertUniversally
+
+removeScope' :: HasScopes a => a -> Scope -> a
+removeScope' = adjustScope ScopeSet.deleteUniversally
+
 
 addScopes :: HasScopes a => a -> ScopeSet -> a
 addScopes a0 scopeSet

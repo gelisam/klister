@@ -8,6 +8,7 @@ module Main where
 
 import Control.Lens hiding (List)
 import Control.Monad
+import Data.List.NonEmpty (NonEmpty(..))
 import qualified Data.Map as Map
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (maybeToList)
@@ -451,7 +452,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/non-examples/type-errors.kl"
           , \case
-              TypeMismatch (Just _) _ _ -> True
+              TypeCheckErrors ((TypeMismatch (Just _) _ _ _) :| _) -> True
               _ -> False
           )
         ]

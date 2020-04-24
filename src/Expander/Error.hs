@@ -4,6 +4,8 @@ module Expander.Error where
 
 import Control.Lens
 import Numeric.Natural
+import Data.List (sortBy)
+import Data.List.NonEmpty (NonEmpty(..))
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -46,12 +48,18 @@ data ExpansionErr
   | ReaderError Text
   | WrongMacroContext Syntax MacroContext MacroContext
   | NotValidType Syntax
-  | TypeMismatch (Maybe SrcLoc) Ty Ty
-  | OccursCheckFailed MetaPtr Ty
+  | TypeCheckErrors (NonEmpty TypeCheckError)
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
   | WrongDatatypeArity Syntax Datatype Natural Int
   deriving (Show)
+
+data TypeCheckError
+  = TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
+    -- ^ Blame for constraint, expected, got, and specific part that doesn't match
+  | OccursCheckFailed MetaPtr Ty
+  deriving (Show)
+
 
 data MacroContext
   = ExpressionCtx
@@ -150,23 +158,22 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
-  pp env (TypeMismatch loc expected got) =
-    group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
-                                         , maybe (text "unknown location") (pp env) loc <> text "."
-                                         ]
-                 , group $ vsep [ group $ hang 2 $ vsep [ text "Expected"
-                                                        , pp env expected
-                                                        ]
-                                , group $ hang 2 $ vsep [ text "but got"
-                                                        , pp env got
-                                                        ]
-                                ]
-                 ]
 
-  pp env (OccursCheckFailed ptr ty) =
-    hang 2 $ group $ vsep [ text "Occurs check failed:"
-                          , group (vsep [viaShow ptr, "≠", pp env ty])
-                          ]
+  pp env (TypeCheckErrors (err :| [])) = pp env err
+
+  pp env (TypeCheckErrors (err :| errs)) =
+    hang 2 $ vsep [ text "Type errors:"
+                  , vsep (map (bulleted . pp env) (sortBy typeErrOrder (err : errs)))
+                  ]
+    where
+      bulleted doc = text " • " <>  align doc
+      typeErrOrder :: TypeCheckError -> TypeCheckError -> Ordering
+      typeErrOrder (TypeMismatch loc1 _ _ _) (TypeMismatch loc2 _ _ _) =
+        loc1 `compare` loc2
+      typeErrOrder (TypeMismatch _ _ _ _) (OccursCheckFailed _ _) = GT
+      typeErrOrder (OccursCheckFailed _ _) (TypeMismatch _ _ _ _) = LT
+      typeErrOrder (OccursCheckFailed _ _) (OccursCheckFailed _ _) = EQ
+
   pp env (WrongArgCount stx ctor wanted got) =
     hang 2 $
     vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
@@ -182,6 +189,37 @@ instance Pretty VarInfo ExpansionErr where
                   , text "Got" <+> viaShow got
                   , text "In" <+> align (pp env stx)
                   ]
+
+
+instance Pretty VarInfo TypeCheckError where
+  pp env (TypeMismatch loc expected got specifically) =
+    group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
+                                         , maybe (text "unknown location") (pp env) loc <> text ":"
+                                         ]
+                 , group $ vsep $
+                   [ group $ hang 2 $ vsep [ text "Expected"
+                                           , pp env expected
+                                           ]
+                   , group $ hang 2 $ vsep [ text "but got"
+                                           , pp env got
+                                           ]
+                   ] ++
+                   case specifically of
+                     Nothing -> []
+                     Just (expected', got') ->
+                       [ hang 2 $ group $ vsep [text "Specifically,"
+                                               , group (vsep [ pp env expected'
+                                                             , text "doesn't match" <+> pp env got'
+                                                             ])
+                                               ]
+                       ]
+                 ]
+
+  pp env (OccursCheckFailed ptr ty) =
+    hang 2 $ group $ vsep [ text "Occurs check failed:"
+                          , group (vsep [viaShow ptr, "≠", pp env ty])
+                          ]
+
 
 instance Pretty VarInfo MacroContext where
   pp _env ExpressionCtx = text "an expression"

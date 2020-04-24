@@ -110,6 +110,7 @@ expandModule thisMod src = do
   startBindings <- view expanderCurrentBindingTable <$> getState
   modifyState $ set expanderCurrentBindingTable mempty
   startDefTypes <- view expanderDefTypes <$> getState
+  modifyState $ set expanderDefTypes mempty
   local (set (expanderLocal . expanderModuleName) thisMod) do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
@@ -146,8 +147,11 @@ loadModuleFile modName =
                 \case
                   Left err -> throwError $ ReaderError err
                   Right stx -> return stx
+         startExports <- view expanderModuleExports <$> getState
+         modifyState $ set expanderModuleExports noExports
          m <- expandModule modName stx
          es <- view expanderModuleExports <$> getState
+         modifyState $ set expanderModuleExports startExports
 
          modifyState $ over expanderWorld $
             set (worldExports . at modName) (Just es) .
@@ -206,7 +210,7 @@ visit modName = do
     do world <- view expanderWorld <$> getState
        case view (worldModules . at modName) world of
          Just m -> do
-           let es = maybe noExports id (view (worldExports . at modName) world)
+           let es = fromMaybe noExports $ view (worldExports . at modName) world
            return (m, es)
          Nothing ->
            inPhase runtime $
@@ -256,11 +260,11 @@ evalMod (Expanded em _) = execWriterT $ do
           val <- lift $ expandEval (eval e)
           p <- lift currentPhase
           lift $ modifyState $
-            over (expanderWorld . worldTypeContexts . at p . non Env.empty) $
-            Env.insert n x ptr
+            over (expanderWorld . worldTypeContexts . at p) $
+            Just . maybe (Env.singleton n x ptr) (Env.insert n x ptr)
           lift $ modifyState $
-            over (expanderWorld . worldEnvironments . at p . non Env.empty) $
-              Env.insert n x val
+            over (expanderWorld . worldEnvironments . at p) $
+            Just . maybe (Env.singleton n x val) (Env.insert n x val)
         Data _ dn arity ctors -> do
           p <- lift currentPhase
           let mn = view moduleName em
@@ -290,8 +294,8 @@ evalMod (Expanded em _) = execWriterT $ do
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
             v <- expandEval (eval e)
             modifyState $
-              over (expanderWorld . worldTransformerEnvironments . at p . non Env.empty) $
-                Env.insert n x v
+              over (expanderWorld . worldTransformerEnvironments . at p) $
+              Just . maybe (Env.singleton n x v) (Env.insert n x v)
         Meta decls -> do
           ((), out) <- lift $ inEarlierPhase (runWriterT $ traverse_ evalDecl decls)
           tell out
@@ -419,6 +423,7 @@ initializeKernel = do
       , ("syntax-case", Prims.syntaxCase)
       , ("let-syntax", Prims.letSyntax)
       , ("log", Prims.log)
+      , ("make-introducer", Prims.makeIntroducer)
       , ("case", Prims.dataCase)
       ]
 
@@ -519,7 +524,7 @@ primImportModule dest outScopesDest importStx = do
   modExports <- getImports spec
   sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
   flip forExports_ modExports $ \p x b -> inPhase p do
-    imported <- addRootScope' $ addScope' (Stx scs loc x) sc
+    imported <- addModuleScope =<< addRootScope' (addScope' (Stx scs loc x) sc)
     addImportBinding imported b
   linkOneDecl dest (Import spec)
   linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)
@@ -1094,3 +1099,13 @@ interpretMacroAction (MacroActionIdentEq how v1 v2) = do
 interpretMacroAction (MacroActionLog stx) = do
   liftIO $ prettyPrint stx >> putStrLn ""
   pure $ Right $ primitiveCtor "unit" []
+interpretMacroAction MacroActionIntroducer = do
+  sc <- freshScope "User introduction scope"
+  pure $ Right $
+    ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
+    ValueSyntax
+      case view (constructorName . constructorNameText) ctor of
+        "add" -> addScope' stx sc
+        "flip" -> flipScope' stx sc
+        "remove" -> removeScope' stx sc
+        _ -> error "Impossible!"

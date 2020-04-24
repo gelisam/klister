@@ -34,17 +34,17 @@ makeLenses ''TypeError
 data EvalError
   = EvalErrorUnbound Var
   | EvalErrorType TypeError
-  | EvalErrorCase Value
+  | EvalErrorCase SrcLoc Value
   | EvalErrorUser Syntax
-  deriving (Eq, Show)
+  deriving (Show)
 makePrisms ''EvalError
 
 evalErrorText :: EvalError -> Text
 evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
 evalErrorText (EvalErrorType (TypeError expected got)) =
   "Wrong type. Expected a " <> expected <> " but got a " <> got
-evalErrorText (EvalErrorCase val) =
-  "Didn't match any pattern: " <> valueText val
+evalErrorText (EvalErrorCase loc val) =
+  "Didn't match any pattern at " <> T.pack (shortShow loc) <> ": " <> valueText val
 evalErrorText (EvalErrorUser what) =
   T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
   syntaxText what
@@ -75,16 +75,16 @@ data EvalResult =
              , resultType :: Scheme Ty
              , resultValue :: Value
              }
-  deriving (Eq, Show)
 
 apply :: Closure -> Value -> Eval Value
-apply (Closure {..}) value = do
+apply (FO (FOClosure {..})) value = do
   let env = Env.insert _closureVar
                        _closureIdent
                        value
                        _closureEnv
-  withEnv env $ do
+  withEnv env $
     eval _closureBody
+apply (HO prim) value = pure (prim value)
 
 eval :: Core -> Eval Value
 eval (Core (CoreVar var)) = do
@@ -99,7 +99,7 @@ eval (Core (CoreLet ident var def body)) = do
 eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
   env <- ask
   let vFun =
-        ValueClosure $ Closure
+        ValueClosure $ FO $ FOClosure
           { _closureEnv = Env.insert funVar funIdent vFun env
           , _closureIdent = argIdent
           , _closureVar = argVar
@@ -108,7 +108,7 @@ eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
   withEnv (Env.insert funVar funIdent vFun env) (eval body)
 eval (Core (CoreLam ident var body)) = do
   env <- ask
-  pure $ ValueClosure $ Closure
+  pure $ ValueClosure $ FO $ FOClosure
     { _closureEnv   = env
     , _closureIdent = ident
     , _closureVar   = var
@@ -120,9 +120,9 @@ eval (Core (CoreApp fun arg)) = do
   apply closure value
 eval (Core (CoreCtor c args)) =
   ValueCtor c <$> traverse eval args
-eval (Core (CoreDataCase scrut cases)) = do
+eval (Core (CoreDataCase loc scrut cases)) = do
   value <- eval scrut
-  doDataCase value cases
+  doDataCase loc value cases
 eval (Core (CoreError what)) = do
   msg <- evalAsSyntax what
   throwError $ EvalErrorUser msg
@@ -152,13 +152,15 @@ eval (Core (CoreIdentEq how e1 e2)) =
 eval (Core (CoreLog msg)) = do
   msgVal <- evalAsSyntax msg
   return $ ValueMacroAction (MacroActionLog msgVal)
+eval (Core CoreMakeIntroducer) =
+  return $ ValueMacroAction MacroActionIntroducer
 eval (Core (CoreSignal signal)) =
   pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do
   pure $ ValueSyntax syntax
-eval (Core (CoreCase scrutinee cases)) = do
+eval (Core (CoreCase loc scrutinee cases)) = do
   v <- eval scrutinee
-  doCase v cases
+  doCase loc v cases
 eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
   pure $ ValueSyntax
        $ Syntax
@@ -227,7 +229,7 @@ evalAsClosure :: Core -> Eval Closure
 evalAsClosure core = do
   value <- eval core
   case value of
-    ValueClosure closure -> do
+    ValueClosure closure ->
       pure closure
     other -> evalErrorType "function" other
 
@@ -259,9 +261,9 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doDataCase :: Value -> [(ConstructorPattern, Core)] -> Eval Value
-doDataCase v0 [] = throwError (EvalErrorCase v0)
-doDataCase v0 ((pat, rhs) : ps) = match (doDataCase v0 ps) pat
+doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
+doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
+doDataCase loc v0 ((pat, rhs) : ps) = match (doDataCase loc v0 ps) pat
   where
     match next (ConstructorPattern ctor vars) =
       case v0 of
@@ -278,9 +280,9 @@ doDataCase v0 ((pat, rhs) : ps) = match (doDataCase v0 ps) pat
     match _next (AnyConstructor n x) =
       withExtendedEnv n x v0 $ eval rhs
 
-doCase :: Value -> [(SyntaxPattern, Core)] -> Eval Value
-doCase v0 []               = throwError (EvalErrorCase v0)
-doCase v0 ((p, rhs0) : ps) = match (doCase v0 ps) p rhs0 v0
+doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> Eval Value
+doCase blameLoc v0 []               = throwError (EvalErrorCase blameLoc v0)
+doCase blameLoc v0 ((p, rhs0) : ps) = match (doCase blameLoc v0 ps) p rhs0 v0
   where
     match next (SyntaxPatternIdentifier n x) rhs =
       \case

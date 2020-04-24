@@ -112,7 +112,7 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
   pp env (CoreCtor ctor []) = pp env ctor
   pp env (CoreCtor ctor args) =
     hang 2 $ parens $ pp env ctor <+> group (vsep (map (pp env) args))
-  pp env (CoreDataCase scrut cases) =
+  pp env (CoreDataCase _ scrut cases) =
     hang 2 $ group $
     vsep [ text "case" <+> pp env scrut <+> "of"
          , encloseSep (flatAlt mempty (text "{" <> space))
@@ -146,9 +146,11 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
           Bound -> "bound-identifier=?"
   pp env (CoreLog msg) =
     group (hang 2 (vsep ["log", pp env msg]))
+  pp _env CoreMakeIntroducer =
+    text "make-introducer"
   pp env (CoreSyntax stx) =
     pp env stx
-  pp env (CoreCase scrut pats) =
+  pp env (CoreCase _ scrut pats) =
     hang 2 $ group $
     group (hang 2 $ text "syntax-case" <+> pp env scrut <+> "of") <> line <>
     vsep [ parens $ hang 2 $
@@ -456,7 +458,9 @@ instance Pretty VarInfo MacroAction where
   pp env (MacroActionPure v) =
     text "pure" <+> pp env v
   pp env (MacroActionBind v k) =
-    group (group (pp env v <> line <> text ">>=") <> line <> pp env k)
+    group $
+      group (pp env v <> line <> text ">>=") <> line <>
+      pp env k
   pp env (MacroActionSyntaxError err) =
     text "syntax-error" <+> pp env err
   pp _env (MacroActionSendSignal s) =
@@ -472,6 +476,8 @@ instance Pretty VarInfo MacroAction where
           Bound -> "bound-identifier=?"
   pp env (MacroActionLog stx) =
     hang 2 $ group $ vsep [text "log", pp env stx]
+  pp _env MacroActionIntroducer =
+    text "make-introducer"
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)
@@ -532,8 +538,8 @@ instance Pretty VarInfo EvalError where
   pp env (EvalErrorUnbound x) = text "Unbound:" <+> pp env (Core (CoreVar x))
   pp _env (EvalErrorType (TypeError expected got)) =
     text "Expected a(n)" <+> text expected <+> "but got a(n)" <+> text got
-  pp env (EvalErrorCase val) =
-    group $ hang 2 $ vsep [text "No case matched:", pp env val]
+  pp env (EvalErrorCase blame val) =
+    group $ hang 2 $ vsep [text "No case matched at" <+> pp env blame <> ":" , pp env val]
   pp env (EvalErrorUser (Syntax (Stx _ loc msg))) =
     group $ hang 2 $ vsep [pp env loc <> ":", pp env msg]
 
