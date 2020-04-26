@@ -2,7 +2,7 @@
 
 (import (shift "n-ary-app.kl" 1))
 (import (shift "do.kl" 1))
-(import (shift "list.kl" 1))
+(import (shift "list-syntax.kl" 1))
 (import (shift "quasiquote.kl" 1))
 (import (shift "syntax.kl" 1))
 
