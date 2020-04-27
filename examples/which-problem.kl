@@ -1,0 +1,18 @@
+#lang kernel
+
+(import (shift kernel 1))
+
+(define-macros
+  ([m (lambda (stx)
+        (>>= (which-problem)
+          (lambda (prob)
+            (case prob
+              [(declaration) (pure '(example (the (m) (m))))]
+              [(type)        (pure '(Bool))]
+              [(expression)  (pure '(true))]
+              [(pattern)     (pure '(unit))]))))]))
+
+(m)
+
+(example (case (unit)
+           ((m) (true))))

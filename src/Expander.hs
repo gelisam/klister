@@ -380,6 +380,7 @@ initializeKernel = do
       [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", 0, [("unit", [])])
       , ("Bool", 0, [("true", []), ("false", [])])
+      , ("Problem", 0, [("declaration", []), ("expression", []), ("type", []), ("pattern", [])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -424,6 +425,7 @@ initializeKernel = do
       , ("let-syntax", Prims.letSyntax)
       , ("log", Prims.log)
       , ("make-introducer", Prims.makeIntroducer)
+      , ("which-problem", Prims.whichProblem)
       , ("case", Prims.dataCase)
       ]
 
@@ -713,7 +715,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just newScopeSet ->
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes stx newScopeSet)
     InterpretMacroAction dest act outerKont -> do
-      interpretMacroAction act >>= \case
+      interpretMacroAction dest act >>= \case
         Left (signal, innerKont) -> do
           forkAwaitingSignal dest signal (innerKont ++ outerKont)
         Right value -> do
@@ -951,7 +953,7 @@ expandOneForm prob stx
                           ValueSyntax $ addScope p stx stepScope
               case macroVal of
                 ValueMacroAction act -> do
-                  res <- interpretMacroAction act
+                  res <- interpretMacroAction prob act
                   case res of
                     Left (sig, kont) ->
                       forkAwaitingSignal prob sig kont
@@ -1030,82 +1032,89 @@ expandLiteralString _dest str =
 -- If we're stuck waiting on a signal, we return that signal and a continuation
 -- in the form of a sequence of closures. The first closure should be applied to
 -- the result of wait-signal, the second to the result of the first, etc.
-interpretMacroAction :: MacroAction -> Expand (Either (Signal, [Closure]) Value)
-interpretMacroAction (MacroActionPure value) = do
-  pure $ Right value
-interpretMacroAction (MacroActionBind macroAction closure) = do
-  interpretMacroAction macroAction >>= \case
-    Left (signal, closures) -> do
-      pure $ Left (signal, closures ++ [closure])
-    Right boundResult -> do
-      phase <- view (expanderLocal . expanderPhase)
-      s <- getState
-      let env = fromMaybe Env.empty
-              . view (expanderWorld . worldEnvironments . at phase)
-              $ s
-      evalResult <- liftIO
-                  $ runExceptT
-                  $ flip runReaderT env
-                  $ runEval
-                  $ apply closure boundResult
-      case evalResult of
-        Left evalError -> do
-          p <- currentPhase
-          throwError $ MacroEvaluationError p evalError
-        Right value ->
-          case value of
-            ValueMacroAction act -> interpretMacroAction act
-            other -> throwError $ ValueNotMacro other
-interpretMacroAction (MacroActionSyntaxError syntaxError) = do
-  throwError $ MacroRaisedSyntaxError syntaxError
-interpretMacroAction (MacroActionSendSignal signal) = do
-  setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-  pure $ Right $ primitiveCtor "unit" []
-interpretMacroAction (MacroActionWaitSignal signal) = do
-  pure $ Left (signal, [])
-interpretMacroAction (MacroActionIdentEq how v1 v2) = do
-  id1 <- getIdent v1
-  id2 <- getIdent v2
-  case how of
-    Free ->
-      compareFree id1 id2
-        `catchError`
-        \case
-          -- Ambiguous bindings should not crash the comparison -
-          -- they're just not free-identifier=?.
-          Ambiguous _ _ _ -> return $ Right $ primitiveCtor "false" []
-          -- Similarly, things that are not yet bound are just not
-          -- free-identifier=?
-          Unknown _ -> return $ Right $ primitiveCtor "false" []
-          e -> throwError e
-    Bound ->
-      return $ Right $ flip primitiveCtor [] $
-        if view stxValue id1 == view stxValue id2 &&
-           view stxScopeSet id1 == view stxScopeSet id2
-          then "true" else "false"
-  where
-    getIdent (ValueSyntax stx) = mustBeIdent stx
-    getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
-    compareFree id1 id2 = do
-      b1 <- resolve id1
-      b2 <- resolve id2
-      return $ Right $
-        flip primitiveCtor [] $
-        if b1 == b2 then "true" else "false"
-    opName =
-      case how of
-        Free  -> "free-identifier=?"
-        Bound -> "bound-identifier=?"
-interpretMacroAction (MacroActionLog stx) = do
-  liftIO $ prettyPrint stx >> putStrLn ""
-  pure $ Right $ primitiveCtor "unit" []
-interpretMacroAction MacroActionIntroducer = do
-  sc <- freshScope "User introduction scope"
-  pure $ Right $
-    ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
-    ValueSyntax
-      case view (constructorName . constructorNameText) ctor of
-        "add" -> addScope' stx sc
-        "flip" -> flipScope' stx sc
-        "remove" -> removeScope' stx sc
-        _ -> error "Impossible!"
+interpretMacroAction :: MacroDest -> MacroAction -> Expand (Either (Signal, [Closure]) Value)
+interpretMacroAction prob = \case
+  MacroActionPure value-> do
+    pure $ Right value
+  MacroActionBind macroAction closure -> do
+    interpretMacroAction prob macroAction >>= \case
+      Left (signal, closures) -> do
+        pure $ Left (signal, closures ++ [closure])
+      Right boundResult -> do
+        phase <- view (expanderLocal . expanderPhase)
+        s <- getState
+        let env = fromMaybe Env.empty
+                . view (expanderWorld . worldEnvironments . at phase)
+                $ s
+        evalResult <- liftIO
+                    $ runExceptT
+                    $ flip runReaderT env
+                    $ runEval
+                    $ apply closure boundResult
+        case evalResult of
+          Left evalError -> do
+            p <- currentPhase
+            throwError $ MacroEvaluationError p evalError
+          Right value ->
+            case value of
+              ValueMacroAction act -> interpretMacroAction prob act
+              other -> throwError $ ValueNotMacro other
+  MacroActionSyntaxError syntaxError -> do
+    throwError $ MacroRaisedSyntaxError syntaxError
+  MacroActionSendSignal signal -> do
+    setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
+    pure $ Right $ primitiveCtor "unit" []
+  MacroActionWaitSignal signal -> do
+    pure $ Left (signal, [])
+  MacroActionIdentEq how v1 v2 -> do
+    id1 <- getIdent v1
+    id2 <- getIdent v2
+    case how of
+      Free ->
+        compareFree id1 id2
+          `catchError`
+          \case
+            -- Ambiguous bindings should not crash the comparison -
+            -- they're just not free-identifier=?.
+            Ambiguous _ _ _ -> return $ Right $ primitiveCtor "false" []
+            -- Similarly, things that are not yet bound are just not
+            -- free-identifier=?
+            Unknown _ -> return $ Right $ primitiveCtor "false" []
+            e -> throwError e
+      Bound ->
+        return $ Right $ flip primitiveCtor [] $
+          if view stxValue id1 == view stxValue id2 &&
+             view stxScopeSet id1 == view stxScopeSet id2
+            then "true" else "false"
+    where
+      getIdent (ValueSyntax stx) = mustBeIdent stx
+      getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+      compareFree id1 id2 = do
+        b1 <- resolve id1
+        b2 <- resolve id2
+        return $ Right $
+          flip primitiveCtor [] $
+          if b1 == b2 then "true" else "false"
+      opName =
+        case how of
+          Free  -> "free-identifier=?"
+          Bound -> "bound-identifier=?"
+  MacroActionLog stx -> do
+    liftIO $ prettyPrint stx >> putStrLn ""
+    pure $ Right $ primitiveCtor "unit" []
+  MacroActionIntroducer -> do
+    sc <- freshScope "User introduction scope"
+    pure $ Right $
+      ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
+      ValueSyntax
+        case view (constructorName . constructorNameText) ctor of
+          "add" -> addScope' stx sc
+          "flip" -> flipScope' stx sc
+          "remove" -> removeScope' stx sc
+          _ -> error "Impossible!"
+  MacroActionWhichProblem -> do
+    case prob of
+      ExprDest {} -> pure $ Right $ primitiveCtor "expression" []
+      TypeDest {} -> pure $ Right $ primitiveCtor "type" []
+      DeclTreeDest {} -> pure $ Right $ primitiveCtor "declaration" []
+      PatternDest {} -> pure $ Right $ primitiveCtor "pattern" []

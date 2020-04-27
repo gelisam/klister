@@ -24,6 +24,10 @@ his talk from `Strange Loop`_.
 
 .. _Strange Loop: https://www.youtube.com/watch?v=Or_yKiI3Ha4
 
+Additionaly, there is a module system patterned after `Racket's`_.
+
+.. _Racket's: https://www.cs.utah.edu/plt/publications/macromod.pdf
+
 This macro expander has a few differences:
 
 * Rather than performing a depth-first traversal of the input syntax,
@@ -37,17 +41,23 @@ This macro expander has a few differences:
   overhead associated with recursive uses of ``local-expand``, as well
   as enabling a second, trusted type checking pass.
 
-We additionally intend to eventually interleave a type checker with
-the macro expander, but there's not yet any evidence of this in the
-source code.
+* Type checking and macro expansion are interleaved. Every expansion
+  step in an expression or pattern context knows what type the
+  resulting program will have.
 
+The type checker is a vanilla Hindley-Milner, based on Sestoft's
+description in `Programming Language Concepts`_, extended with
+user-definable datatypes and Racket-style phase stratification of
+bindings.
+
+.. _Programming Language Concepts: https://www.itu.dk/~sestoft/plc/
 
 Initially, macros can get stuck by blocking until a signal has been
 sent. Signals are essentially just integers. Other macros can send
 signals, at which point the blocked macros get un-stuck. This is
 reminiscent of the ``blockOnMeta`` operation in Agda's reflection
 system. Eventually, we plan to replace this with the ability to block
-on the solution to a metavariable.
+on the solution to a type unification variable.
 
 FAQ
 ===

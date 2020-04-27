@@ -25,9 +25,11 @@ data MacroAction
   | MacroActionIdentEq HowEq Value Value
   | MacroActionLog Syntax
   | MacroActionIntroducer
+  | MacroActionWhichProblem
 
 instance Show MacroAction where
   show _ = "MacroAction..."
+
 
 data Value
   = ValueClosure Closure

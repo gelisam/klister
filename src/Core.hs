@@ -109,6 +109,7 @@ data CoreF pat core
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
   | CoreMakeIntroducer
+  | CoreWhichProblem
   | CoreSyntax Syntax
   | CoreCase SrcLoc core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
@@ -362,7 +363,9 @@ instance (ShortShow pat, ShortShow core) =>
   shortShow (CoreLog msg)
     = "(CoreLog " ++ shortShow msg ++ ")"
   shortShow CoreMakeIntroducer
-    = "CoreMakeIntroducer"
+    = "(CoreMakeIntroducer)"
+  shortShow CoreWhichProblem
+    = "(CoreWhichProblem)"
   shortShow (CoreSyntax syntax)
     = "(Syntax "
    ++ shortShow syntax

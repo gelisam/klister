@@ -154,6 +154,8 @@ eval (Core (CoreLog msg)) = do
   return $ ValueMacroAction (MacroActionLog msgVal)
 eval (Core CoreMakeIntroducer) =
   return $ ValueMacroAction MacroActionIntroducer
+eval (Core CoreWhichProblem) = do
+  return $ ValueMacroAction MacroActionWhichProblem
 eval (Core (CoreSignal signal)) =
   pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do

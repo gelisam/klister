@@ -148,6 +148,8 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
     group (hang 2 (vsep ["log", pp env msg]))
   pp _env CoreMakeIntroducer =
     text "make-introducer"
+  pp _ CoreWhichProblem =
+    text "which-problem"
   pp env (CoreSyntax stx) =
     pp env stx
   pp env (CoreCase _ scrut pats) =
@@ -478,6 +480,8 @@ instance Pretty VarInfo MacroAction where
     hang 2 $ group $ vsep [text "log", pp env stx]
   pp _env MacroActionIntroducer =
     text "make-introducer"
+  pp _env MacroActionWhichProblem =
+    text "which-problem"
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)

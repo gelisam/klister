@@ -28,6 +28,7 @@ module Expander.Primitives
   , listSyntax
   , makeIntroducer
   , Expander.Primitives.log
+  , whichProblem
   , oops
   , pureMacro
   , quote
@@ -438,6 +439,12 @@ log t dest stx = do
   Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
   msgDest <- schedule (Ty TSyntax) message
   linkExpr dest $ CoreLog msgDest
+
+whichProblem :: ExprPrim
+whichProblem t dest stx = do
+  unify dest (Ty (TMacro (primitiveDatatype "Problem" []))) t
+  Stx _ _ (_ :: Syntax) <- mustHaveEntries stx
+  linkExpr dest CoreWhichProblem
 
 dataCase :: ExprPrim
 dataCase t dest stx = do
