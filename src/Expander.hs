@@ -729,17 +729,6 @@ runTask (tid, localData, task) = withLocal localData $ do
         ValueMacroAction macroAction -> do
           forkInterpretMacroAction dest macroAction kont
         other -> expandEval $ evalErrorType "macro action" other
-    EvalDefnAction x n p expr ->
-      linkedCore expr >>=
-      \case
-        Nothing -> stillStuck tid task
-        Just definiens ->
-          inPhase p $ do
-            val <- expandEval (eval definiens)
-            modifyState $ over (expanderCurrentEnvs . at p) $
-              \case
-                Nothing -> Just $ Env.singleton x n val
-                Just env -> Just $ env <> Env.singleton x n val
     GeneralizeType edest ty schdest -> do
       ready <- isExprChecked edest
       if ready
