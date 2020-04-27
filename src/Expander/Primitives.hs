@@ -165,7 +165,7 @@ defineMacros dest outScopesDest stx = do
     b <- freshBinding
     addDefinedBinding theName b
     macroDest <- inEarlierPhase $
-                   schedule (Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax)))))
+                   schedule typeOfMacro
                      (addScope p mdef sc)
     v <- freshMacroVar
     bind b $ EIncompleteMacro v theName macroDest
@@ -416,7 +416,7 @@ letSyntax t dest stx = do
   v <- freshMacroVar
   macroDest <- inEarlierPhase $ do
     psc <- phaseRoot
-    schedule (Ty (TFun (Ty TSyntax) (Ty (TMacro (Ty TSyntax)))))
+    schedule typeOfMacro
       (addScope (prior p) mdef psc)
   forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
 
@@ -596,7 +596,6 @@ varPrepHelper varStx = do
   addLocalBinding x' b
   return (sc, x', b)
 
-
 prepareVar :: Syntax -> Expand (Scope, Ident, Var)
 prepareVar varStx = do
   (sc, x', b) <- varPrepHelper varStx
@@ -611,3 +610,6 @@ primitiveDatatype name args =
                     }
   in Ty $ TDatatype dt args
 
+-- | The type of user-written macros: Syntax -> Macro Syntax
+typeOfMacro :: Ty
+typeOfMacro = Ty $ TFun (Ty TSyntax) $ Ty $ TMacro $ Ty TSyntax
