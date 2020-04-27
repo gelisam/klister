@@ -146,6 +146,8 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
           Bound -> "bound-identifier=?"
   pp env (CoreLog msg) =
     group (hang 2 (vsep ["log", pp env msg]))
+  pp _ CoreWhichProblem =
+    text "which-problem"
   pp env (CoreSyntax stx) =
     pp env stx
   pp env (CoreCase scrut pats) =
@@ -472,6 +474,8 @@ instance Pretty VarInfo MacroAction where
           Bound -> "bound-identifier=?"
   pp env (MacroActionLog stx) =
     hang 2 $ group $ vsep [text "log", pp env stx]
+  pp _env MacroActionWhichProblem =
+    text "which-problem"
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)

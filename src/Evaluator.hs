@@ -152,6 +152,8 @@ eval (Core (CoreIdentEq how e1 e2)) =
 eval (Core (CoreLog msg)) = do
   msgVal <- evalAsSyntax msg
   return $ ValueMacroAction (MacroActionLog msgVal)
+eval (Core CoreWhichProblem) = do
+  return $ ValueMacroAction MacroActionWhichProblem
 eval (Core (CoreSignal signal)) =
   pure $ ValueSignal signal
 eval (Core (CoreSyntax syntax)) = do
