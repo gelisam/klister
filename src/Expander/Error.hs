@@ -140,11 +140,11 @@ instance Pretty VarInfo ExpansionErr where
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
                           vsep [ text "Used in a position expecting"
-                               , pp env expected
+                               , pp env actual
                                ]
                         , group $ hang 2 $
                           vsep [ text "but is valid in a position expecting"
-                               , pp env actual
+                               , pp env expected
                                ]
                         ]
          ]
