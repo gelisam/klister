@@ -135,16 +135,16 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
-  pp env (WrongMacroContext stx expected actual) =
+  pp env (WrongMacroContext stx actual expected) =
     hang 2 $ group $
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
                           vsep [ text "Used in a position expecting"
-                               , pp env actual
+                               , pp env expected
                                ]
                         , group $ hang 2 $
                           vsep [ text "but is valid in a position expecting"
-                               , pp env expected
+                               , pp env actual
                                ]
                         ]
          ]
