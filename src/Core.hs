@@ -107,6 +107,7 @@ data CoreF pat core
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
+  | CoreWhichProblem
   | CoreSyntax Syntax
   | CoreCase core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
@@ -359,6 +360,8 @@ instance (ShortShow pat, ShortShow core) =>
     ++ " " ++ shortShow e2 ++ ")"
   shortShow (CoreLog msg)
     = "(CoreLog " ++ shortShow msg ++ ")"
+  shortShow CoreWhichProblem
+    = "(CoreWhichProblem)"
   shortShow (CoreSyntax syntax)
     = "(Syntax "
    ++ shortShow syntax

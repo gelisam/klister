@@ -24,6 +24,7 @@ data MacroAction
   | MacroActionWaitSignal Signal
   | MacroActionIdentEq HowEq Value Value
   | MacroActionLog Syntax
+  | MacroActionWhichProblem
   deriving (Eq, Show)
 
 data Value
