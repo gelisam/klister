@@ -12,6 +12,8 @@ import Env
 import ModuleName
 import Signals
 import Syntax
+import Syntax.SrcLoc
+import Type
 
 type VEnv = Env Var Value
 type TEnv = Env MacroVar Value
@@ -26,6 +28,7 @@ data MacroAction
   | MacroActionLog Syntax
   | MacroActionIntroducer
   | MacroActionWhichProblem
+  | MacroActionTypeCase VEnv SrcLoc MetaPtr [(TypePattern, Core)]
 
 instance Show MacroAction where
   show _ = "MacroAction..."
@@ -37,6 +40,7 @@ data Value
   | ValueMacroAction MacroAction
   | ValueSignal Signal
   | ValueCtor Constructor [Value]
+  | ValueType MetaPtr
 
 instance Show Value where
   show _ = "Value..."
@@ -54,6 +58,7 @@ valueText (ValueSignal s) = "#!" <> T.pack (show s)
 valueText (ValueCtor c args) =
   "(" <> view (constructorName . constructorNameText) c <> " " <>
   T.intercalate " " (map valueText args) <> ")"
+valueText (ValueType ptr) = "#t<" <> T.pack (show ptr) <> ">"
 
 -- | Find a simple description that is suitable for inclusion in error messages.
 describeVal :: Value -> Text
@@ -63,6 +68,7 @@ describeVal (ValueMacroAction _) = "macro action"
 describeVal (ValueSignal _) = "signal"
 describeVal (ValueCtor c _args) =
   view (constructorName . constructorNameText) c
+describeVal (ValueType _) = "type"
 
 data FOClosure = FOClosure
   { _closureEnv   :: VEnv

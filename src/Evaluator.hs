@@ -219,6 +219,10 @@ eval (Core (CoreReplaceLoc loc stx)) = do
   Syntax (Stx _ newLoc _) <- evalAsSyntax loc
   Syntax (Stx scs _ contents) <- evalAsSyntax stx
   return $ ValueSyntax $ Syntax $ Stx scs newLoc contents
+eval (Core (CoreTypeCase loc scrut cases)) = do
+  ty <- evalAsType scrut
+  env <- ask
+  return $ ValueMacroAction $ MacroActionTypeCase env loc ty cases
 
 evalErrorType :: Text -> Value -> Eval a
 evalErrorType expected got =
@@ -255,6 +259,13 @@ evalAsMacroAction core = do
   case value of
     ValueMacroAction macroAction -> pure macroAction
     other -> evalErrorType "macro action" other
+
+evalAsType :: Core -> Eval MetaPtr
+evalAsType core = do
+  value <- eval core
+  case value of
+    ValueType ptr -> pure ptr
+    other -> evalErrorType "type" other
 
 withScopeOf :: Core -> ExprF Syntax -> Eval Value
 withScopeOf scope expr = do

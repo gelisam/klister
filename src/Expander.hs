@@ -722,9 +722,9 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes stx newScopeSet)
     InterpretMacroAction dest act outerKont -> do
       interpretMacroAction dest act >>= \case
-        Left (signal, innerKont) -> do
+        StuckOnSignal signal innerKont -> do
           forkAwaitingSignal dest signal (innerKont ++ outerKont)
-        Right value -> do
+        Done value -> do
           forkContinueMacroAction dest value outerKont
     ContinueMacroAction dest value [] -> do
       case value of
@@ -961,9 +961,9 @@ expandOneForm prob stx
                 ValueMacroAction act -> do
                   res <- interpretMacroAction prob act
                   case res of
-                    Left (sig, kont) ->
+                    StuckOnSignal sig kont ->
                       forkAwaitingSignal prob sig kont
-                    Right expanded ->
+                    Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
                           forkExpandSyntax prob (flipScope p expansionResult stepScope)
@@ -1035,18 +1035,23 @@ expandLiteralString :: SplitCorePtr -> Text -> Expand ()
 expandLiteralString _dest str =
   throwError $ InternalError $ "Strings are not valid expressions yet: " ++ show str
 
+data MacroOutput
+  = StuckOnSignal Signal [Closure]
+  | StuckOnType MetaPtr VEnv [(TypePattern, Core)]
+  | Done Value
+
 -- If we're stuck waiting on a signal, we return that signal and a continuation
 -- in the form of a sequence of closures. The first closure should be applied to
 -- the result of wait-signal, the second to the result of the first, etc.
-interpretMacroAction :: MacroDest -> MacroAction -> Expand (Either (Signal, [Closure]) Value)
+interpretMacroAction :: MacroDest -> MacroAction -> Expand MacroOutput
 interpretMacroAction prob = \case
   MacroActionPure value-> do
-    pure $ Right value
+    pure $ Done value
   MacroActionBind macroAction closure -> do
     interpretMacroAction prob macroAction >>= \case
-      Left (signal, closures) -> do
-        pure $ Left (signal, closures ++ [closure])
-      Right boundResult -> do
+      StuckOnSignal signal closures -> do
+        pure $ StuckOnSignal signal (closures ++ [closure])
+      Done boundResult -> do
         phase <- view (expanderLocal . expanderPhase)
         s <- getState
         let env = fromMaybe Env.empty
@@ -1069,9 +1074,9 @@ interpretMacroAction prob = \case
     throwError $ MacroRaisedSyntaxError syntaxError
   MacroActionSendSignal signal -> do
     setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-    pure $ Right $ primitiveCtor "unit" []
+    pure $ Done $ primitiveCtor "unit" []
   MacroActionWaitSignal signal -> do
-    pure $ Left (signal, [])
+    pure $ StuckOnSignal signal []
   MacroActionIdentEq how v1 v2 -> do
     id1 <- getIdent v1
     id2 <- getIdent v2
@@ -1082,13 +1087,13 @@ interpretMacroAction prob = \case
           \case
             -- Ambiguous bindings should not crash the comparison -
             -- they're just not free-identifier=?.
-            Ambiguous _ _ _ -> return $ Right $ primitiveCtor "false" []
+            Ambiguous _ _ _ -> return $ Done $ primitiveCtor "false" []
             -- Similarly, things that are not yet bound are just not
             -- free-identifier=?
-            Unknown _ -> return $ Right $ primitiveCtor "false" []
+            Unknown _ -> return $ Done $ primitiveCtor "false" []
             e -> throwError e
       Bound ->
-        return $ Right $ flip primitiveCtor [] $
+        return $ Done $ flip primitiveCtor [] $
           if view stxValue id1 == view stxValue id2 &&
              view stxScopeSet id1 == view stxScopeSet id2
             then "true" else "false"
@@ -1098,7 +1103,7 @@ interpretMacroAction prob = \case
       compareFree id1 id2 = do
         b1 <- resolve id1
         b2 <- resolve id2
-        return $ Right $
+        return $ Done $
           flip primitiveCtor [] $
           if b1 == b2 then "true" else "false"
       opName =
@@ -1107,10 +1112,10 @@ interpretMacroAction prob = \case
           Bound -> "bound-identifier=?"
   MacroActionLog stx -> do
     liftIO $ prettyPrint stx >> putStrLn ""
-    pure $ Right $ primitiveCtor "unit" []
+    pure $ Done $ primitiveCtor "unit" []
   MacroActionIntroducer -> do
     sc <- freshScope "User introduction scope"
-    pure $ Right $
+    pure $ Done $
       ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
       ValueSyntax
         case view (constructorName . constructorNameText) ctor of
@@ -1120,7 +1125,7 @@ interpretMacroAction prob = \case
           _ -> error "Impossible!"
   MacroActionWhichProblem -> do
     case prob of
-      ExprDest {} -> pure $ Right $ primitiveCtor "expression" []
-      TypeDest {} -> pure $ Right $ primitiveCtor "type" []
-      DeclTreeDest {} -> pure $ Right $ primitiveCtor "declaration" []
-      PatternDest {} -> pure $ Right $ primitiveCtor "pattern" []
+      ExprDest {} -> pure $ Done $ primitiveCtor "expression" []
+      TypeDest {} -> pure $ Done $ primitiveCtor "type" []
+      DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
+      PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []

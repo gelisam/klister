@@ -672,7 +672,9 @@ genSyntaxError subgen =
   <$> Gen.list range256 subgen
   <*> subgen
 
-genLam :: (CoreF ConstructorPattern Bool -> GenT IO a) -> GenT IO (CoreF ConstructorPattern a)
+genLam ::
+  (CoreF TypePattern ConstructorPattern Bool -> GenT IO a) ->
+  GenT IO (CoreF TypePattern ConstructorPattern a)
 genLam subgen = do
   ident <- Gen.generalize genIdent
   var <- genVar
@@ -682,23 +684,31 @@ genLam subgen = do
 --
 -- Subgenerators have access to both a list of identifiers and the knowledge of
 -- which subtree of 'CoreF' they're being asked to generate.
-genCoreF :: forall a.
-  (Maybe (GenT IO Var) -> CoreF ConstructorPattern Bool -> GenT IO a) {- ^ Generic sub-generator -} ->
+genCoreF ::
+  forall a.
+  (Maybe (GenT IO Var) -> CoreF TypePattern ConstructorPattern Bool ->
+   GenT IO a) {- ^ Generic sub-generator -} ->
   Maybe (GenT IO Var) {- ^ Variable generator -} ->
-  GenT IO (CoreF ConstructorPattern a)
+  GenT IO (CoreF TypePattern ConstructorPattern a)
 genCoreF subgen varGen =
   let sameVars = subgen varGen
       -- A unary constructor with no binding
-      unary :: (forall b. b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
+      unary ::
+        (forall b. b -> CoreF TypePattern ConstructorPattern b) ->
+        GenT IO (CoreF TypePattern ConstructorPattern a)
       unary constructor = constructor <$> sameVars (constructor True)
       -- A binary constructor with no binding
-      binary :: (forall b. b -> b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
+      binary ::
+        (forall b. b -> b -> CoreF TypePattern ConstructorPattern b) ->
+        GenT IO (CoreF TypePattern ConstructorPattern a)
       binary constructor =
         constructor
         <$> sameVars (constructor True False)
         <*> sameVars (constructor False True)
       -- A ternary constructor with no binding
-      ternary :: (forall b. b -> b -> b -> CoreF ConstructorPattern b) -> GenT IO (CoreF ConstructorPattern a)
+      ternary ::
+        (forall b. b -> b -> b -> CoreF TypePattern ConstructorPattern b) ->
+        GenT IO (CoreF TypePattern ConstructorPattern a)
       ternary constructor =
         constructor
         <$> sameVars (constructor True False False)

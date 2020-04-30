@@ -484,6 +484,7 @@ instance Pretty VarInfo Value where
     parens $
     text (view (constructorName . constructorNameText) c) <+>
     align (group (vsep (map (pp env) args)))
+  pp _env (ValueType ptr) = text "#t<" <> viaShow ptr <> text ">"
 
 instance Pretty VarInfo MacroAction where
   pp env (MacroActionPure v) =
@@ -511,6 +512,14 @@ instance Pretty VarInfo MacroAction where
     text "make-introducer"
   pp _env MacroActionWhichProblem =
     text "which-problem"
+  pp env (MacroActionTypeCase venv _loc ptr cases) =
+    hang 2 $
+    text "type-case" <+> text "#t<" <> viaShow ptr <> text ">" <+> text "of" <> line <>
+    vsep (map ppCase cases)
+    where
+      ppCase (pat, c) =
+        let (patDoc, env') = ppBind env pat
+        in hang 2 $ group $ vsep [patDoc <+> "↦", pp (fmap (const ()) venv <> env') c]
 
 instance Pretty VarInfo Phase where
   pp _env p = text "p" <> viaShow (phaseNum p)
