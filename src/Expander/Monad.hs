@@ -102,6 +102,7 @@ module Expander.Monad
   , expanderGlobalBindingTable
   , expanderCompletedCore
   , expanderCompletedPatterns
+  , expanderCompletedTypePatterns
   , expanderCompletedDecls
   , expanderCompletedTypes
   , expanderCompletedDeclTrees
@@ -256,8 +257,9 @@ data ExpanderState = ExpanderState
   , _expanderExpansionEnv :: !ExpansionEnv
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
-  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF PatternPtr SplitCorePtr))
+  , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr))
   , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
+  , _expanderCompletedTypePatterns :: !(Map.Map TypePatternPtr TypePattern)
   , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedDeclTrees :: !(Map.Map DeclTreePtr (DeclTreeF DeclPtr DeclTreePtr))
@@ -294,6 +296,7 @@ initExpanderState = ExpanderState
   , _expanderOriginLocations = Map.empty
   , _expanderCompletedCore = Map.empty
   , _expanderCompletedPatterns = Map.empty
+  , _expanderCompletedTypePatterns = Map.empty
   , _expanderPatternBinders = Map.empty
   , _expanderCompletedTypes = Map.empty
   , _expanderCompletedDeclTrees = Map.empty
@@ -391,7 +394,7 @@ makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
 makePrisms ''ExpanderTask
 
-linkExpr :: SplitCorePtr -> CoreF PatternPtr SplitCorePtr -> Expand ()
+linkExpr :: SplitCorePtr -> CoreF TypePatternPtr PatternPtr SplitCorePtr -> Expand ()
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
@@ -425,7 +428,7 @@ linkScheme :: SchemePtr -> Scheme Ty -> Expand ()
 linkScheme ptr sch =
   modifyState $ over expanderCompletedSchemes (<> Map.singleton ptr sch)
 
-linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF PatternPtr SplitCorePtr))
+linkStatus :: SplitCorePtr -> Expand (Maybe (CoreF TypePatternPtr PatternPtr SplitCorePtr))
 linkStatus slot = do
   complete <- view expanderCompletedCore <$> getState
   return $ Map.lookup slot complete
@@ -433,8 +436,8 @@ linkStatus slot = do
 linkedCore :: SplitCorePtr -> Expand (Maybe Core)
 linkedCore slot =
   runPartialCore . unsplit .
-  uncurry (SplitCore slot) .
-  (view expanderCompletedCore &&& view expanderCompletedPatterns) <$>
+  (\(x, (y, z)) -> SplitCore slot x y z) .
+  (view expanderCompletedCore &&& view expanderCompletedPatterns &&& view expanderCompletedTypePatterns) <$>
   getState
 
 linkedType :: SplitTypePtr -> Expand (Maybe Ty)

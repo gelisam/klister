@@ -9,16 +9,16 @@ import Core
 
 newtype PartialCore = PartialCore
   { unPartialCore ::
-      Maybe (CoreF (Maybe ConstructorPattern) PartialCore)
+      Maybe (CoreF (Maybe TypePattern) (Maybe ConstructorPattern) PartialCore)
   }
   deriving (Eq, Show)
 makePrisms ''PartialCore
 
 nonPartial :: Core -> PartialCore
 nonPartial =
-  PartialCore . Just . bimap Just nonPartial . unCore
+  PartialCore . Just . mapCoreF Just Just nonPartial . unCore
 
 
 runPartialCore :: PartialCore -> Maybe Core
 runPartialCore (PartialCore Nothing) = Nothing
-runPartialCore (PartialCore (Just c)) = Core <$> bitraverse id runPartialCore c
+runPartialCore (PartialCore (Just c)) = Core <$> traverseCoreF id id runPartialCore c

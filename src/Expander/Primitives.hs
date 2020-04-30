@@ -473,10 +473,14 @@ arrowType dest stx = do
   linkType dest (TFun argDest retDest)
 
 macroType :: TypePrim
-macroType dest stx = do
+macroType = unaryType TMacro
+
+unaryType :: (SplitTypePtr -> TyF SplitTypePtr) -> TypePrim
+unaryType ctor dest stx = do
   Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
   tDest <- scheduleType t
-  linkType dest (TMacro tDest)
+  linkType dest (ctor tDest)
+
 
 -------------
 -- Modules --

@@ -1,3 +1,4 @@
+-- TODO next step is add prisms for Type
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -89,9 +90,11 @@ expandExpr stx = do
   expandTasks
   children <- view expanderCompletedCore <$> getState
   patterns <- view expanderCompletedPatterns <$> getState
+  typePatterns <- view expanderCompletedTypePatterns <$> getState
   return $ SplitCore { _splitCoreRoot = dest
                      , _splitCoreDescendants = children
                      , _splitCorePatterns = patterns
+                     , _splitCoreTypePatterns = typePatterns
                      }
 
 initializeLanguage :: Stx ModuleName -> Expand ()
@@ -247,6 +250,7 @@ evalMod (KernelModule _) = do
   modifyState $
     over (expanderWorld . worldConstructors . at p . non Map.empty) $
     Map.union ctors
+
   return []
 evalMod (Expanded em _) = execWriterT $ do
     traverseOf_ (moduleBody . each) evalDecl em
@@ -373,6 +377,7 @@ initializeKernel = do
       , ("Signal", Prims.baseType TSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
+      , ("Type", Prims.baseType TType)
       ]
 
     datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
@@ -381,6 +386,7 @@ initializeKernel = do
       , ("Unit", 0, [("unit", [])])
       , ("Bool", 0, [("true", []), ("false", [])])
       , ("Problem", 0, [("declaration", []), ("expression", []), ("type", []), ("pattern", [])])
+      , ("Maybe", 1, [("nothing", []), ("just", [Ty $ TSchemaVar 0])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]

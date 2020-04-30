@@ -7,11 +7,15 @@
 module Type where
 
 import Control.Lens
+import Control.Monad
+import Data.Foldable
 import Data.Map (Map)
 import Data.Unique
 import Numeric.Natural
 
+import Alpha
 import Datatype
+import ShortShow
 
 newtype MetaPtr = MetaPtr Unique deriving (Eq, Ord)
 
@@ -26,6 +30,7 @@ data TyF t
   | TSignal
   | TFun t t
   | TMacro t
+  | TType
   | TDatatype Datatype [t]
   | TSchemaVar Natural
   | TMetaVar MetaPtr
@@ -66,3 +71,24 @@ newtype Ty = Ty
   { unTy :: TyF Ty }
   deriving (Eq, Show)
 makePrisms ''Ty
+
+instance AlphaEq a => AlphaEq (TyF a) where
+  alphaCheck TSyntax TSyntax = pure ()
+  alphaCheck TSignal TSignal = pure ()
+  alphaCheck (TFun a1 b1) (TFun a2 b2) = do
+    alphaCheck a1 a2
+    alphaCheck b1 b2
+  alphaCheck (TMacro a) (TMacro b) =
+    alphaCheck a b
+  alphaCheck (TDatatype a args1) (TDatatype b args2) = do
+    guard (a == b)
+    guard (length args1 == length args2)
+    for_ (zip args1 args2) (uncurry alphaCheck)
+  alphaCheck (TSchemaVar i) (TSchemaVar j) =
+    guard (i == j)
+  alphaCheck (TMetaVar α) (TMetaVar β) =
+    guard (α == β)
+  alphaCheck _ _ = notAlphaEquivalent
+
+instance ShortShow a => ShortShow (TyF a) where
+  shortShow t = show (fmap shortShow t)

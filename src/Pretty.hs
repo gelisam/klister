@@ -72,6 +72,9 @@ prettyPrintEnv env x =
 class Pretty ann a | a -> ann where
   pp :: Env Var () -> a -> Doc ann
 
+instance Pretty ann (Doc ann) where
+  pp _env doc = doc
+
 data VarInfo
   = BindingSite Var
   | MacroBindingSite MacroVar
@@ -80,8 +83,8 @@ data VarInfo
 instance Pretty VarInfo Core where
   pp env (Core e) = pp env e
 
-instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
-         Pretty VarInfo (CoreF pat core) where
+instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo core) =>
+         Pretty VarInfo (CoreF typePat pat core) where
   pp env (CoreVar v) =
     annotate (UseSite v) $
     case Env.lookupIdent v env of
@@ -171,6 +174,14 @@ instance (PrettyBinder VarInfo pat, Pretty VarInfo core) =>
                           , pp env loc
                           , pp env stx
                           ]
+  pp env (CoreTypeCase _ scrut pats) =
+    hang 2 $ group $
+    group (hang 2 $ text "type-case" <+> pp env scrut <+> "of") <> line <>
+    vsep [ parens $ hang 2 $
+           let (b, env') = ppBind env pat
+           in group (group (b <+> "=>") <> line <> pp (env <> env') body)
+         | (pat, body) <- pats
+         ]
 
 instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
   pp env err =
@@ -181,6 +192,23 @@ instance Pretty VarInfo core => Pretty VarInfo (SyntaxError core) where
 
 class PrettyBinder ann a | a -> ann where
   ppBind :: Env Var () -> a -> (Doc ann, Env Var ())
+
+instance PrettyBinder VarInfo a => PrettyBinder VarInfo (TyF a) where
+  ppBind env t =
+    let subs = ppBind env <$> t
+    in (pp env (fst <$> subs), foldMap snd subs) 
+
+newtype BinderPair = BinderPair (Ident, Var)
+
+instance PrettyBinder VarInfo BinderPair where
+  ppBind _env (BinderPair (ident@(Stx _ _ n), x)) =
+    (annotate (BindingSite x) (text n), Env.singleton x ident ())
+
+instance PrettyBinder VarInfo TypePattern where
+  ppBind env (TypePattern t) =
+    ppBind env (fmap BinderPair t)
+  ppBind env (AnyType ident x) =
+    ppBind env (BinderPair (ident, x))
 
 instance PrettyBinder VarInfo ConstructorPattern where
   ppBind env (ConstructorPattern ctor vars) =
@@ -286,6 +314,7 @@ instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
   pp env (TFun a b) =
     parens $ align $ group $ vsep [pp env a <+> text "→", pp env b]
   pp env (TMacro a) = parens (text "Macro" <+> align (pp env a))
+  pp _env TType = text "Type"
   pp env (TDatatype t args) =
     case args of
       [] -> pp env t

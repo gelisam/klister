@@ -162,6 +162,7 @@ generalizeType ty = do
     genVars vars (TFun dom ran) =
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
     genVars vars (TMacro a) = TMacro <$> genTyVars vars a
+    genVars _ TType = pure TType
     genVars vars (TDatatype d args) =
       TDatatype d <$> traverse (genTyVars vars) args
     genVars _ (TSchemaVar _) =
