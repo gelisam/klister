@@ -49,6 +49,7 @@ module Expander.Monad
   , linkOneDecl
   , linkExpr
   , linkPattern
+  , linkTypePattern
   , linkType
   , linkScheme
   , linkDeclOutputScopes
@@ -74,6 +75,7 @@ module Expander.Monad
   , forkAwaitingMacro
   , forkAwaitingDeclMacro
   , forkAwaitingSignal
+  , forkAwaitingTypeCase
   , forkAwaitingType
   , forkContinueMacroAction
   , forkEstablishConstructors
@@ -210,10 +212,11 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 
 data EValue
   = EPrimExprMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
-  | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) -- ^ For type-level special forms
+  | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
+    -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
-  | EPrimPatternMacro (Ty -> Ty -> PatternPtr -> Syntax -> Expand ())
+  | EPrimPatternMacro (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
@@ -260,7 +263,7 @@ data ExpanderState = ExpanderState
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr))
   , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
   , _expanderCompletedTypePatterns :: !(Map.Map TypePatternPtr TypePattern)
-  , _expanderPatternBinders :: !(Map.Map PatternPtr [(Scope, Ident, Var, SchemePtr)])
+  , _expanderPatternBinders :: !(Map.Map (Either PatternPtr TypePatternPtr) [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedDeclTrees :: !(Map.Map DeclTreePtr (DeclTreeF DeclPtr DeclTreePtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr))
@@ -402,6 +405,10 @@ linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 
+linkTypePattern :: TypePatternPtr -> TypePattern -> Expand ()
+linkTypePattern dest pat =
+  modifyState $ over expanderCompletedTypePatterns (<> Map.singleton dest pat)
+
 linkDeclTree :: DeclTreePtr -> DeclTreeF DeclPtr DeclTreePtr -> Expand ()
 linkDeclTree dest declTreeF =
   modifyState $ over expanderCompletedDeclTrees $ (<> Map.singleton dest declTreeF)
@@ -490,6 +497,10 @@ forkExpandVar ty expr ident var =
 forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
 forkAwaitingSignal dest signal kont =
   forkExpanderTask $ AwaitingSignal dest signal kont
+
+forkAwaitingTypeCase :: SrcLoc -> MacroDest -> Ty -> VEnv -> [(TypePattern, Core)] -> [Closure] -> Expand ()
+forkAwaitingTypeCase loc dest ty env cases kont =
+  forkExpanderTask $ AwaitingTypeCase loc dest ty env cases kont
 
 forkAwaitingMacro ::
   Binding -> MacroVar -> Ident -> SplitCorePtr -> MacroDest -> Syntax -> Expand ()

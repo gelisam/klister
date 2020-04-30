@@ -46,7 +46,6 @@ import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
-import Type
 import Value
 import World
 

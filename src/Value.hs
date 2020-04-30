@@ -28,7 +28,7 @@ data MacroAction
   | MacroActionLog Syntax
   | MacroActionIntroducer
   | MacroActionWhichProblem
-  | MacroActionTypeCase VEnv SrcLoc MetaPtr [(TypePattern, Core)]
+  | MacroActionTypeCase VEnv SrcLoc Ty [(TypePattern, Core)]
 
 instance Show MacroAction where
   show _ = "MacroAction..."
@@ -40,7 +40,7 @@ data Value
   | ValueMacroAction MacroAction
   | ValueSignal Signal
   | ValueCtor Constructor [Value]
-  | ValueType MetaPtr
+  | ValueType Ty
 
 instance Show Value where
   show _ = "Value..."

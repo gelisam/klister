@@ -59,6 +59,7 @@ data MacroContext
   | ModuleCtx
   | DeclarationCtx
   | PatternCaseCtx
+  | TypePatternCaseCtx
   deriving Show
 
 instance Pretty VarInfo ExpansionErr where
@@ -189,3 +190,4 @@ instance Pretty VarInfo MacroContext where
   pp _env TypeCtx = text "a type"
   pp _env DeclarationCtx = text "a top-level declaration or example"
   pp _env PatternCaseCtx = text "a pattern"
+  pp _env TypePatternCaseCtx = text "a typecase pattern"

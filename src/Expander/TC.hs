@@ -203,6 +203,7 @@ unify blame t1 t2 = do
   where
     unify' :: TyF Ty -> TyF Ty -> Expand ()
     -- Rigid-rigid
+    unify' TType TType = pure ()
     unify' TSyntax TSyntax = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d

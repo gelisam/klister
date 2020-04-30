@@ -77,6 +77,7 @@ import ShortShow
 import SplitCore
 import SplitType
 import Syntax
+import Syntax.SrcLoc
 import Type
 import Value
 import World
@@ -371,7 +372,7 @@ initializeKernel = do
   traverse_ addDatatypePrimitive datatypePrims
 
   where
-    typePrims :: [(Text, SplitTypePtr -> Syntax -> Expand ())]
+    typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
       [ ("Syntax", Prims.baseType TSyntax)
       , ("Signal", Prims.baseType TSignal)
@@ -385,7 +386,7 @@ initializeKernel = do
       [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", 0, [("unit", [])])
       , ("Bool", 0, [("true", []), ("false", [])])
-      , ("Problem", 0, [("declaration", []), ("expression", []), ("type", []), ("pattern", [])])
+      , ("Problem", 0, [("declaration", []), ("expression", [Ty TType]), ("type", []), ("pattern", [])])
       , ("Maybe", 1, [("nothing", []), ("just", [Ty $ TSchemaVar 0])])
       ]
 
@@ -433,9 +434,10 @@ initializeKernel = do
       , ("make-introducer", Prims.makeIntroducer)
       , ("which-problem", Prims.whichProblem)
       , ("case", Prims.dataCase)
+      , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Ty -> Ty -> PatternPtr -> Syntax -> Expand ())]
+    patternPrims :: [(Text, Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())]
     patternPrims = [("else", Prims.elsePattern)]
 
     addToKernel name p b =
@@ -448,14 +450,32 @@ initializeKernel = do
                  { _datatypeModule = KernelName kernelName
                  , _datatypeName = dn
                  }
-      let val = EPrimTypeMacro \dest stx -> do
-            Stx _ _ (me, args) <- mustBeCons stx
-            _ <- mustBeIdent me
-            if length args /= fromIntegral arity
-              then throwError $ WrongDatatypeArity stx dt arity (length args)
-              else do
-                argDests <- traverse scheduleType args
-                linkType dest $ TDatatype dt argDests
+      let tyImpl =
+             \dest stx -> do
+               Stx _ _ (me, args) <- mustBeCons stx
+               _ <- mustBeIdent me
+               if length args /= fromIntegral arity
+                 then throwError $ WrongDatatypeArity stx dt arity (length args)
+                 else do
+                   argDests <- traverse scheduleType args
+                   linkType dest $ TDatatype dt argDests
+          patImpl =
+            \dest stx -> do
+              Stx _ _ (me, args) <- mustBeCons stx
+              _ <- mustBeIdent me
+              if length args /= fromIntegral arity
+                then throwError $ WrongDatatypeArity stx dt arity (length args)
+                else do
+                  varInfo <- traverse Prims.prepareVar args
+                  sch <- trivialScheme $ Ty TType
+                  modifyState $
+                    set (expanderPatternBinders . at (Right dest)) $
+                    Just [ (sc, n, x, sch)
+                         | (sc, n, x) <- varInfo
+                         ]
+                  linkTypePattern dest $
+                    TypePattern $ TDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
+      let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -486,7 +506,7 @@ initializeKernel = do
 
 
     addPatternPrimitive ::
-      Text -> (Ty -> Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
       b <- freshBinding
@@ -508,9 +528,12 @@ initializeKernel = do
       bind b val
       addToKernel name runtime b
 
-    addTypePrimitive :: Text -> (SplitTypePtr -> Syntax -> Expand ()) -> Expand ()
-    addTypePrimitive name impl = do
-      let val = EPrimTypeMacro impl
+    addTypePrimitive ::
+      Text ->
+      (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()) ->
+      Expand ()
+    addTypePrimitive name (implT, implP) = do
+      let val = EPrimTypeMacro implT implP
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -649,6 +672,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneType d stx
         PatternDest exprT scrutT d ->
           expandOnePattern exprT scrutT d stx
+        TypePatternDest exprT d ->
+          expandOneTypePattern exprT d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -667,6 +692,17 @@ runTask (tid, localData, task) = withLocal localData $ do
           stillStuck tid task
         Just () -> do
           let result = primitiveCtor "unit" []
+          forkContinueMacroAction dest result kont
+    AwaitingTypeCase loc dest ty env cases kont -> do
+      Ty t <- normType ty
+      case t of
+        TMetaVar ptr' ->
+          -- Always wait on the canonical representative
+          case ty of
+            Ty (TMetaVar ptr) | ptr == ptr' -> stillStuck tid task
+            _ -> forkAwaitingTypeCase loc dest (Ty (TMetaVar ptr')) env cases kont
+        other -> do
+          result <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           forkContinueMacroAction dest result kont
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
@@ -720,10 +756,12 @@ runTask (tid, localData, task) = withLocal localData $ do
           stillStuck tid task
         Just newScopeSet ->
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes stx newScopeSet)
-    InterpretMacroAction dest act outerKont -> do
+    InterpretMacroAction dest act outerKont ->
       interpretMacroAction dest act >>= \case
-        StuckOnSignal signal innerKont -> do
+        StuckOnSignal signal innerKont ->
           forkAwaitingSignal dest signal (innerKont ++ outerKont)
+        StuckOnType loc ty env cases innerKont ->
+          forkAwaitingTypeCase loc dest ty env cases (innerKont ++ outerKont)
         Done value -> do
           forkContinueMacroAction dest value outerKont
     ContinueMacroAction dest value [] -> do
@@ -778,10 +816,13 @@ runTask (tid, localData, task) = withLocal localData $ do
             addConstructor cn dt ctor ts
           linkDeclOutputScopes outScopesDest scs
     AwaitingPattern patPtr ty dest stx -> do
-      view (expanderCompletedPatterns . at patPtr) <$> getState >>=
-        \case
-          Nothing -> stillStuck tid task
-          Just _pat -> do
+      ready <-
+        case patPtr of
+          Left pptr -> isJust . view (expanderCompletedPatterns . at pptr) <$> getState
+          Right tptr -> isJust . view (expanderCompletedTypePatterns . at tptr) <$> getState
+      if (not ready)
+        then stillStuck tid task
+        else do
             varInfo <- view (expanderPatternBinders . at patPtr) <$> getState
             case varInfo of
               Nothing -> throwError $ InternalError "Pattern info not added"
@@ -830,6 +871,11 @@ expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
 expandOnePattern exprTy scrutTy dest stx =
   expandOneForm (PatternDest exprTy scrutTy dest) stx
 
+expandOneTypePattern :: Ty -> TypePatternPtr -> Syntax -> Expand ()
+expandOneTypePattern exprTy dest stx =
+  expandOneForm (TypePatternDest exprTy dest) stx
+
+
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
 
@@ -849,6 +895,7 @@ problemContext (DeclTreeDest {}) = DeclarationCtx
 problemContext (TypeDest {}) = TypeCtx
 problemContext (ExprDest {}) = ExpressionCtx
 problemContext (PatternDest {}) = PatternCaseCtx
+problemContext (TypePatternDest {}) = TypePatternCaseCtx
 
 requireDeclarationCtx :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
 requireDeclarationCtx _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
@@ -865,9 +912,11 @@ requireTypeCtx _ (TypeDest dest) = return dest
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Ty, Ty, PatternPtr)
+requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr))
 requirePatternCtx _ (PatternDest exprTy scrutTy dest) =
-  return (exprTy, scrutTy, dest)
+  return $ Left (exprTy, scrutTy, dest)
+requirePatternCtx _ (TypePatternDest exprTy dest) =
+  return $ Right (exprTy, dest)
 requirePatternCtx stx other =
   throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
 
@@ -911,7 +960,7 @@ expandOneForm prob stx
                 else do
                   varInfo <- traverse Prims.prepareVar patVars
                   modifyState $
-                    set (expanderPatternBinders . at dest) $
+                    set (expanderPatternBinders . at (Left dest)) $
                     Just [ (sc, name, x, t)
                          | ((sc, name, x), t) <- zip varInfo argTypes
                          ]
@@ -926,12 +975,17 @@ expandOneForm prob stx
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCtx stx prob
           impl dest outScopesDest stx
-        EPrimTypeMacro impl -> do
-          dest <- requireTypeCtx stx prob
-          impl dest stx
+        EPrimTypeMacro implT implP ->
+          case prob of
+            TypeDest dest ->
+              implT dest stx
+            TypePatternDest _exprTy dest ->
+              implP dest stx
+            otherDest ->
+              throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)
         EPrimPatternMacro impl -> do
-          (exprTy, scrutTy, dest) <- requirePatternCtx stx prob
-          impl exprTy scrutTy dest stx
+          dest <- requirePatternCtx stx prob
+          impl dest stx
         EVarMacro var -> do
           (t, dest) <- requireExpressionCtx stx prob
           case syntaxE stx of
@@ -963,6 +1017,8 @@ expandOneForm prob stx
                   case res of
                     StuckOnSignal sig kont ->
                       forkAwaitingSignal prob sig kont
+                    StuckOnType loc ty env cases kont ->
+                      forkAwaitingTypeCase loc prob ty env cases kont
                     Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
@@ -983,6 +1039,8 @@ expandOneForm prob stx
         throwError $ NotValidType stx
       PatternDest {} ->
         throwError $ InternalError "All patterns should be identifier-headed"
+      TypePatternDest {} ->
+        throwError $ InternalError "All type patterns should be identifier-headed"
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
@@ -1037,95 +1095,102 @@ expandLiteralString _dest str =
 
 data MacroOutput
   = StuckOnSignal Signal [Closure]
-  | StuckOnType MetaPtr VEnv [(TypePattern, Core)]
+  | StuckOnType SrcLoc Ty VEnv [(TypePattern, Core)] [Closure]
   | Done Value
 
 -- If we're stuck waiting on a signal, we return that signal and a continuation
 -- in the form of a sequence of closures. The first closure should be applied to
 -- the result of wait-signal, the second to the result of the first, etc.
 interpretMacroAction :: MacroDest -> MacroAction -> Expand MacroOutput
-interpretMacroAction prob = \case
-  MacroActionPure value-> do
-    pure $ Done value
-  MacroActionBind macroAction closure -> do
-    interpretMacroAction prob macroAction >>= \case
-      StuckOnSignal signal closures -> do
-        pure $ StuckOnSignal signal (closures ++ [closure])
-      Done boundResult -> do
-        phase <- view (expanderLocal . expanderPhase)
-        s <- getState
-        let env = fromMaybe Env.empty
-                . view (expanderWorld . worldEnvironments . at phase)
-                $ s
-        evalResult <- liftIO
-                    $ runExceptT
-                    $ flip runReaderT env
-                    $ runEval
-                    $ apply closure boundResult
-        case evalResult of
-          Left evalError -> do
-            p <- currentPhase
-            throwError $ MacroEvaluationError p evalError
-          Right value ->
-            case value of
-              ValueMacroAction act -> interpretMacroAction prob act
-              other -> throwError $ ValueNotMacro other
-  MacroActionSyntaxError syntaxError -> do
-    throwError $ MacroRaisedSyntaxError syntaxError
-  MacroActionSendSignal signal -> do
-    setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-    pure $ Done $ primitiveCtor "unit" []
-  MacroActionWaitSignal signal -> do
-    pure $ StuckOnSignal signal []
-  MacroActionIdentEq how v1 v2 -> do
-    id1 <- getIdent v1
-    id2 <- getIdent v2
-    case how of
-      Free ->
-        compareFree id1 id2
-          `catchError`
+interpretMacroAction prob =
+  \case
+    MacroActionPure value-> do
+      pure $ Done value
+    MacroActionBind macroAction closure ->
+      interpretMacroAction prob macroAction >>=
+      \case
+        StuckOnSignal signal closures ->
+          pure $ StuckOnSignal signal (closures ++ [closure])
+        StuckOnType loc ty env cases closures ->
+          pure $ StuckOnType loc ty env cases (closures ++ [closure])
+        Done boundResult -> do
+          phase <- view (expanderLocal . expanderPhase)
+          s <- getState
+          let env = fromMaybe Env.empty .
+                    view (expanderWorld . worldEnvironments . at phase) $
+                    s
+          value <- expandEval $ withEnv env $ apply closure boundResult
+          case value of
+            ValueMacroAction act -> interpretMacroAction prob act
+            other -> throwError $ ValueNotMacro other
+    MacroActionSyntaxError syntaxError ->
+      throwError $ MacroRaisedSyntaxError syntaxError
+    MacroActionSendSignal signal -> do
+      setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
+      pure $ Done $ primitiveCtor "unit" []
+    MacroActionWaitSignal signal ->
+      pure $ StuckOnSignal signal []
+    MacroActionIdentEq how v1 v2 -> do
+      id1 <- getIdent v1
+      id2 <- getIdent v2
+      case how of
+        Free ->
+          compareFree id1 id2
+            `catchError`
+            \case
+              -- Ambiguous bindings should not crash the comparison -
+              -- they're just not free-identifier=?.
+              Ambiguous _ _ _ -> return $ Done $ primitiveCtor "false" []
+              -- Similarly, things that are not yet bound are just not
+              -- free-identifier=?
+              Unknown _ -> return $ Done $ primitiveCtor "false" []
+              e -> throwError e
+        Bound ->
+          return $ Done $ flip primitiveCtor [] $
+            if view stxValue id1 == view stxValue id2 &&
+               view stxScopeSet id1 == view stxScopeSet id2
+              then "true" else "false"
+      where
+        getIdent (ValueSyntax stx) = mustBeIdent stx
+        getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+        compareFree id1 id2 = do
+          b1 <- resolve id1
+          b2 <- resolve id2
+          return $ Done $
+            flip primitiveCtor [] $
+            if b1 == b2 then "true" else "false"
+        opName =
+          case how of
+            Free  -> "free-identifier=?"
+            Bound -> "bound-identifier=?"
+    MacroActionLog stx -> do
+      liftIO $ prettyPrint stx >> putStrLn ""
+      pure $ Done $ primitiveCtor "unit" []
+    MacroActionIntroducer -> do
+      sc <- freshScope "User introduction scope"
+      pure $ Done $
+        ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
+        ValueSyntax
+          case view (constructorName . constructorNameText) ctor of
+            "add" -> addScope' stx sc
+            "flip" -> flipScope' stx sc
+            "remove" -> removeScope' stx sc
+            _ -> error "Impossible!"
+    MacroActionWhichProblem -> do
+      case prob of
+        ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
+        TypeDest {} -> pure $ Done $ primitiveCtor "type" []
+        DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
+        PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
+        TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
+    MacroActionTypeCase env loc ty cases -> do
+      Ty ty' <- normType ty
+      case ty' of
+        TMetaVar _ ->
+          pure $ StuckOnType loc (Ty ty') env cases []
+        other ->
+          (expandEval $ withEnv env $ doTypeCase loc (Ty other) cases) >>=
           \case
-            -- Ambiguous bindings should not crash the comparison -
-            -- they're just not free-identifier=?.
-            Ambiguous _ _ _ -> return $ Done $ primitiveCtor "false" []
-            -- Similarly, things that are not yet bound are just not
-            -- free-identifier=?
-            Unknown _ -> return $ Done $ primitiveCtor "false" []
-            e -> throwError e
-      Bound ->
-        return $ Done $ flip primitiveCtor [] $
-          if view stxValue id1 == view stxValue id2 &&
-             view stxScopeSet id1 == view stxScopeSet id2
-            then "true" else "false"
-    where
-      getIdent (ValueSyntax stx) = mustBeIdent stx
-      getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
-      compareFree id1 id2 = do
-        b1 <- resolve id1
-        b2 <- resolve id2
-        return $ Done $
-          flip primitiveCtor [] $
-          if b1 == b2 then "true" else "false"
-      opName =
-        case how of
-          Free  -> "free-identifier=?"
-          Bound -> "bound-identifier=?"
-  MacroActionLog stx -> do
-    liftIO $ prettyPrint stx >> putStrLn ""
-    pure $ Done $ primitiveCtor "unit" []
-  MacroActionIntroducer -> do
-    sc <- freshScope "User introduction scope"
-    pure $ Done $
-      ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
-      ValueSyntax
-        case view (constructorName . constructorNameText) ctor of
-          "add" -> addScope' stx sc
-          "flip" -> flipScope' stx sc
-          "remove" -> removeScope' stx sc
-          _ -> error "Impossible!"
-  MacroActionWhichProblem -> do
-    case prob of
-      ExprDest {} -> pure $ Done $ primitiveCtor "expression" []
-      TypeDest {} -> pure $ Done $ primitiveCtor "type" []
-      DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
-      PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
+            ValueMacroAction nextStep -> interpretMacroAction prob nextStep
+            otherVal -> do
+              expandEval $ evalErrorType "macro action" otherVal
