@@ -133,7 +133,7 @@ instance Pretty VarInfo ExpansionErr where
     group $ hang 4 $ vsep [ pp env loc <> text ":"
                           , text "Not available at phase" <+> pp env p <> text ":" <+> pp env x
                           ]
-  pp _env (ImportError err) = ppKlisterPathError err
+  pp env (ImportError err) = pp env err
   pp _env (InternalError str) =
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =

@@ -241,7 +241,7 @@ data ExpanderLocal = ExpanderLocal
 
 mkInitContext :: ModuleName -> IO ExpanderContext
 mkInitContext mn = do
-  klisterPath <- getKlisterPath
+  kPath <- getKlisterPath
   st <- newIORef initExpanderState
   return $ ExpanderContext { _expanderState = st
                            , _expanderLocal = ExpanderLocal
@@ -249,7 +249,7 @@ mkInitContext mn = do
                              , _expanderPhase = runtime
                              , _expanderBindingLevels = Map.empty
                              , _expanderVarTypes = mempty
-                             , _expanderKlisterPath = klisterPath
+                             , _expanderKlisterPath = kPath
                              }
                            }
 

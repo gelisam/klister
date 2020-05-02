@@ -1,5 +1,7 @@
 #lang kernel
 
+-- N-ary function abstraction and application
+
 [import [shift (only kernel cons-list-syntax lambda pure quote syntax-case list-syntax export import) 1]]
 
 (define-macros
@@ -85,7 +87,7 @@
                                      (list-syntax ('lambda more-args def) stx))
                                     stx)
                        body)
-                      stx))])])]))])) 
+                      stx))])])]))]))
 
 (define-macros
   ([flet (lambda (stx)
@@ -93,27 +95,8 @@
              [(cons _ rest)
               (pure (cons-list-syntax 'flet* rest stx))]))]))
 
-[define id [lambda (x) x]]
-
-[define const [lambda (x y) x]]
-
-[example (const 'a 'b)]
-
-[define compose [lambda (f g x) (f (g x))]]
-
-[example (compose id)]
-[example (compose id id)]
-[example (compose id id id)]
-
-(define compose* (flet (comp (f g x) (f (g x))) comp))
-
-[example (compose* id)]
-[example (compose* id id)]
-[example (compose* id id id)]
-
-
 (export #%module #%app
-        const lambda define example define-macros quote meta
+        lambda define example define-macros quote meta
         the -> Syntax Macro
         if true false
         error
@@ -123,4 +106,3 @@
         list-syntax cons-list-syntax empty-list-syntax replace-loc
         free-identifier=? bound-identifier=? log
         datatype case else)
-
