@@ -27,6 +27,7 @@ import Env
 import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
 import Module
 import ModuleName
+import KlisterPath
 import Phase
 import Scope
 import ScopeSet
@@ -586,3 +587,6 @@ instance Pretty VarInfo ScopeSet where
       ppMap m =
         group (vsep [group (viaShow k <+> text "↦" <> line <> v) | (k, v) <- Map.toList m])
 
+
+instance Pretty VarInfo KlisterPathError where
+  pp _ = ppKlisterPathError
