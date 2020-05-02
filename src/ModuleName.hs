@@ -10,11 +10,13 @@ module ModuleName (
   ) where
 
 import Control.Lens
+import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Directory
 import System.FilePath
 
+import KlisterPath
 import ShortShow
 import Syntax.SrcLoc
 
@@ -34,10 +36,17 @@ instance ShortShow ModuleName where
 moduleNameFromPath :: FilePath -> IO ModuleName
 moduleNameFromPath file = ModuleName <$> canonicalizePath file
 
-moduleNameFromLocatedPath :: SrcLoc -> FilePath -> IO ModuleName
-moduleNameFromLocatedPath loc file = do
-  origDir <- takeDirectory <$> canonicalizePath (view srcLocFilePath loc)
-  withCurrentDirectory origDir $ moduleNameFromPath file
+moduleNameFromLocatedPath ::
+  KlisterPath {- ^ Path to search -} ->
+  SrcLoc ->
+  String {- ^ Module name -} ->
+  IO (Either KlisterPathError ModuleName)
+moduleNameFromLocatedPath klisterPath loc name = do
+  sameDir <- makeKlisterPath (Set.singleton (takeDirectory (view srcLocFilePath loc)))
+  maybePath <- importFromKlisterPath (sameDir <> klisterPath) name
+  case maybePath of
+    Left err -> pure (Left err)
+    Right path -> Right <$> moduleNameFromPath path
 
 moduleNameToPath :: ModuleName -> Either FilePath KernelName
 moduleNameToPath (ModuleName file) = Left file
