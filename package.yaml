@@ -5,6 +5,7 @@ author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Géline
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 tested-with:    GHC==8.6.5, GHC==8.8.1
 ghc-options: -Wall
+data-files: stdlib/*.kl
 dependencies:
   - base
   - bifunctors

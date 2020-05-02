@@ -45,7 +45,7 @@ mustBeString other = throwError (NotString other)
 mustBeModName :: Syntax -> Expand (Stx ModuleName)
 mustBeModName (Syntax (Stx scs srcloc (String s))) = do
   kPath <- klisterPath
-  liftIO (moduleNameFromLocatedPath kPath srcloc (T.unpack s)) >>=
+  liftIO (findModule kPath srcloc (T.unpack s)) >>=
     \case
       Left err -> throwError (ImportError err)
       Right path -> pure $ Stx scs srcloc path
