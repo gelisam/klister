@@ -1,0 +1,5 @@
+#<closure> : (Syntax → Syntax)
+#<closure> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
+#<closure> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
+#<closure> : ∀α. (α → α)
+(true) : Bool
