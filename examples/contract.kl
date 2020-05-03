@@ -1,0 +1,78 @@
+#lang "n-ary-app.kl"
+[import "defun.kl"]
+[import "bool.kl"]
+[import [shift "n-ary-app.kl" 1]]
+[import [shift "defun.kl"1]]
+
+(meta
+  (defun contract-violation (contract)
+    (list-syntax ('error (quote '"Contract violation!")) contract)))
+
+(meta -- type annotation
+  (example (the (-> Syntax Syntax)
+                contract-violation)))
+
+(meta
+  (defun enforce-single (arg contract body)
+    (pure
+      (list-syntax
+        ('if
+         (list-syntax (contract arg) contract)
+         body
+         (contract-violation contract))
+        contract))))
+
+(meta -- type annotation
+  (example (the (-> Syntax (-> Syntax (-> Syntax (Macro Syntax))))
+                enforce-single)))
+
+(meta
+  (defun enforce-many (args contracts body)
+    (syntax-case args
+      [(cons arg more-args)
+       (syntax-case contracts
+         [(cons contract more-contracts)
+          (>>= (enforce-single arg contract body)
+               (lambda (new-body)
+                 (enforce-many
+                   more-args
+                   more-contracts
+                   new-body)))]
+         [_ (syntax-error '"Wrong number of contracts" contracts)])]
+      [()
+       (syntax-case contracts
+         [(list (ret-contract))
+          (pure
+            (list-syntax
+              -- TODO: This is inefficient, use a let-binding
+              ('if
+               (list-syntax (ret-contract body) ret-contract)
+               body
+               (contract-violation ret-contract))
+              ret-contract))]
+         [_ (syntax-error '"Wrong number of contracts" contracts)])])))
+
+(meta -- type annotation
+  (example (the (-> Syntax (-> Syntax (-> Syntax (Macro Syntax))))
+                enforce-many)))
+
+(define-macros
+  ([defun/contract
+     [lambda (stx)
+       (syntax-case stx
+         [[list [_ f args contracts body]]
+          (>>= (enforce-many args contracts body)
+               (lambda (new-body)
+                 (pure
+                   (list-syntax
+                     ('defun f args new-body)
+                     stx))))]
+         [_ (syntax-error '"bad syntax" stx)])]]))
+
+(defun const (x y) x)
+(define any (const (true)))
+(defun true? (b) (if b (true) (false)))
+(defun/contract id (x) (any any) x)
+(defun/contract id-bool (x) (true? true?) x)
+(example (id id))
+(example (id-bool (true)))
