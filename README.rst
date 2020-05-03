@@ -34,7 +34,7 @@ out writing some Klister expressions.
 ``klister run file.kl`` will evaluate the contents of ``file.kl``.
 
 Imports
--------
+~~~~~~~
 
 The ``import`` form will search for modules in the same directory as the
 importing module, and in directories listed in the ``KLISTERPATH`` environment
