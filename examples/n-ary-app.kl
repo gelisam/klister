@@ -114,6 +114,7 @@
 
 (export #%module #%app
         const lambda define example define-macros quote meta
+        the -> Syntax Macro
         if true false
         error
         let flet
