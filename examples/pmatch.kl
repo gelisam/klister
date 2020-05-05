@@ -92,7 +92,7 @@
                                [(:: id-and-stx rest)
                                 `(ppat ,(fst id-and-stx) ,(snd id-and-stx) ,(combine rest) ,kf)]))
                         (pure `(case ,tgt
-                                 [,(cons-list-syntax what (the Syntax (list->syntax temp-names pat)) pat)
+                                 [,(cons-list-syntax what (list->syntax temp-names pat) pat)
                                   ,(combine temps)]
                                  [(else other) ,kf]))))))])]))]))
 
