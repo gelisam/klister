@@ -85,8 +85,8 @@
                       (case e
                         [(just x) (pure `(let (,x ,tgt) ,rhs))]
                         [(nothing)
-                         (pure `(let (fk (lambda (_) (pmatch-aux ,scrut ,tgt ,cs)))
-                                  (ppat ,tgt ,pat ,rhs (fk 'hi))))])))])])]))]
+                         (pure `(let (kf (lambda (_) (pmatch-aux ,scrut ,tgt ,cs)))
+                                  (ppat ,tgt ,pat ,rhs (kf 'hi))))])))])])]))]
    [ppat
     (lambda (stx)
       (syntax-case stx
