@@ -51,18 +51,6 @@
       [(nil) (empty-list-syntax stx)]
       [(:: x xs) (cons-list-syntax x (list->syntax xs stx) stx)])))
 
-(meta
-  (datatype (Abstracted)
-    (none)
-    (bind Syntax Syntax (Abstracted)))
-
-  (defun abstract (stxs)
-    (syntax-case stxs
-      [() (none)]
-      [(cons e es)
-       (bind 'internal-x e (abstract es))])))
-   
-
 (define-macros
   ([pmatch
     (lambda (stx)
