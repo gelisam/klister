@@ -13,6 +13,33 @@ please see this `talk`_.
 .. _talk: https://www.youtube.com/watch?v=nUvKoG_V_U0
 
 
+Installation
+============
+
+Klister is written in Haskell, and is built with HPack and Cabal. You can build
+it like so::
+
+    hpack package.yaml
+    cabal v2-build
+
+You can use ``v2-install`` instead of ``v2-build`` to install the Klister
+executable and associated files to your home directory.
+
+Usage
+=====
+
+Run ``klister repl`` to be dropped into a read-eval-print loop where you can try
+out writing some Klister expressions.
+
+``klister run file.kl`` will evaluate the contents of ``file.kl``.
+
+Imports
+~~~~~~~
+
+The ``import`` form will search for modules in the same directory as the
+importing module, and in directories listed in the ``KLISTERPATH`` environment
+variable, a ``:``-separated list of directories.
+
 Overall Design
 ==============
 

@@ -1,8 +1,8 @@
 #lang kernel
 
 [import (only "n-ary-app.kl" #%app)]
-[import (only "n-ary-app.kl" const)]
 [import (only "n-ary-app.kl" lambda)]
+[import (only "prelude.kl" const)]
 
 [example (const [quote one] [quote two])]
 [example ([lambda (x y z) y] [quote en] [quote to] [quote tre])]

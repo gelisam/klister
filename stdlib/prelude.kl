@@ -1,0 +1,23 @@
+#lang "n-ary-app.kl"
+
+[define id [lambda (x) x]]
+[define const [lambda (x y) x]]
+[define compose [lambda (f g x) (f (g x))]]
+(define compose* (flet (comp (f g x) (f (g x))) comp))
+
+(export #%module #%app
+        lambda define example define-macros quote meta
+        if true false
+        error
+        let flet
+        import export
+        >>= pure syntax-error syntax-case
+        list-syntax cons-list-syntax empty-list-syntax replace-loc
+        free-identifier=? bound-identifier=? log
+        datatype case else
+
+        -- non-#lang
+        id
+        const
+        compose
+        compose*)

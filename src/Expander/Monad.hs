@@ -21,6 +21,7 @@ module Expander.Monad
   , constructorInfo
   , currentEnv
   , currentPhase
+  , klisterPath
   , currentBindingLevel
   , currentTransformerEnv
   , datatypeInfo
@@ -165,6 +166,7 @@ import Expander.Error
 import Expander.Task
 import Module
 import ModuleName
+import KlisterPath
 import PartialCore
 import PartialType
 import Phase
@@ -234,10 +236,12 @@ data ExpanderLocal = ExpanderLocal
   , _expanderPhase :: !Phase
   , _expanderBindingLevels :: !(Map Phase BindingLevel)
   , _expanderVarTypes :: TypeContext Var SchemePtr
+  , _expanderKlisterPath :: !KlisterPath
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
 mkInitContext mn = do
+  kPath <- getKlisterPath
   st <- newIORef initExpanderState
   return $ ExpanderContext { _expanderState = st
                            , _expanderLocal = ExpanderLocal
@@ -245,6 +249,7 @@ mkInitContext mn = do
                              , _expanderPhase = runtime
                              , _expanderBindingLevels = Map.empty
                              , _expanderVarTypes = mempty
+                             , _expanderKlisterPath = kPath
                              }
                            }
 
@@ -349,6 +354,10 @@ withLocal localData = Expand . local (set expanderLocal localData) . runExpand
 
 currentPhase :: Expand Phase
 currentPhase = Expand $ view (expanderLocal . expanderPhase) <$> ask
+
+klisterPath :: Expand KlisterPath
+klisterPath =
+  Expand $ view (expanderLocal . expanderKlisterPath) <$> ask
 
 inPhase :: Phase -> Expand a -> Expand a
 inPhase p act = Expand $ local (over (expanderLocal . expanderPhase) (const p)) $ runExpand act

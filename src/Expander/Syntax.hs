@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -11,6 +12,7 @@ import qualified Data.Text as T
 
 import Expander.Error
 import Expander.Monad
+import KlisterPath
 import ModuleName
 import Syntax
 
@@ -41,8 +43,12 @@ mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
 mustBeString other = throwError (NotString other)
 
 mustBeModName :: Syntax -> Expand (Stx ModuleName)
-mustBeModName (Syntax (Stx scs srcloc (String s))) =
-  Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
+mustBeModName (Syntax (Stx scs srcloc (String s))) = do
+  kPath <- klisterPath
+  liftIO (findModule kPath srcloc (T.unpack s)) >>=
+    \case
+      Left err -> throwError (ImportError err)
+      Right path -> pure $ Stx scs srcloc path
 -- TODO use hygiene here instead
 mustBeModName (Syntax (Stx scs srcloc (Id "kernel"))) =
   return (Stx scs srcloc (KernelName kernelName))

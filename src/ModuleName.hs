@@ -3,20 +3,16 @@ module ModuleName (
     ModuleName(..)
   , KernelName
   , kernelName
-  , moduleNameFromLocatedPath
   , moduleNameFromPath
   , moduleNameToPath
   , moduleNameText
   ) where
 
-import Control.Lens
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Directory
-import System.FilePath
 
 import ShortShow
-import Syntax.SrcLoc
 
 newtype KernelName = Kernel ()
   deriving (Eq, Ord, Show)
@@ -34,15 +30,9 @@ instance ShortShow ModuleName where
 moduleNameFromPath :: FilePath -> IO ModuleName
 moduleNameFromPath file = ModuleName <$> canonicalizePath file
 
-moduleNameFromLocatedPath :: SrcLoc -> FilePath -> IO ModuleName
-moduleNameFromLocatedPath loc file = do
-  origDir <- takeDirectory <$> canonicalizePath (view srcLocFilePath loc)
-  withCurrentDirectory origDir $ moduleNameFromPath file
-
 moduleNameToPath :: ModuleName -> Either FilePath KernelName
 moduleNameToPath (ModuleName file) = Left file
 moduleNameToPath (KernelName _) = Right (Kernel ())
-
 
 moduleNameText :: ModuleName -> Text
 moduleNameText (ModuleName f) = T.pack (show f)

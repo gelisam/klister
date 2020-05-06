@@ -532,10 +532,6 @@ primImportModule dest outScopesDest importStx = do
   linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)
   where
     importSpec :: Syntax -> Expand ImportSpec
-    importSpec (Syntax (Stx scs srcloc (String s))) =
-      ImportModule . Stx scs srcloc <$> liftIO (moduleNameFromLocatedPath srcloc (T.unpack s))
-    importSpec (Syntax (Stx scs srcloc (Id "kernel"))) =
-      return $ ImportModule (Stx scs srcloc (KernelName kernelName))
     importSpec stx@(Syntax (Stx _ _ (List elts)))
       | (Syntax (Stx _ _ (Id "only")) : spec : names) <- elts = do
           subSpec <- importSpec spec
@@ -551,7 +547,7 @@ primImportModule dest outScopesDest importStx = do
         Stx _ _ p <- mustBeIdent prefix
         return $ PrefixImports subSpec p
       | otherwise = throwError $ NotImportSpec stx
-    importSpec other = throwError $ NotImportSpec other
+    importSpec modStx = ImportModule <$> mustBeModName modStx
     getRename s = do
       Stx _ _ (old', new') <- mustHaveEntries s
       old <- mustBeIdent old'
