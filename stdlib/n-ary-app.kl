@@ -102,7 +102,10 @@
         error
         let flet
         import export
+        Macro
         >>= pure syntax-error syntax-case
-        list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log
+        Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
+        free-identifier=? bound-identifier=? log make-introducer
+        Unit unit
+        ScopeAction flip add remove
         datatype case else)

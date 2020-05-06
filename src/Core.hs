@@ -20,6 +20,7 @@ import Phase
 import ShortShow
 import Signals
 import Syntax
+import Syntax.SrcLoc
 
 
 data SyntaxError a = SyntaxError
@@ -97,7 +98,7 @@ data CoreF pat core
   | CoreLam Ident Var core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
-  | CoreDataCase core [(pat, core)]
+  | CoreDataCase SrcLoc core [(pat, core)]
   | CoreError core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
@@ -107,9 +108,10 @@ data CoreF pat core
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
+  | CoreMakeIntroducer
   | CoreWhichProblem
   | CoreSyntax Syntax
-  | CoreCase core [(SyntaxPattern, core)]
+  | CoreCase SrcLoc core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
   | CoreSignal Signal
   | CoreIdent (ScopedIdent core)
@@ -184,8 +186,8 @@ instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
   alphaCheck (CoreSyntax syntax1)
              (CoreSyntax syntax2) = do
     alphaCheck syntax1 syntax2
-  alphaCheck (CoreCase scrutinee1 cases1)
-             (CoreCase scrutinee2 cases2) = do
+  alphaCheck (CoreCase _ scrutinee1 cases1)
+             (CoreCase _ scrutinee2 cases2) = do
     alphaCheck scrutinee1 scrutinee2
     alphaCheck cases1 cases2
   alphaCheck (CoreIdentifier stx1)
@@ -322,7 +324,7 @@ instance (ShortShow pat, ShortShow core) =>
    ++ " "
    ++ shortShow args
    ++ ")"
-  shortShow (CoreDataCase scrut cases)
+  shortShow (CoreDataCase _ scrut cases)
     = "(DataCase "
    ++ shortShow scrut
    ++ " "
@@ -360,13 +362,15 @@ instance (ShortShow pat, ShortShow core) =>
     ++ " " ++ shortShow e2 ++ ")"
   shortShow (CoreLog msg)
     = "(CoreLog " ++ shortShow msg ++ ")"
+  shortShow CoreMakeIntroducer
+    = "(CoreMakeIntroducer)"
   shortShow CoreWhichProblem
     = "(CoreWhichProblem)"
   shortShow (CoreSyntax syntax)
     = "(Syntax "
    ++ shortShow syntax
    ++ ")"
-  shortShow (CoreCase scrutinee cases)
+  shortShow (CoreCase _ scrutinee cases)
     = "(Case "
    ++ shortShow scrutinee
    ++ " "

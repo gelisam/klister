@@ -1,0 +1,15 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define-macros
+  ([lambda-case
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ cases))
+         (pure
+          (quasiquote/loc stx
+            (lambda (x) (case x ,cases))))]))]))
+
+(export lambda-case)

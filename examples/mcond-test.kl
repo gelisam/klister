@@ -1,5 +1,6 @@
 #lang "n-ary-app.kl"
 
+(import (shift "n-ary-app.kl" 1))
 (import (shift "mcond.kl" 1))
 
 (define-macros

@@ -1,0 +1,133 @@
+#lang "n-ary-app.kl"
+(import "defun.kl")
+(import "pair-datatype.kl")
+(import "list-datatype.kl")
+
+(import (shift "n-ary-app.kl" 1))
+
+(import (shift "quasiquote.kl" 1))
+(import (shift "defun.kl" 1))
+(import (shift "lispy-do.kl" 1))
+(import (shift "free-identifier-case.kl" 1))
+(import (shift "temporaries.kl" 1))
+(import (shift "pair-datatype.kl" 1))
+(import (shift "list-datatype.kl" 1))
+
+(meta
+  (define identifier?
+    (lambda (stx)
+      (syntax-case stx [(ident x) (true)] [_ (false)]))))
+
+(meta
+  (datatype (Maybe A)
+    (nothing)
+    (just A)))
+
+(meta
+  (defun syntax->list (stx)
+    (syntax-case stx
+      [() (nil)]
+      [(cons x xs) (:: x (syntax->list xs))])))
+
+(meta
+  (define else-case
+     (lambda (stx)
+       (syntax-case stx
+         [(list (e x))
+          (if (identifier? e)
+              (free-identifier-case e
+                [else (pure (just x))]
+                [(else other) (pure (nothing))])
+              (pure (nothing)))]
+         [(ident e)
+          (free-identifier-case e
+            [else (pure (just 'else-x))]
+            [(else other) (pure (nothing))])]
+         [_ (pure (nothing))]))))
+
+(meta
+  (defun list->syntax (stx-lst stx)
+    (case stx-lst
+      [(nil) (empty-list-syntax stx)]
+      [(:: x xs) (cons-list-syntax x (list->syntax xs stx) stx)])))
+
+(define-macros
+  ([pmatch
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ more)
+         (syntax-case more
+           [(cons scrut pats)
+            (pure `(let (x ,scrut) (pmatch-aux ,scrut x ,pats)))])]))]
+   [pmatch-aux
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ scrut tgt pats))
+         (syntax-case pats
+           [() (pure `(error ',scrut))]
+           [(cons c cs)
+            (syntax-case c
+              [(list (pat rhs))
+               (>>= (else-case pat)
+                    (lambda (e)
+                      (case e
+                        [(just x) (pure `(let (,x ,tgt) ,rhs))]
+                        [(nothing)
+                         (pure `(let (kf (lambda (_) (pmatch-aux ,scrut ,tgt ,cs)))
+                                  (ppat ,tgt ,pat ,rhs (kf 'hi))))])))])])]))]
+   [ppat
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ tgt pat ks kf))
+         (syntax-case pat
+           [(ident x)
+            (pure `(let (,x ,tgt) ,ks))]
+           [(cons what args)
+            (>>= (make-temporaries (syntax->list args))
+                 (lambda (temps)
+                   (let (temp-names (map fst temps))
+                     (flet (combine (stxs)
+                             (case stxs
+                               [(nil) ks]
+                               [(:: id-and-stx rest)
+                                `(ppat ,(fst id-and-stx) ,(snd id-and-stx) ,(combine rest) ,kf)]))
+                        (pure `(case ,tgt
+                                 [,(cons-list-syntax what (list->syntax temp-names pat) pat)
+                                  ,(combine temps)]
+                                 [(else other) ,kf]))))))])]))]))
+
+
+
+(datatype (Nat) (zero) (add1 (Nat)))
+
+(example (pmatch (zero) (else 't)))
+(example (pmatch (zero) ((else x) 't)))
+(example (pmatch (zero) (x 't)))
+(example (pmatch (add1 (zero)) [(add1 (zero)) 't]))
+(example (pmatch (add1 (add1 (zero)))
+           [(add1 (add1 k)) k]
+           [x x]))
+
+(define yep-its-often-zero
+   (lambda (num)
+     (pmatch num
+       [(add1 (add1 k)) k]
+       [(add1 k) k]
+       [x x])))
+
+(example (yep-its-often-zero (add1 (add1 (zero)))))
+(example (yep-its-often-zero (add1 (zero))))
+(example (yep-its-often-zero (zero)))
+(example (yep-its-often-zero (add1 (add1 (add1 (zero))))))
+
+
+(defun swap-list (xs)
+  (pmatch xs
+    [(:: (pair x y) more)
+     (:: (pair y x) (swap-list more))]
+    [(nil)
+     (nil)]))
+
+(example (swap-list (:: (pair 1 '1) (:: (pair 2 '2) (:: (pair 3 '3) (nil))))))
+
+(export pmatch)

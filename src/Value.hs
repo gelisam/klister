@@ -24,8 +24,12 @@ data MacroAction
   | MacroActionWaitSignal Signal
   | MacroActionIdentEq HowEq Value Value
   | MacroActionLog Syntax
+  | MacroActionIntroducer
   | MacroActionWhichProblem
-  deriving (Eq, Show)
+
+instance Show MacroAction where
+  show _ = "MacroAction..."
+
 
 data Value
   = ValueClosure Closure
@@ -33,7 +37,9 @@ data Value
   | ValueMacroAction MacroAction
   | ValueSignal Signal
   | ValueCtor Constructor [Value]
-  deriving (Eq, Show)
+
+instance Show Value where
+  show _ = "Value..."
 
 primitiveCtor :: Text -> [Value] -> Value
 primitiveCtor name args =
@@ -43,7 +49,7 @@ primitiveCtor name args =
 valueText :: Value -> Text
 valueText (ValueClosure _) = "#<closure>"
 valueText (ValueSyntax stx) = "'" <> syntaxText stx
-valueText (ValueMacroAction m) = T.pack (show m)
+valueText (ValueMacroAction _) = "#<macro>"
 valueText (ValueSignal s) = "#!" <> T.pack (show s)
 valueText (ValueCtor c args) =
   "(" <> view (constructorName . constructorNameText) c <> " " <>
@@ -58,13 +64,17 @@ describeVal (ValueSignal _) = "signal"
 describeVal (ValueCtor c _args) =
   view (constructorName . constructorNameText) c
 
-data Closure = Closure
+data FOClosure = FOClosure
   { _closureEnv   :: VEnv
   , _closureIdent :: Ident
   , _closureVar   :: Var
   , _closureBody  :: Core
   }
-  deriving (Eq, Show)
+
+data Closure = FO FOClosure | HO (Value -> Value)
+
+instance Show Closure where
+  show _ = "Closure {...}"
 
 makePrisms ''MacroAction
 makePrisms ''Value

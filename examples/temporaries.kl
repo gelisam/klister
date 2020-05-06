@@ -1,0 +1,26 @@
+#lang "n-ary-app.kl"
+
+(import "lispy-do.kl")
+(import "list-datatype.kl")
+(import "pair-datatype.kl")
+(import "defun.kl")
+
+
+(define make-temporary
+  (lambda (x)
+    (syntax-case x
+      [(ident id)
+       (do (<- i (make-introducer))
+           (pure (i (add) id)))]
+      [_ (syntax-error (replace-loc x '"Not an identifier"))])))
+
+(defun make-temporaries (vals)
+  (case vals
+    [(nil) (pure (nil))]
+    [(:: v vs)
+     (do (<- tmp (make-temporary 'x))
+         (<- tmps (make-temporaries vs))
+         (pure (:: (pair tmp v) tmps)))]))
+
+(export make-temporary make-temporaries)
+  
