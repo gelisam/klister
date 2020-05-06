@@ -1,8 +1,11 @@
+{-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 module Core where
 
 import Control.Lens hiding (elements)
@@ -11,6 +14,7 @@ import Data.Bifunctor.TH
 import Data.List
 import Data.Foldable
 import Data.Text (Text)
+import Data.Traversable
 import Data.Unique
 
 import Alpha
@@ -21,6 +25,7 @@ import ShortShow
 import Signals
 import Syntax
 import Syntax.SrcLoc
+import Type
 
 
 data SyntaxError a = SyntaxError
@@ -42,6 +47,11 @@ newtype MacroVar = MacroVar Unique
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
+data TypePattern
+  = TypePattern (TyF (Ident, Var))
+  | AnyType Ident Var
+  deriving (Eq, Show)
+
 data ConstructorPattern
   = ConstructorPattern !Constructor [(Ident, Var)]
   | AnyConstructor Ident Var
@@ -49,6 +59,9 @@ data ConstructorPattern
 makePrisms ''ConstructorPattern
 
 instance Phased ConstructorPattern where
+  shift _ = id
+
+instance Phased TypePattern where
   shift _ = id
 
 data SyntaxPattern
@@ -91,7 +104,7 @@ makeLenses ''ScopedList
 data HowEq = Free | Bound
   deriving (Eq, Show)
 
-data CoreF pat core
+data CoreF typePat pat core
   = CoreVar Var
   | CoreLet Ident Var core core
   | CoreLetFun Ident Var Ident Var core core
@@ -119,24 +132,141 @@ data CoreF pat core
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
   | CoreReplaceLoc core core
+  | CoreTypeCase SrcLoc core [(typePat, core)]
   deriving (Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 deriveBifunctor ''CoreF
 deriveBifoldable ''CoreF
 deriveBitraversable ''CoreF
 
-corePrimitiveCtor :: Text -> [a] -> CoreF pat a
+mapCoreF ::
+  (a -> b) -> (c -> d) -> (e -> f) ->
+  CoreF a c e ->
+  CoreF b d f
+mapCoreF _f _g _h (CoreVar x) =
+  CoreVar x
+mapCoreF _f _g h (CoreLet n x def body) =
+  CoreLet n x (h def) (h body)
+mapCoreF _f _g h (CoreLetFun funN funX n x def body) =
+  CoreLetFun funN funX n x (h def) (h body)
+mapCoreF _f _g h (CoreLam n x body) =
+  CoreLam n x (h body)
+mapCoreF _f _g h (CoreApp rator rand) =
+  CoreApp (h rator) (h rand)
+mapCoreF _f _g h (CoreCtor ctor args) =
+  CoreCtor ctor (map h args)
+mapCoreF _f g h (CoreDataCase loc scrut cases) =
+  CoreDataCase loc (h scrut) [(g pat, h c) | (pat, c) <- cases]
+mapCoreF _f _g h (CoreError msg) =
+  CoreError (h msg)
+mapCoreF _f _g h (CorePure core) =
+  CorePure (h core)
+mapCoreF _f _g h (CoreBind act k) =
+  CoreBind (h act) (h k)
+mapCoreF _f _g h (CoreSyntaxError err) =
+  CoreSyntaxError (fmap h err)
+mapCoreF _f _g h (CoreSendSignal core) =
+  CoreSendSignal (h core)
+mapCoreF _f _g h (CoreWaitSignal core) =
+  CoreWaitSignal (h core)
+mapCoreF _f _g h (CoreIdentEq how l r) =
+  CoreIdentEq how (h l) (h r)
+mapCoreF _f _g h (CoreLog core) =
+  CoreLog (h core)
+mapCoreF _f _g _h CoreMakeIntroducer =
+  CoreMakeIntroducer
+mapCoreF _f _g _h CoreWhichProblem =
+  CoreWhichProblem
+mapCoreF _f _g _h (CoreSyntax stx) =
+  CoreSyntax stx
+mapCoreF _f _g h (CoreCase loc scrut cases) =
+  CoreCase loc (h scrut) [(pat, h c) | (pat, c) <- cases]
+mapCoreF _f _g _h (CoreIdentifier n) =
+  CoreIdentifier n
+mapCoreF _f _g _h (CoreSignal s) =
+  CoreSignal s
+mapCoreF _f _g h (CoreIdent ident) =
+  CoreIdent (fmap h ident)
+mapCoreF _f _g h (CoreEmpty args) =
+  CoreEmpty (fmap h args)
+mapCoreF _f _g h (CoreCons args) =
+  CoreCons (fmap h args)
+mapCoreF _f _g h (CoreList args) =
+  CoreList (fmap h args)
+mapCoreF _f _g h (CoreReplaceLoc src dest) =
+  CoreReplaceLoc (h src) (h dest)
+mapCoreF f _g h (CoreTypeCase loc scrut cases) =
+  CoreTypeCase loc (h scrut) [(f pat, h c) | (pat, c) <- cases]
+
+traverseCoreF :: Applicative f => (a -> f d) -> (b -> f e) -> (c -> f g) -> CoreF a b c -> f (CoreF d e g)
+traverseCoreF _f _g _h (CoreVar x) =
+  pure $ CoreVar x
+traverseCoreF _f _g h (CoreLet n x def body) =
+  CoreLet n x <$> h def <*> h body
+traverseCoreF _f _g h (CoreLetFun funN funX n x def body) =
+  CoreLetFun funN funX n x <$> h def <*> h body
+traverseCoreF _f _g h (CoreLam n x body) =
+  CoreLam n x <$> h body
+traverseCoreF _f _g h (CoreApp rator rand) =
+  CoreApp <$> h rator <*> h rand
+traverseCoreF _f _g h (CoreCtor ctor args) =
+  CoreCtor ctor <$> traverse h args
+traverseCoreF _f g h (CoreDataCase loc scrut cases) =
+  CoreDataCase loc <$> h scrut <*> for cases \ (pat, c) -> (,) <$> g pat <*> h c
+traverseCoreF _f _g h (CoreError msg) =
+  CoreError <$> h msg
+traverseCoreF _f _g h (CorePure core) =
+  CorePure <$> h core
+traverseCoreF _f _g h (CoreBind act k) =
+  CoreBind <$> h act <*> h k
+traverseCoreF _f _g h (CoreSyntaxError err) =
+  CoreSyntaxError <$> traverse h err
+traverseCoreF _f _g h (CoreSendSignal core) =
+  CoreSendSignal <$> h core
+traverseCoreF _f _g h (CoreWaitSignal core) =
+  CoreWaitSignal <$> h core
+traverseCoreF _f _g h (CoreIdentEq how l r) =
+  CoreIdentEq how <$> h l <*> h r
+traverseCoreF _f _g h (CoreLog core) =
+  CoreLog <$> h core
+traverseCoreF _f _g _h CoreMakeIntroducer =
+  pure CoreMakeIntroducer
+traverseCoreF _f _g _h CoreWhichProblem =
+  pure CoreWhichProblem
+traverseCoreF _f _g _h (CoreSyntax stx) =
+  pure $ CoreSyntax stx
+traverseCoreF _f _g h (CoreCase loc scrut cases) =
+  CoreCase loc <$> h scrut <*> for cases \(pat, c) -> (pat,) <$> h c
+traverseCoreF _f _g _h (CoreIdentifier n) =
+  pure $ CoreIdentifier n
+traverseCoreF _f _g _h (CoreSignal s) =
+  pure $ CoreSignal s
+traverseCoreF _f _g h (CoreIdent ident) =
+  CoreIdent <$> traverse h ident
+traverseCoreF _f _g h (CoreEmpty args) =
+  CoreEmpty <$> traverse h args
+traverseCoreF _f _g h (CoreCons args) =
+  CoreCons <$> traverse h args
+traverseCoreF _f _g h (CoreList args) =
+  CoreList <$> traverse h args
+traverseCoreF _f _g h (CoreReplaceLoc src dest) =
+  CoreReplaceLoc <$> (h src) <*> (h dest)
+traverseCoreF f _g h (CoreTypeCase loc scrut cases) =
+  CoreTypeCase loc <$> h scrut <*> for cases \(pat, c) -> (,) <$> f pat <*> h c
+
+
+corePrimitiveCtor :: Text -> [a] -> CoreF typePat pat a
 corePrimitiveCtor name args =
   let ctor = Constructor (KernelName kernelName) (ConstructorName name)
   in CoreCtor ctor args
 
-instance (Phased pat, Phased core) => Phased (CoreF pat core) where
+instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat core) where
   shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
   shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
   shift i other = bimap (shift i) (shift i) other
 
 newtype Core = Core
-  { unCore :: CoreF ConstructorPattern Core }
+  { unCore :: CoreF TypePattern ConstructorPattern Core }
   deriving (Eq, Show)
 makePrisms ''Core
 
@@ -149,7 +279,7 @@ instance AlphaEq a => AlphaEq (SyntaxError a) where
     alphaCheck locations1 locations2
     alphaCheck message1   message2
 
-instance (AlphaEq pat, AlphaEq core) => AlphaEq (CoreF pat core) where
+instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat pat core) where
   alphaCheck (CoreVar var1)
              (CoreVar var2) = do
     alphaCheck var1 var2
@@ -225,6 +355,15 @@ instance AlphaEq ConstructorPattern where
     alphaCheck x1 x2
   alphaCheck _ _ = notAlphaEquivalent
 
+instance AlphaEq TypePattern where
+  alphaCheck (TypePattern t1)
+             (TypePattern t2) =
+    alphaCheck t1 t2
+  alphaCheck (AnyType _ x1)
+             (AnyType _ x2) =
+    alphaCheck x1 x2
+  alphaCheck _ _ = notAlphaEquivalent
+
 instance AlphaEq Core where
   alphaCheck (Core x1)
              (Core x2) = do
@@ -282,8 +421,8 @@ instance ShortShow a => ShortShow (SyntaxError a) where
 instance ShortShow Var where
   shortShow (Var x) = shortShow x
 
-instance (ShortShow pat, ShortShow core) =>
-         ShortShow (CoreF pat core) where
+instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
+         ShortShow (CoreF typePat pat core) where
   shortShow (CoreVar var)
     = "(Var "
    ++ shortShow var
@@ -402,6 +541,13 @@ instance (ShortShow pat, ShortShow core) =>
     = "(ReplaceLoc "
    ++ shortShow loc ++ " "
    ++ shortShow stx ++ ")"
+  shortShow (CoreTypeCase _ scrut pats)
+    = "(TypeCase "
+   ++ shortShow scrut
+   ++ " "
+   ++ intercalate ", " (map shortShow pats)
+   ++ ")"
+
 
 instance ShortShow Core where
   shortShow (Core x) = shortShow x
@@ -413,6 +559,13 @@ instance ShortShow ConstructorPattern where
     ")"
   shortShow (AnyConstructor ident _var) =
     "(AnyConstructor " ++ shortShow ident ++ " )"
+
+instance ShortShow TypePattern where
+  shortShow (TypePattern t) =
+    "(" ++ shortShow (fmap fst t) ++ ")"
+  shortShow (AnyType ident _var) =
+    "(AnyConstructor " ++ shortShow ident ++ " )"
+
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x

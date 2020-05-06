@@ -1,6 +1,7 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Expander.Primitives
@@ -38,6 +39,7 @@ module Expander.Primitives
   , syntaxError
   , the
   , waitSignal
+  , typeCase
   -- * Type primitives
   , arrowType
   , baseType
@@ -454,29 +456,67 @@ dataCase t dest stx = do
   cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
   linkExpr dest $ CoreDataCase loc scrutineeDest cases'
 
+typeCase :: ExprPrim
+typeCase t dest stx = do
+  Stx _ loc (_, scrut, cases) <- mustBeConsCons stx
+  a <- Ty . TMetaVar <$> freshMeta
+  unify dest (Ty (TMacro a)) t
+  scrutineeDest <- schedule (Ty TType) scrut
+  cases' <- traverse (mustHaveEntries >=> scheduleTypePattern t) cases
+  linkExpr dest $ CoreTypeCase loc scrutineeDest cases'
+
 ---------------------
 -- Type Primitives --
 ---------------------
 type TypePrim =
-  SplitTypePtr -> Syntax -> Expand ()
+  (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ())
 
-baseType :: TyF SplitTypePtr -> TypePrim
-baseType ctor dest stx = do
-  _actualName <- mustBeIdent stx
-  linkType dest ctor
+baseType :: (forall a . TyF a) -> TypePrim
+baseType ctor = (implT, implP)
+  where
+    implT dest stx = do
+      _actualName <- mustBeIdent stx
+      linkType dest ctor
+    implP dest stx = do
+      _actualName <- mustBeIdent stx
+      linkTypePattern dest $ TypePattern ctor
 
 arrowType :: TypePrim
-arrowType dest stx = do
-  Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
-  argDest <- scheduleType arg
-  retDest <- scheduleType ret
-  linkType dest (TFun argDest retDest)
+arrowType = (implT, implP)
+  where
+    implT dest stx = do
+      Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+      argDest <- scheduleType arg
+      retDest <- scheduleType ret
+      linkType dest (TFun argDest retDest)
+    implP dest stx = do
+      Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+      (sc1, n1, x1) <- prepareVar arg
+      (sc2, n2, x2) <- prepareVar ret
+      sch <- trivialScheme $ Ty $ TType
+      modifyState $
+        set (expanderPatternBinders . at (Right dest)) $
+        Just [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
+      linkTypePattern dest $ TypePattern $ TFun (n1, x1) (n2, x2)
 
 macroType :: TypePrim
-macroType dest stx = do
-  Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
-  tDest <- scheduleType t
-  linkType dest (TMacro tDest)
+macroType = unaryType TMacro
+
+unaryType :: (forall a . a -> TyF a) -> TypePrim
+unaryType ctor = (implT, implP)
+  where
+    implT dest stx = do
+      Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
+      tDest <- scheduleType t
+      linkType dest (ctor tDest)
+    implP dest stx = do
+      Stx _ _ (_ :: Syntax, a) <- mustHaveEntries stx
+      (sc, n, x) <- prepareVar a
+      sch <- trivialScheme $ Ty $ TType
+      modifyState $
+        set (expanderPatternBinders . at (Right dest)) $
+        Just [(sc, n, x, sch)]
+      linkTypePattern dest $ TypePattern $ ctor (n, x)
 
 -------------
 -- Modules --
@@ -503,16 +543,23 @@ makeModule expandDeclForms stx =
 -- Patterns --
 --------------
 
-type PatternPrim = Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+type PatternPrim = Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()
 
 elsePattern :: PatternPrim
-elsePattern _exprTy scrutTy dest stx = do
+elsePattern (Left (_exprTy, scrutTy, dest)) stx = do
   Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
   ty <- trivialScheme scrutTy
   (sc, x, v) <- prepareVar var
-  modifyState $ set (expanderPatternBinders . at dest) $
+  modifyState $ set (expanderPatternBinders . at (Left dest)) $
     Just [(sc, x, v, ty)]
   linkPattern dest $ AnyConstructor x v
+elsePattern (Right (_exprTy, dest)) stx = do
+  Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
+  ty <- trivialScheme (Ty TType)
+  (sc, x, v) <- prepareVar var
+  modifyState $ set (expanderPatternBinders . at (Right dest)) $
+    Just [(sc, x, v, ty)]
+  linkTypePattern dest $ AnyType x v
 
 -------------
 -- Helpers --
@@ -521,14 +568,31 @@ elsePattern _exprTy scrutTy dest stx = do
 addDatatype :: Ident -> Datatype -> Natural -> Expand ()
 addDatatype name dt arity = do
   name' <- addRootScope' name
-  let val = EPrimTypeMacro \dest stx -> do
-              Stx _ _ (me, args) <- mustBeCons stx
-              _ <- mustBeIdent me
-              if length args /= fromIntegral arity
-                then throwError $ WrongDatatypeArity stx dt arity (length args)
-                else do
-                  argDests <- traverse scheduleType args
-                  linkType dest $ TDatatype dt argDests
+  let implType =
+        \dest stx -> do
+          Stx _ _ (me, args) <- mustBeCons stx
+          _ <- mustBeIdent me
+          if length args /= fromIntegral arity
+            then throwError $ WrongDatatypeArity stx dt arity (length args)
+            else do
+              argDests <- traverse scheduleType args
+              linkType dest $ TDatatype dt argDests
+      implPat =
+        \dest stx -> do
+          Stx _ _ (me, args) <- mustBeCons stx
+          _ <- mustBeIdent me
+          if length args /= fromIntegral arity
+            then throwError $ WrongDatatypeArity stx dt arity (length args)
+            else do
+              patVarInfo <- traverse prepareVar args
+              sch <- trivialScheme $ Ty $ TType
+              modifyState $
+                set (expanderPatternBinders . at (Right dest)) $
+                Just [ (sc, n, x, sch)
+                     | (sc, n, x) <- patVarInfo
+                     ]
+              linkTypePattern dest $ TypePattern $ TDatatype dt [(n, x) | (_, n, x) <- patVarInfo]
+  let val = EPrimTypeMacro implType implPat
   b <- freshBinding
   addDefinedBinding name' b
   bind b val
@@ -583,7 +647,18 @@ scheduleDataPattern exprTy scrutTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _
   forkExpandSyntax (PatternDest exprTy scrutTy dest) patStx
   rhsDest <- liftIO newSplitCorePtr
   saveOrigin rhsDest loc
-  forkExpanderTask $ AwaitingPattern dest exprTy rhsDest rhsStx
+  forkExpanderTask $ AwaitingPattern (Left dest) exprTy rhsDest rhsStx
+  return (dest, rhsDest)
+
+scheduleTypePattern ::
+  Ty -> Stx (Syntax, Syntax) ->
+  Expand (TypePatternPtr, SplitCorePtr)
+scheduleTypePattern exprTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = do
+  dest <- liftIO newTypePatternPtr
+  forkExpandSyntax (TypePatternDest exprTy dest) patStx
+  rhsDest <- liftIO newSplitCorePtr
+  saveOrigin rhsDest loc
+  forkExpanderTask $ AwaitingPattern (Right dest) exprTy rhsDest rhsStx
   return (dest, rhsDest)
 
 prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)

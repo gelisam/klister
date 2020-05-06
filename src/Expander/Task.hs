@@ -17,6 +17,7 @@ import Signals
 import SplitCore
 import SplitType
 import Syntax
+import Syntax.SrcLoc
 import Type
 import Value
 
@@ -27,12 +28,15 @@ data MacroDest
     -- ^ produced declaration tree, scopes introduced
   | PatternDest Ty Ty PatternPtr
     -- ^ expression type, scrutinee type, destination pointer
+  | TypePatternDest Ty TypePatternPtr
+    -- ^ expression type, destination pointer
   deriving Show
 
 
 data ExpanderTask
   = ExpandSyntax MacroDest Syntax
   | AwaitingSignal MacroDest Signal [Closure]
+  | AwaitingTypeCase SrcLoc MacroDest Ty VEnv [(TypePattern, Core)] [Closure]
   | AwaitingMacro MacroDest TaskAwaitMacro
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
     -- ^ Waiting on var, binding, and definiens, destination, syntax to expand
@@ -50,7 +54,7 @@ data ExpanderTask
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
   | EstablishConstructors ScopeSet DeclOutputScopesPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
-  | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
+  | AwaitingPattern (Either PatternPtr TypePatternPtr) Ty SplitCorePtr Syntax
   deriving (Show)
 
 data AfterTypeTask
@@ -88,6 +92,7 @@ instance ShortShow TaskAwaitMacroType where
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
   shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
+  shortShow (AwaitingTypeCase loc _ _ _ _ _) = "(AwaitingTypeCase " ++ shortShow loc ++ "_)"
   shortShow (AwaitingDefn _x n _b _defn _t _dest stx) =
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
   shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"

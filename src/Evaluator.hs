@@ -219,6 +219,10 @@ eval (Core (CoreReplaceLoc loc stx)) = do
   Syntax (Stx _ newLoc _) <- evalAsSyntax loc
   Syntax (Stx scs _ contents) <- evalAsSyntax stx
   return $ ValueSyntax $ Syntax $ Stx scs newLoc contents
+eval (Core (CoreTypeCase loc scrut cases)) = do
+  ty <- evalAsType scrut
+  env <- ask
+  return $ ValueMacroAction $ MacroActionTypeCase env loc ty cases
 
 evalErrorType :: Text -> Value -> Eval a
 evalErrorType expected got =
@@ -256,6 +260,13 @@ evalAsMacroAction core = do
     ValueMacroAction macroAction -> pure macroAction
     other -> evalErrorType "macro action" other
 
+evalAsType :: Core -> Eval Ty
+evalAsType core = do
+  value <- eval core
+  case value of
+    ValueType t -> pure t
+    other -> evalErrorType "type" other
+
 withScopeOf :: Core -> ExprF Syntax -> Eval Value
 withScopeOf scope expr = do
   scopeSyntax <- evalAsSyntax scope
@@ -281,6 +292,32 @@ doDataCase loc v0 ((pat, rhs) : ps) = match (doDataCase loc v0 ps) pat
         _otherValue -> next
     match _next (AnyConstructor n x) =
       withExtendedEnv n x v0 $ eval rhs
+
+doTypeCase :: SrcLoc -> Ty -> [(TypePattern, Core)] -> Eval Value
+doTypeCase blameLoc v0 [] = throwError (EvalErrorCase blameLoc (ValueType v0))
+doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0) ps) p rhs0 v0
+  where
+    match :: Eval Value -> TypePattern -> Core -> TyF Ty -> Eval Value
+    match next (TypePattern t) rhs scrut =
+      case (t, scrut) of
+        (TSyntax, TSyntax) -> eval rhs
+        (TSignal, TSignal) -> eval rhs
+        (TFun (n1, x1) (n2, x2), TFun dom cod) ->
+           withExtendedEnv n1 x1 (ValueType dom) $
+           withExtendedEnv n2 x2 (ValueType cod) $
+           eval rhs
+        (TMacro (n, x), TMacro a) -> withExtendedEnv n x (ValueType a) (eval rhs)
+        (TType, TType) -> eval rhs
+        (TDatatype dt xs, TDatatype dt' args)
+          | dt == dt', length xs == length args ->
+            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- xs, arg <- args] $
+            eval rhs
+        (TSchemaVar i, TSchemaVar j)
+          | i == j ->
+            eval rhs
+        (_, _) -> next
+    match _next (AnyType n x) rhs scrut =
+      withExtendedEnv n x (ValueType (Ty scrut)) (eval rhs)
 
 doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> Eval Value
 doCase blameLoc v0 []               = throwError (EvalErrorCase blameLoc v0)

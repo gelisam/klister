@@ -162,6 +162,7 @@ generalizeType ty = do
     genVars vars (TFun dom ran) =
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
     genVars vars (TMacro a) = TMacro <$> genTyVars vars a
+    genVars _ TType = pure TType
     genVars vars (TDatatype d args) =
       TDatatype d <$> traverse (genTyVars vars) args
     genVars _ (TSchemaVar _) =
@@ -202,6 +203,7 @@ unify blame t1 t2 = do
   where
     unify' :: TyF Ty -> TyF Ty -> Expand ()
     -- Rigid-rigid
+    unify' TType TType = pure ()
     unify' TSyntax TSyntax = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unify blame b a >> unify blame c d
