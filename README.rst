@@ -51,7 +51,7 @@ his talk from `Strange Loop`_.
 
 .. _Strange Loop: https://www.youtube.com/watch?v=Or_yKiI3Ha4
 
-Additionaly, there is a module system patterned after `Racket's`_.
+Additionally, there is a module system patterned after `Racket's`_.
 
 .. _Racket's: https://www.cs.utah.edu/plt/publications/macromod.pdf
 
@@ -72,12 +72,16 @@ This macro expander has a few differences:
   step in an expression or pattern context knows what type the
   resulting program will have.
 
-The type checker is a vanilla Hindley-Milner, based on Sestoft's
-description in `Programming Language Concepts`_, extended with
-user-definable datatypes and Racket-style phase stratification of
-bindings.
+The type checker is a mostly-vanilla Hindley-Milner, based on
+Sestoft's description in `Programming Language Concepts`_, extended
+with user-definable datatypes and Racket-style phase stratification of
+bindings. It uses Rémy's optimization_ of generalization, where type
+metavariables are assigned levels to avoid scanning the context at
+generalization time.
 
 .. _Programming Language Concepts: https://www.itu.dk/~sestoft/plc/
+
+.. _optimization: https://hal.inria.fr/inria-00077006/document
 
 Initially, macros can get stuck by blocking until a signal has been
 sent. Signals are essentially just integers. Other macros can send
