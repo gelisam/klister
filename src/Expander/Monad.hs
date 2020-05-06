@@ -213,12 +213,14 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
   deriving (Semigroup, Monoid)
 
 data EValue
-  = EPrimExprMacro (Ty -> SplitCorePtr -> Syntax -> Expand ()) -- ^ For special forms
+  = EPrimExprMacro (Ty -> SplitCorePtr -> Syntax -> Expand ())
+    -- ^ For special forms
   | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
     -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EPrimPatternMacro (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())
+  | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros

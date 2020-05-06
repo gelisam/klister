@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -49,6 +50,8 @@ module Expander.Primitives
   , elsePattern
   -- * Module primitives
   , makeModule
+  -- * Anywhere primitives
+  , makeLocalType
   -- * Local primitives
   , prepareVar
   ) where
@@ -538,6 +541,29 @@ makeModule expandDeclForms stx =
       expandDeclForms bodyPtr mempty outScopesDest body
 
       pure ()
+
+--------------
+-- Anywhere --
+--------------
+
+makeLocalType :: MacroDest -> Syntax -> Expand ()
+makeLocalType dest stx = do
+  Stx _ _ (_ :: Syntax, binder, body) <- mustHaveEntries stx
+  Stx _ _ theVar <- mustHaveEntries binder
+  (sc, n, b) <- varPrepHelper theVar
+  t <- TMetaVar <$> freshMeta
+
+  let tyImpl tdest tstx = do
+        _ <- mustBeIdent tstx
+        linkType tdest t
+  let patImpl _ tstx =
+        throwError $ NotValidType tstx
+
+  p <- currentPhase
+  addLocalBinding n b
+  bind b $ EPrimTypeMacro tyImpl patImpl
+
+  forkExpandSyntax dest (addScope p body sc)
 
 --------------
 -- Patterns --
