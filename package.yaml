@@ -16,7 +16,6 @@ dependencies:
   - lens
   - megaparsec
   - mtl
-  - n-ary-functor
   - prettyprinter
   - text
 library:
