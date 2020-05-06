@@ -370,6 +370,8 @@ initializeKernel = do
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
   traverse_ addDatatypePrimitive datatypePrims
+  addUniversalPrimitive "with-unknown-type" Prims.makeLocalType
+
 
   where
     typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
@@ -541,6 +543,13 @@ initializeKernel = do
     addExprPrimitive :: Text -> (Ty -> SplitCorePtr -> Syntax -> Expand ()) -> Expand ()
     addExprPrimitive name impl = do
       let val = EPrimExprMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+
+    addUniversalPrimitive :: Text -> (MacroDest -> Syntax -> Expand ()) -> Expand ()
+    addUniversalPrimitive name impl = do
+      let val = EPrimUniversalMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -982,6 +991,8 @@ expandOneForm prob stx
         EPrimPatternMacro impl -> do
           dest <- requirePatternCtx stx prob
           impl dest stx
+        EPrimUniversalMacro impl ->
+          impl prob stx
         EVarMacro var -> do
           (t, dest) <- requireExpressionCtx stx prob
           case syntaxE stx of

@@ -1,0 +1,28 @@
+#lang "n-ary-app.kl"
+
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+(import "pair-datatype.kl")
+
+(define-macros
+  ([gotta-be-maybe
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ e))
+         (pure (quasiquote/loc stx (with-unknown-type (A) (the (Maybe A) ,e))))]))]
+   [gotta-be-maybes
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ e1 e2))
+         (pure
+          (quasiquote/loc stx
+            (with-unknown-type (A)
+              (pair (the (Maybe A) ,e1)
+                    (the (Maybe A) ,e2)))))]))]))
+
+(example (gotta-be-maybe (nothing)))
+(example (gotta-be-maybe (just 'here)))
+(example (gotta-be-maybe (just (lambda (x) x))))
+
+
+(example (gotta-be-maybes (just (lambda (x) x)) (nothing)))

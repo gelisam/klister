@@ -98,6 +98,7 @@
 (export #%module #%app
         lambda define example define-macros quote meta
         the -> Syntax Macro
+        with-unknown-type
         if true false
         error
         let flet
@@ -108,4 +109,5 @@
         free-identifier=? bound-identifier=? log make-introducer
         Unit unit
         ScopeAction flip add remove
+        Maybe just nothing
         datatype case else)
