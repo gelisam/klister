@@ -1,6 +1,8 @@
-#lang kernel
+#lang "n-ary-app.kl"
 
-(import (shift kernel 1))
+(import (shift "n-ary-app.kl" 1))
+(import "quasiquote.kl")
+(import (shift "quasiquote.kl" 1))
 
 (define-macros
   ([m (lambda (stx)
@@ -28,13 +30,11 @@
                    [(expression t)
                     (type-case t
                       [(-> a b)
-                       (pure (list-syntax ('lambda
-                                           (list-syntax ('_) stx)
-                                           (list-syntax ('mega-const e) e))
-                                          stx))]
+                       (pure `(lambda (_)
+                                (mega-const ,e)))]
                       [(else x) (pure e)])])))]))]))
 
-(example (the (-> (Bool) (-> (Bool) (-> (Bool) (-> (Bool) (Unit))))) (mega-const (unit))))
+(example (the (-> (Bool) (Bool) (Bool) (Bool) (Unit)) (mega-const (unit))))
 
 (datatype (Both A) (both A A))
 

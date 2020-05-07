@@ -95,19 +95,37 @@
              [(cons _ rest)
               (pure (cons-list-syntax 'flet* rest stx))]))]))
 
+(define-macros
+  -- (my-arrow foo bar baz) => (-> foo (-> bar baz))
+  ([my-arrow (lambda (stx)
+               (syntax-case stx
+                 [(cons _ args)
+                  (syntax-case args
+                    [(list (arg1 arg2))
+                     (pure (list-syntax ('-> arg1 arg2)
+                                        stx))]
+                    [(cons arg1 args)
+                     (pure (list-syntax ('-> arg1
+                                          (cons-list-syntax 'my-arrow args stx))
+                                        stx))])]))]))
+
+(export (rename ([my-arrow ->]) my-arrow))
 (export #%module #%app
         lambda define example define-macros quote meta
-        the -> Syntax Macro
+        the Syntax Macro
         with-unknown-type
         if true false
         error
         let flet
         import export
         Macro
+        which-problem declaration type expression pattern
+        Unit unit
+        Bool true false
         >>= pure syntax-error syntax-case
         Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
         free-identifier=? bound-identifier=? log make-introducer
         Unit unit
         ScopeAction flip add remove
         Maybe just nothing
-        datatype case else)
+        datatype case type-case else)
