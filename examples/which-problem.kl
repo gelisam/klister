@@ -1,8 +1,9 @@
 #lang "n-ary-app.kl"
 
 (import (shift "n-ary-app.kl" 1))
-(import "quasiquote.kl")
 (import (shift "quasiquote.kl" 1))
+(import "quasiquote.kl")
+(import "define-syntax-rule.kl")
 
 (define-macros
   ([m (lambda (stx)
@@ -19,20 +20,16 @@
 (example (case (unit)
            ((m) (true))))
 
-(define-macros
-  ([mega-const
-    (lambda (stx)
-      (syntax-case stx
-        [(list (_ e))
-         (>>= (which-problem)
-              (lambda (prob)
-                 (case prob
-                   [(expression t)
-                    (type-case t
-                      [(-> a b)
-                       (pure `(lambda (_)
-                                (mega-const ,e)))]
-                      [(else x) (pure e)])])))]))]))
+(define-macro (mega-const e)
+  (>>= (which-problem)
+       (lambda (prob)
+          (case prob
+            [(expression t)
+             (type-case t
+               [(-> a b)
+                (pure `(lambda (_)
+                         (mega-const ,e)))]
+               [(else x) (pure e)])]))))
 
 (example (the (-> (Bool) (Bool) (Bool) (Bool) (Unit)) (mega-const (unit))))
 

@@ -7,6 +7,19 @@
 (import (shift "syntax.kl" 1))
 
 (define-macros
+  ((define-macro
+     (lambda (stx)
+       (syntax-case stx
+         ((list (_ pattern body))
+          (syntax-case pattern
+           ((cons macro-name args)
+            (pure `(define-macros
+                     ((,macro-name (lambda (stx)
+                                     (syntax-case stx
+                                      ((list ,pattern)
+                                       ,body)))))))))))))))
+
+(define-macros
   ((define-syntax-rule
      (lambda (stx)
        (syntax-case stx
@@ -32,4 +45,4 @@
 
 (example ((lambda2 x y y) 'foo 'bar))  -- 'bar
 
-(export define-syntax-rule)
+(export define-macro define-syntax-rule)
