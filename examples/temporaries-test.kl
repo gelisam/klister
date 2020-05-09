@@ -1,6 +1,6 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 
-(import (shift "n-ary-app.kl" 1))
+(import (shift "prelude.kl" 1))
 (import (shift "lispy-do.kl" 1))
 (import (shift "list-datatype.kl" 1))
 (import (shift "pair-datatype.kl" 1))

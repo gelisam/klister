@@ -109,47 +109,5 @@
                                           (cons-list-syntax 'my-arrow args stx))
                                         stx))])]))]))
 
-(meta
-  (define optional-parens
-    (lambda (symbol)
-      (lambda (stx)
-        (syntax-case stx
-          [(ident x)
-           (pure (list-syntax (symbol) stx))]
-          [(cons x xs)
-           (pure (cons-list-syntax symbol xs stx))])))))
-
--- TODO: wrap 'datatype' so that parentheses are also optional for
--- the nullary types and constructors it creates
-(define-macros
-  ([my-Unit (optional-parens 'Unit)]
-   [my-unit (optional-parens 'unit)]
-   [my-Bool (optional-parens 'Bool)]
-   [my-true (optional-parens 'true)]
-   [my-false (optional-parens 'false)]
-   [my-nothing (optional-parens 'nothing)]))
-
-(export (rename ([my-arrow ->]
-                 [my-Unit Unit] [my-unit unit]
-                 [my-Bool Bool] [my-true true] [my-false false]
-                 [my-nothing nothing])
-                my-arrow
-                my-Unit my-unit
-                my-Bool my-true my-false
-                my-nothing))
-(export #%module #%app
-        lambda define example define-macros quote meta
-        the Syntax Macro
-        with-unknown-type
-        if
-        error
-        let flet
-        import export
-        Macro
-        which-problem declaration type expression pattern
-        >>= pure syntax-error syntax-case
-        Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log make-introducer
-        ScopeAction flip add remove
-        Maybe just
-        datatype case type-case else)
+(export (rename ([my-arrow ->]) my-arrow))
+(export if #%app lambda flet)

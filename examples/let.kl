@@ -1,7 +1,7 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 
 (import "quasiquote.kl")
-(import (shift "n-ary-app.kl" 1))
+(import (shift "prelude.kl" 1))
 (import (shift "list-syntax.kl" 1))
 (import (shift "quasiquote.kl" 1))
 

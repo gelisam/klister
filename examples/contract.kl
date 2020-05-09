@@ -1,7 +1,7 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 [import "defun.kl"]
 [import "bool.kl"]
-[import [shift "n-ary-app.kl" 1]]
+[import [shift "prelude.kl" 1]]
 [import [shift "defun.kl"1]]
 
 (meta

@@ -1,4 +1,4 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 
 [define f [lambda (x y z) y]]
 

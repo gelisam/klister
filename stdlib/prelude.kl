@@ -1,22 +1,78 @@
-#lang "n-ary-app.kl"
+#lang kernel
+
+(import "builtins.kl")
+(import "n-ary-app.kl")
 
 [define id [lambda (x) x]]
 [define const [lambda (x y) x]]
 [define compose [lambda (f g x) (f (g x))]]
 (define compose* (flet (comp (f g x) (f (g x))) comp))
 
-(export #%module #%app
-        lambda define example define-macros quote meta
-        if true false
-        error
-        let flet
-        import export
-        >>= pure syntax-error syntax-case
-        list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log
-        datatype case else
+(export -- primitive types
+        Syntax
+        Signal
+        -> 
+        Macro
+        Type
 
-        -- non-#lang
+        -- primitive datatypes
+        ScopeAction flip add remove
+        Unit unit
+        Bool true false
+        Problem declaration expression type pattern
+        Maybe nothing just
+
+        -- primitive module macros
+        #%module
+
+        -- primitive declaration macros
+        define
+        datatype
+        define-macros
+        example
+        import
+        export
+        meta
+        group
+
+        -- primitive expression macros
+        oops
+        error
+        the
+        let
+        flet
+        lambda
+        #%app
+        pure
+        >>=
+        syntax-error
+        send-signal
+        wait-signal
+        bound-identifier=?
+        free-identifier=?
+        quote
+        ident
+        ident-syntax
+        empty-list-syntax
+        cons-list-syntax
+        list-syntax
+        replace-loc
+        syntax-case
+        let-syntax
+        log
+        make-introducer
+        which-problem
+        case
+        type-case
+
+        -- primitive patterns
+        else
+
+        -- primitive universal macros
+        with-unknown-type
+
+        -- non-primitives
+        if
         id
         const
         compose
