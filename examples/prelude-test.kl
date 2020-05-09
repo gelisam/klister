@@ -5,7 +5,3 @@
 [example (compose id)]
 [example (compose id id)]
 [example (compose id id id)]
-
-[example (compose* id)]
-[example (compose* id id)]
-[example (compose* id id id)]
