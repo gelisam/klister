@@ -1,5 +1,5 @@
-#lang "n-ary-app.kl"
-[import [shift "n-ary-app.kl" 1]]
+#lang "prelude.kl"
+[import [shift "prelude.kl" 1]]
 
 
 (define-macros

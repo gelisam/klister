@@ -1,4 +1,4 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 
 (import "list-datatype.kl")
 

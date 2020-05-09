@@ -1,6 +1,6 @@
-#lang "n-ary-app.kl"
+#lang "prelude.kl"
 (import "defun.kl")
-(import (shift "n-ary-app.kl" 1))
+(import (shift "prelude.kl" 1))
 (import (shift "lispy-do.kl" 1))
 (import (shift "let.kl" 1))
 (import (shift "quasiquote.kl" 1))

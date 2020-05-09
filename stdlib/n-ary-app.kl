@@ -2,7 +2,7 @@
 
 -- N-ary function abstraction and application
 
-[import [shift (only kernel cons-list-syntax lambda pure quote syntax-case list-syntax export import) 1]]
+[import [shift kernel 1]]
 
 (define-macros
   ([if
@@ -110,22 +110,4 @@
                                         stx))])]))]))
 
 (export (rename ([my-arrow ->]) my-arrow))
-(export #%module #%app
-        lambda define example define-macros quote meta
-        the Syntax Macro
-        with-unknown-type
-        if true false
-        error
-        let flet
-        import export
-        Macro
-        which-problem declaration type expression pattern
-        Unit unit
-        Bool true false
-        >>= pure syntax-error syntax-case
-        Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
-        free-identifier=? bound-identifier=? log make-introducer
-        Unit unit
-        ScopeAction flip add remove
-        Maybe just nothing
-        datatype case type-case else)
+(export if #%app lambda flet)
