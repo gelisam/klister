@@ -2,7 +2,7 @@
 
 -- N-ary function abstraction and application
 
-[import [shift (only kernel cons-list-syntax lambda pure quote syntax-case list-syntax export import) 1]]
+[import [shift kernel 1]]
 
 (define-macros
   ([if
@@ -109,43 +109,23 @@
                                           (cons-list-syntax 'my-arrow args stx))
                                         stx))])]))]))
 
+(meta
+  (define optional-parens
+    (lambda (symbol)
+      (lambda (stx)
+        (syntax-case stx
+          [(ident x)
+           (pure (list-syntax (symbol) stx))]
+          [(cons x xs)
+           (pure (cons-list-syntax symbol xs stx))])))))
+
 (define-macros
-  ([my-Unit (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('Unit) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'Unit xs stx))]))]
-   [my-unit (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('unit) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'unit xs stx))]))]
-   [my-Bool (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('Bool) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'Bool xs stx))]))]
-   [my-true (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('true) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'true xs stx))]))]
-   [my-false (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('false) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'false xs stx))]))]
-   [my-nothing (lambda (stx)
-              (syntax-case stx
-                [(ident x)
-                 (pure (list-syntax ('nothing) stx))]
-                [(cons x xs)
-                 (pure (cons-list-syntax 'nothing xs stx))]))]))
+  ([my-Unit (optional-parens 'Unit)]
+   [my-unit (optional-parens 'unit)]
+   [my-Bool (optional-parens 'Bool)]
+   [my-true (optional-parens 'true)]
+   [my-false (optional-parens 'false)]
+   [my-nothing (optional-parens 'nothing)]))
 
 (export (rename ([my-arrow ->]
                  [my-Unit Unit] [my-unit unit]
