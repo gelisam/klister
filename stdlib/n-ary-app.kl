@@ -109,23 +109,65 @@
                                           (cons-list-syntax 'my-arrow args stx))
                                         stx))])]))]))
 
-(export (rename ([my-arrow ->]) my-arrow))
+(define-macros
+  ([my-Unit (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('Unit) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'Unit xs stx))]))]
+   [my-unit (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('unit) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'unit xs stx))]))]
+   [my-Bool (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('Bool) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'Bool xs stx))]))]
+   [my-true (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('true) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'true xs stx))]))]
+   [my-false (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('false) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'false xs stx))]))]
+   [my-nothing (lambda (stx)
+              (syntax-case stx
+                [(ident x)
+                 (pure (list-syntax ('nothing) stx))]
+                [(cons x xs)
+                 (pure (cons-list-syntax 'nothing xs stx))]))]))
+
+(export (rename ([my-arrow ->]
+                 [my-Unit Unit] [my-unit unit]
+                 [my-Bool Bool] [my-true true] [my-false false]
+                 [my-nothing nothing])
+                my-arrow
+                my-Unit my-unit
+                my-Bool my-true my-false
+                my-nothing))
 (export #%module #%app
         lambda define example define-macros quote meta
         the Syntax Macro
         with-unknown-type
-        if true false
+        if
         error
         let flet
         import export
         Macro
         which-problem declaration type expression pattern
-        Unit unit
-        Bool true false
         >>= pure syntax-error syntax-case
         Syntax list-syntax cons-list-syntax empty-list-syntax replace-loc
         free-identifier=? bound-identifier=? log make-introducer
-        Unit unit
         ScopeAction flip add remove
-        Maybe just nothing
+        Maybe just
         datatype case type-case else)

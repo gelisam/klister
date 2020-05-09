@@ -11,14 +11,14 @@
           (lambda (prob)
             (case prob
               [(declaration)  (pure '(example (the (m) (m))))]
-              [(type)         (pure '(Bool))]
-              [(expression t) (pure '(true))]
-              [(pattern)      (pure '(unit))]))))]))
+              [(type)         (pure 'Bool)]
+              [(expression t) (pure 'true)]
+              [(pattern)      (pure 'unit)]))))]))
 
 (m)
 
-(example (case (unit)
-           ((m) (true))))
+(example (case unit
+           ((m) true)))
 
 (define-macro (mega-const e)
   (>>= (which-problem)
@@ -31,7 +31,7 @@
                          (mega-const ,e)))]
                [(else x) (pure e)])]))))
 
-(example (the (-> (Bool) (Bool) (Bool) (Bool) (Unit)) (mega-const (unit))))
+(example (the (-> Bool Bool Bool Bool Unit) (mega-const unit)))
 
 (datatype (Both A) (both A A))
 
