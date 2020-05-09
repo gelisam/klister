@@ -119,6 +119,8 @@
           [(cons x xs)
            (pure (cons-list-syntax symbol xs stx))])))))
 
+-- TODO: wrap 'datatype' so that parentheses are also optional for
+-- the nullary types and constructors it creates
 (define-macros
   ([my-Unit (optional-parens 'Unit)]
    [my-unit (optional-parens 'unit)]
