@@ -706,9 +706,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           case ty of
             Ty (TMetaVar ptr) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (Ty (TMetaVar ptr')) env cases kont
-        other -> do
-          result <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
-          forkContinueMacroAction dest result kont
+        _ -> do
+          forkInterpretMacroAction dest (MacroActionTypeCase env loc ty cases) kont
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
