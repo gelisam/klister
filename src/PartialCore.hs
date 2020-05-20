@@ -2,7 +2,6 @@
 module PartialCore where
 
 import Control.Lens
-import Data.Bitraversable
 
 import Core
 
