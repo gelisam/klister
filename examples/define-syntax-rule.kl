@@ -1,10 +1,12 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
+(import (shift "defun.kl" 1))
 (import (shift "do.kl" 1))
 (import (shift "list-syntax.kl" 1))
 (import (shift "quasiquote.kl" 1))
 (import (shift "syntax.kl" 1))
+(import (shift "temporaries.kl" 1))
 
 (define-macros
   ((define-macro
@@ -19,29 +21,69 @@
                                       ((list ,pattern)
                                        ,body)))))))))))))))
 
+-- pattern is a tree of variable names
+-- template is an expression containing those variable names
+-- stx is used for constructing syntax objects
+-- cc is a monadic continuation which we call with an unwrapping function and
+--   an unquoted template. The unquote template is a version of the input
+--   template in which each variable var found in the pattern has been replaced
+--   with (unquote var); it thus makes sense to wrap it in a quasiquote. The
+--   unwrapping function takes as input a variable name and a body, and
+--   generates code which matches on that variable name, deconstructing it into
+--   the shape described by the pattern and bying the pattern's variables so
+--   that they are available in the body (which is also a syntax object).
+(meta
+  (defun bind-vars (pattern template stx cc)
+    (syntax-case pattern
+      [(ident arg)
+       (do (template <- (replace-identifier
+                          arg
+                          (list-syntax ('unquote arg) stx)
+                          template))
+           (cc (lambda (var body)
+                 `(let [,arg ,var]
+                    ,body))
+               template))]
+      [(cons car-pattern cdr-pattern)
+       (bind-vars car-pattern template stx
+         (lambda (car-unwrap template)
+           (bind-vars cdr-pattern template stx
+             (lambda (cdr-unwrap template)
+               (do (car-var <- (make-temporary 'car-var))
+                   (cdr-var <- (make-temporary 'cdr-var))
+                   (cc (lambda (var body)
+                         `(syntax-case ,var
+                            [(cons ,car-var ,cdr-var)
+                             ,(cdr-unwrap cdr-var
+                                (car-unwrap car-var
+                                  body))]))
+                       template))))))]
+      [(list ())
+       (cc (lambda (var body)
+             `(syntax-case ,var
+                [(list ())
+                 ,body]))
+           template)])))
+
 (define-macros
-  ((define-syntax-rule
-     (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern template))
-          (syntax-case pattern
-           ((cons macro-name args)
-            (do (unquoted-template <- (foldlM (lambda (t arg)
-                                                (replace-identifier
-                                                  arg
-                                                  (list-syntax ('unquote arg) stx)
-                                                  t))
-                                              template
-                                              args))
-                (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
-                (pure `(define-macros
-                         ((,macro-name (lambda (stx)
-                                         (syntax-case stx
-                                          ((list ,pattern)
-                                           (pure ,quasiquoted-template)))))))))))))))))
+  ([define-syntax-rule
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ macro-args-pattern template))
+         (syntax-case macro-args-pattern
+           [(cons macro-name args-pattern)
+            (bind-vars macro-args-pattern template stx
+              (lambda (unwrap unquoted-template)
+                (let [quasiquoted-template
+                      (list-syntax ('quasiquote unquoted-template) stx)]
+                  (pure `(define-macros
+                           ([,macro-name
+                             (lambda (stx)
+                               ,(unwrap 'stx
+                                  `(pure ,quasiquoted-template)))]))))))])]))]))
 
 (define-syntax-rule (lambda2 x y body)
-  (lambda (x y) body))
+                      (lambda (x y) body))
 
 (example ((lambda2 x y y) 'foo 'bar))  -- 'bar
 
