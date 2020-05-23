@@ -1,6 +1,0 @@
-(true) : Bool
-(true) : Bool
-#<closure> : (Bool → (Bool → (Bool → (Bool → Unit))))
-#<closure> : (Bool → (Bool → (Bool → (Bool → Unit))))
-(both #<closure> #<closure>) : ∀α β γ. (Both (α → (β → (γ → Syntax))))
-(both #<closure> #<closure>) : ∀α β γ. (Both (α → (β → (γ → Syntax))))

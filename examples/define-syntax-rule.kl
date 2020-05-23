@@ -8,18 +8,39 @@
 (import (shift "syntax.kl" 1))
 (import (shift "temporaries.kl" 1))
 
+-- (define-macro my-macro
+--   (lambda (stx) ...))
+-- or
+-- (define-macro (my-macro arg1 arg2 arg3)
+--   ...)
 (define-macros
-  ((define-macro
-     (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern body))
-          (syntax-case pattern
-           ((cons macro-name args)
+  ([define-macro
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ pattern body))
+         (syntax-case pattern
+           [(ident macro-name)
             (pure `(define-macros
-                     ((,macro-name (lambda (stx)
-                                     (syntax-case stx
-                                      ((list ,pattern)
-                                       ,body)))))))))))))))
+                     ([,macro-name
+                       ,body])))]
+           [(cons macro-name args)
+            (pure `(define-macros
+                     ([,macro-name
+                       (lambda (stx)
+                         (syntax-case stx
+                           [(list ,pattern)
+                            ,body]))])))])]))]))
+
+(define-macro m1
+  (lambda (stx)
+    (pure `(,'quote ,stx))))
+
+(define-macro (m2 arg)
+  (pure `(,'quote ,arg)))
+
+(example (m1 foo bar baz))  -- '(m1 foo bar baz)
+(example (m2 foo))          -- 'foo
+
 
 -- pattern is a tree of variable names
 -- template is an expression containing those variable names

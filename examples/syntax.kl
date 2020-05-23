@@ -9,10 +9,9 @@
 (import "pmatch.kl")
 (import "quasiquote.kl")
 
-(define-macros
-  ([tree
-    (lambda (stx)
-      (error '(tree is only intended to be used as a pattern)))]))
+(define tree
+  (lambda (_)
+    (error '(tree is only intended to be used as a pattern))))
 
 (meta
   -- (is-tree-pattern '(tree foo))
@@ -259,5 +258,5 @@
 --- replace-identifier is only available at phase 0.
 
 
-(export (rename ([my-syntax-case syntax-case]) syntax-case))
-(export tree syntax-pmatch replace-identifier)
+--(export (rename ([my-syntax-case syntax-case]) syntax-case))
+(export tree syntax-pmatch replace-identifier my-syntax-case)
