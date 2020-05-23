@@ -707,8 +707,12 @@ runTask (tid, localData, task) = withLocal localData $ do
             Ty (TMetaVar ptr) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (Ty (TMetaVar ptr')) env cases kont
         other -> do
-          result <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
-          forkContinueMacroAction dest result kont
+          selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
+          case selectedBranch of
+            ValueMacroAction nextStep -> do
+              forkInterpretMacroAction dest nextStep kont
+            otherVal -> do
+              expandEval $ evalErrorType "macro action" otherVal
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
@@ -1191,13 +1195,4 @@ interpretMacroAction prob =
         PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
         TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
     MacroActionTypeCase env loc ty cases -> do
-      Ty ty' <- normType ty
-      case ty' of
-        TMetaVar _ ->
-          pure $ StuckOnType loc (Ty ty') env cases []
-        other ->
-          (expandEval $ withEnv env $ doTypeCase loc (Ty other) cases) >>=
-          \case
-            ValueMacroAction nextStep -> interpretMacroAction prob nextStep
-            otherVal -> do
-              expandEval $ evalErrorType "macro action" otherVal
+      pure $ StuckOnType loc ty env cases []

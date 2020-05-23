@@ -5,6 +5,7 @@
 (import "quasiquote.kl")
 (import "define-syntax-rule.kl")
 
+
 (define-macros
   ([m (lambda (stx)
         (>>= (which-problem)
@@ -20,6 +21,7 @@
 (example (case unit
            ((m) true)))
 
+
 (define-macro (mega-const e)
   (>>= (which-problem)
        (lambda (prob)
@@ -32,6 +34,18 @@
                [(else x) (pure e)])]))))
 
 (example (the (-> Bool Bool Bool Bool Unit) (mega-const unit)))
+
+(define-macros
+  ([llet (lambda (stx)
+          (syntax-case stx
+            [(list (_ binding body))
+             (syntax-case binding
+               [(list (name def))
+                (pure (quasiquote/loc stx
+                        ((lambda (,name) ,body) ,def)))])]))]))
+
+(example (llet (x (mega-const unit)) (the (-> Bool Bool Bool Bool Unit) x)))
+
 
 (datatype (Both A) (both A A))
 
