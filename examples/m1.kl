@@ -1,0 +1,10 @@
+#lang kernel
+
+(import (shift kernel 1))
+
+(define-macros
+  ([m1
+    (lambda (stx)
+      (pure ''1))]))
+
+(export m1)
