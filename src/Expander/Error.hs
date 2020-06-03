@@ -74,6 +74,7 @@ instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
     hang 4 $
       text "Ambiguous identifier in phase" <+> pp env p <+>
+      pp env (_stxScopeSet x) <> line <>
       pp env x <> line <>
       vsep [viaShow c | c <- candidates]
   pp env (Unknown x) = text "Unknown:" <+> pp env x
