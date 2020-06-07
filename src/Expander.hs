@@ -227,11 +227,9 @@ visit modName = do
   unless visitedp $ do
     let m' = shift i m -- Shift the syntax literals in the module source code
     sc <- freshScope $ T.pack $ "For module-phase " ++ shortShow modName ++ "-" ++ shortShow p
-    let m'' = case m' of
-          Expanded mod' bs -> Expanded mod' (over (bindings . each . each . _1)
-                                                  (ScopeSet.insertAtPhase p sc)
-                                                  bs)
-          _ -> m'
+    let moduleScopeSets :: Traversal' CompleteModule ScopeSet
+        moduleScopeSets = _Expanded . _2 . bindings . each . each . _1
+    let m'' = over moduleScopeSets (ScopeSet.insertAtPhase p sc) m'
     evalResults <- inPhase p $ evalMod m''
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)

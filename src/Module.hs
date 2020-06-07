@@ -8,6 +8,8 @@ module Module (
   , moduleExports
   , moduleBody
   , CompleteModule(..)
+  , _Expanded
+  , _KernelModule
   , CompleteDecl(..)
   , completeDecl
   , Decl(..)
@@ -227,3 +229,4 @@ data SplitDeclTree a = SplitDeclTree
   }
 
 makeLenses ''CompleteDecl
+makePrisms ''CompleteModule
