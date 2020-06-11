@@ -124,6 +124,7 @@ module Expander.Monad
   , expanderKernelExports
   , expanderKernelDatatypes
   , expanderKernelConstructors
+  , expanderKernelValues
   , expanderModuleExports
   , expanderModuleImports
   , expanderModuleName
@@ -283,6 +284,7 @@ data ExpanderState = ExpanderState
   , _expanderKernelExports :: !Exports
   , _expanderKernelDatatypes :: !(Map Datatype DatatypeInfo)
   , _expanderKernelConstructors :: !(Map Constructor (ConstructorInfo Ty))
+  , _expanderKernelValues :: !(Env Var (SchemePtr, Value))
   , _expanderDeclOutputScopes :: !(Map DeclOutputScopesPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
@@ -320,6 +322,7 @@ initExpanderState = ExpanderState
   , _expanderKernelExports = noExports
   , _expanderKernelDatatypes = mempty
   , _expanderKernelConstructors = mempty
+  , _expanderKernelValues = mempty
   , _expanderDeclOutputScopes = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty

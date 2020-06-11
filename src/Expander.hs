@@ -240,8 +240,6 @@ visit modName = do
 -- recursively loading its run-time dependencies.
 evalMod :: CompleteModule -> Expand [EvalResult]
 evalMod (KernelModule _) = do
-  -- Builtins go here, suitably shifted. There are no built-in values
-  -- yet, only built-in syntax and datatypes, but this may change.
   p <- currentPhase
   dts <- view expanderKernelDatatypes <$> getState
   modifyState $
@@ -251,7 +249,14 @@ evalMod (KernelModule _) = do
   modifyState $
     over (expanderWorld . worldConstructors . at p . non Map.empty) $
     Map.union ctors
-
+  vals <- view expanderKernelValues <$> getState
+  modifyState $
+    over (expanderWorld . worldEnvironments . at p) $
+    \case
+      Nothing -> Just (snd <$> vals)
+      Just env -> Just (env <> (snd <$> vals))
+  modifyState $
+    over (expanderWorld . worldTypeContexts . at p . non mempty) $ (<> (fst <$> vals))
   return []
 evalMod (Expanded em _) = execWriterT $ do
     traverseOf_ (moduleBody . each) evalDecl em
@@ -370,6 +375,7 @@ initializeKernel = do
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
   traverse_ addDatatypePrimitive datatypePrims
+  traverse_ addFunPrimitive funPrims
   addUniversalPrimitive "with-unknown-type" Prims.makeLocalType
 
 
@@ -381,6 +387,28 @@ initializeKernel = do
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
       , ("Type", Prims.baseType TType)
+      ]
+
+    funPrims :: [(Text, Scheme Ty, Value)]
+    funPrims =
+      [ ( "string=?"
+        , Scheme 0 $ Ty (TFun (Ty TString) (Ty (TFun (Ty TString) (Prims.primitiveDatatype "Bool" []))))
+        , ValueClosure $ HO $
+          \(ValueString str1) ->
+            ValueClosure $ HO $
+            \(ValueString str2) ->
+              if str1 == str2
+                then primitiveCtor "true" []
+                else primitiveCtor "false" []
+        )
+      , ( "string-append"
+        , Scheme 0 $ Ty (TFun (Ty TString) (Ty (TFun (Ty TString) (Ty TString))))
+        , ValueClosure $ HO $
+          \(ValueString str1) ->
+            ValueClosure $ HO $
+            \(ValueString str2) ->
+              ValueString (str1 <> str2)
+        )
       ]
 
     datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
@@ -444,6 +472,20 @@ initializeKernel = do
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
+
+    addFunPrimitive :: (Text, Scheme Ty, Value) -> Expand ()
+    addFunPrimitive (name, sch, val) = do
+      x <- freshVar
+      ptr <- liftIO newSchemePtr
+      linkScheme ptr sch
+
+      modifyState $ set (expanderKernelValues . at x) $ Just $ (Stx mempty kernelLoc name, (ptr, val))
+      b <- freshBinding
+      bind b $ EVarMacro x
+      addToKernel name runtime b
+
+      where
+        kernelLoc = SrcLoc "<kernel>" (SrcPos 0 0) (SrcPos 0 0)
 
     addDatatypePrimitive :: (Text, Natural, [(Text, [Ty])]) -> Expand ()
     addDatatypePrimitive (name, arity, ctors) = do

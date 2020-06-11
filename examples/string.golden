@@ -1,1 +1,4 @@
 "hello world" : String
+"hello world" : String
+(true) : Bool
+(false) : Bool
