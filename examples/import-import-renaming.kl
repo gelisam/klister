@@ -1,0 +1,4 @@
+#lang kernel
+(import (rename "bool.kl" (not negb)))
+(import "import-renaming.kl")
+(example (negb (false)))

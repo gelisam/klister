@@ -1,0 +1,4 @@
+#lang kernel
+(import (rename "bool.kl" (not negb)))
+(example (negb (true)))
+(export negb)
