@@ -403,7 +403,7 @@ visit modName = do
         completeModuleScopeSets = _Expanded
                                 . beside (moduleSyntaxes . syntaxScopeSets)
                                          bindingTableScopeSets
-    let m'' = over completeModuleScopeSets (ScopeSet.insertAtPhase p sc) m'
+    let m'' = over completeModuleScopeSets (ScopeSet.insertUniversally sc) m'
     evalResults <- inPhase p $ evalMod m''
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
