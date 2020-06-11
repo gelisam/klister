@@ -112,6 +112,7 @@ data CoreF typePat pat core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
   | CoreDataCase SrcLoc core [(pat, core)]
+  | CoreString Text
   | CoreError core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
@@ -157,6 +158,8 @@ mapCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor (map h args)
 mapCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc (h scrut) [(g pat, h c) | (pat, c) <- cases]
+mapCoreF _f _g _h (CoreString str) =
+  CoreString str
 mapCoreF _f _g h (CoreError msg) =
   CoreError (h msg)
 mapCoreF _f _g h (CorePure core) =
@@ -213,6 +216,8 @@ traverseCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor <$> traverse h args
 traverseCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc <$> h scrut <*> for cases \ (pat, c) -> (,) <$> g pat <*> h c
+traverseCoreF _f _g _h (CoreString str) =
+  pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
   CoreError <$> h msg
 traverseCoreF _f _g h (CorePure core) =
@@ -469,6 +474,8 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
    ++ " "
    ++ intercalate ", " (map shortShow cases)
    ++ ")"
+  shortShow (CoreString str)
+    = "(String " ++ show str ++ ")"
   shortShow (CoreError what)
     = "(Error "
    ++ shortShow what

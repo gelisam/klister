@@ -129,6 +129,7 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
                             pp (env <> env') rhs])
             cases
          ]
+  pp _env (CoreString str) = text (T.pack (show str))
   pp env (CoreError what) =
     text "error" <+> pp env what
   pp env (CorePure arg) =
@@ -312,6 +313,7 @@ typeVarNames =
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
   pp _ TSyntax = text "Syntax"
   pp _ TSignal = text "Signal"
+  pp _ TString = text "String"
   pp env (TFun a b) =
     parens $ align $ group $ vsep [pp env a <+> text "→", pp env b]
   pp env (TMacro a) = parens (text "Macro" <+> align (pp env a))
@@ -486,6 +488,7 @@ instance Pretty VarInfo Value where
     text (view (constructorName . constructorNameText) c) <+>
     align (group (vsep (map (pp env) args)))
   pp _env (ValueType ptr) = text "#t<" <> viaShow ptr <> text ">"
+  pp _env (ValueString str) = text (T.pack (show str))
 
 instance Pretty VarInfo MacroAction where
   pp env (MacroActionPure v) =

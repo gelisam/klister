@@ -1,0 +1,4 @@
+#lang kernel
+
+(example "hello world")
+

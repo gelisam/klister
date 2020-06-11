@@ -41,6 +41,7 @@ data Value
   | ValueSignal Signal
   | ValueCtor Constructor [Value]
   | ValueType Ty
+  | ValueString Text
 
 instance Show Value where
   show _ = "Value..."
@@ -59,6 +60,7 @@ valueText (ValueCtor c args) =
   "(" <> view (constructorName . constructorNameText) c <> " " <>
   T.intercalate " " (map valueText args) <> ")"
 valueText (ValueType ptr) = "#t<" <> T.pack (show ptr) <> ">"
+valueText (ValueString str) = T.pack (show str)
 
 -- | Find a simple description that is suitable for inclusion in error messages.
 describeVal :: Value -> Text
@@ -69,6 +71,7 @@ describeVal (ValueSignal _) = "signal"
 describeVal (ValueCtor c _args) =
   view (constructorName . constructorNameText) c
 describeVal (ValueType _) = "type"
+describeVal (ValueString _) = "string"
 
 data FOClosure = FOClosure
   { _closureEnv   :: VEnv

@@ -28,6 +28,7 @@ instance Show MetaPtr where
 data TyF t
   = TSyntax
   | TSignal
+  | TString
   | TFun t t
   | TMacro t
   | TType

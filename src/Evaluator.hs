@@ -123,6 +123,7 @@ eval (Core (CoreCtor c args)) =
 eval (Core (CoreDataCase loc scrut cases)) = do
   value <- eval scrut
   doDataCase loc value cases
+eval (Core (CoreString str)) = pure (ValueString str)
 eval (Core (CoreError what)) = do
   msg <- evalAsSyntax what
   throwError $ EvalErrorUser msg

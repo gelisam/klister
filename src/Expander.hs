@@ -1059,7 +1059,10 @@ expandOneForm prob stx
             unify dest (Ty TSignal) t
             expandLiteralSignal dest s
             saveExprType dest t
-          String s -> expandLiteralString dest s
+          String s -> do
+            unify dest (Ty TString) t
+            expandLiteralString dest s
+            saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 
@@ -1101,8 +1104,8 @@ expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
 expandLiteralSignal dest signal = linkExpr dest (CoreSignal signal)
 
 expandLiteralString :: SplitCorePtr -> Text -> Expand ()
-expandLiteralString _dest str =
-  throwError $ InternalError $ "Strings are not valid expressions yet: " ++ show str
+expandLiteralString dest str = do
+  linkExpr dest (CoreString str)
 
 data MacroOutput
   = StuckOnSignal Signal [Closure]
