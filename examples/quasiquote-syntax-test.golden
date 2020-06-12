@@ -1,8 +1,8 @@
 #[quasiquote-syntax-test.kl:5.16-5.23]<nothing> : Syntax
 #[quasiquote-syntax-test.kl:8.11-8.16]<thing> : Syntax
 #[quasiquote-syntax-test.kl:5.16-5.23]<nothing> : Syntax
-#[quasiquote.kl:52.63-52.66]<(thing)> : Syntax
-#[quasiquote.kl:59.57-59.60]<(nothing)> : Syntax
-#[quasiquote.kl:52.63-52.66]<(list-syntax (nothing thing) thing)> : Syntax
-#[quasiquote.kl:52.63-52.66]<(list-syntax (nothing thing ()) thing)> : Syntax
-#[quasiquote.kl:52.63-52.66]<(thing nothing thing)> : Syntax
+#[quasiquote-syntax-test.kl:11.11-11.18]<(thing)> : Syntax
+#[quasiquote-syntax-test.kl:12.11-12.19]<(nothing)> : Syntax
+#[quasiquote-syntax-test.kl:14.11-14.45]<(list-syntax (nothing thing) thing)> : Syntax
+#[quasiquote-syntax-test.kl:16.11-16.48]<(list-syntax (nothing thing ()) thing)> : Syntax
+#[quasiquote-syntax-test.kl:18.11-18.31]<(thing nothing thing)> : Syntax
