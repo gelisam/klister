@@ -24,6 +24,9 @@
            [[ident x]
             [pure [list-syntax [[quote quote] x]
                                x]]]
+           [[string str]
+            [pure [list-syntax [[quote quote] (string-syntax str e)]
+                               e]]]
            [()
             [pure
              [list-syntax [[quote empty-list-syntax]

@@ -28,6 +28,7 @@ module Expander.Primitives
   , letExpr
   , letSyntax
   , listSyntax
+  , stringSyntax
   , makeIntroducer
   , Expander.Primitives.log
   , whichProblem
@@ -388,6 +389,14 @@ listSyntax t dest stx = do
   sourceDest <- schedule (Ty TSyntax) source
   linkExpr dest $ CoreList $ ScopedList listDests sourceDest
 
+stringSyntax :: ExprPrim
+stringSyntax t dest stx = do
+  unify dest t (Ty (TSyntax))
+  Stx _ _ (_ :: Syntax, str, source) <- mustHaveEntries stx
+  strDest <- schedule (Ty TString) str
+  sourceDest <- schedule (Ty TSyntax) source
+  linkExpr dest $ CoreStringSyntax $ ScopedString strDest sourceDest
+
 replaceLoc :: ExprPrim
 replaceLoc t dest stx = do
   unify dest t (Ty (TSyntax))
@@ -636,6 +645,14 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
       let rhs' = addScope p rhs sc
       rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
       let patOut = SyntaxPatternIdentifier x' var
+      return (patOut, rhsDest)
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "string")),
+                           patVar])) -> do
+      (sc, x', var) <- prepareVar patVar
+      let rhs' = addScope p rhs sc
+      strSch <- trivialScheme (Ty TString)
+      rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
+      let patOut = SyntaxPatternString x' var
       return (patOut, rhsDest)
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
                            Syntax (Stx _ _ (List vars))])) -> do
