@@ -158,6 +158,7 @@ generalizeType ty = do
       [MetaPtr] -> TyF Ty ->
       StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
     genVars _ TSyntax = pure TSyntax
+    genVars _ TString = pure TString
     genVars _ TSignal = pure TSignal
     genVars vars (TFun dom ran) =
       TFun <$> genTyVars vars dom <*> genTyVars vars ran
@@ -208,6 +209,7 @@ unifyWithBlame blame depth t1 t2 = do
     -- Rigid-rigid
     unify' TType TType = pure ()
     unify' TSyntax TSyntax = pure ()
+    unify' TString TString = pure ()
     unify' TSignal TSignal = pure ()
     unify' (TFun a c) (TFun b d) = unifyWithBlame blame (depth + 1) b a >> unifyWithBlame blame (depth + 1) c d
     unify' (TMacro a) (TMacro b) = unifyWithBlame blame (depth + 1) a b
