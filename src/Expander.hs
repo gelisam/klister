@@ -383,6 +383,7 @@ initializeKernel = do
     typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
       [ ("Syntax", Prims.baseType TSyntax)
+      , ("String", Prims.baseType TString)
       , ("Signal", Prims.baseType TSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
@@ -457,6 +458,7 @@ initializeKernel = do
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)
       , ("list-syntax", Prims.listSyntax)
+      , ("string-syntax", Prims.stringSyntax)
       , ("replace-loc", Prims.replaceLoc)
       , ("syntax-case", Prims.syntaxCase)
       , ("let-syntax", Prims.letSyntax)
