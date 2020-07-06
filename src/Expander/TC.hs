@@ -185,9 +185,7 @@ generalizeType ty = do
 
 
 makeTypeMetas :: Natural -> Expand [Ty]
-makeTypeMetas n = replicateM (fromIntegral n) $ do
-  meta <- freshMeta
-  pure $ Ty $ TyF (TMetaVar meta) []
+makeTypeMetas n = replicateM (fromIntegral n) $ tMetaVar <$> freshMeta
 
 class UnificationErrorBlame a where
   getBlameLoc :: a -> Expand (Maybe SrcLoc)
