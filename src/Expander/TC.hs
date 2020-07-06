@@ -120,9 +120,7 @@ inst (Scheme n ty) ts
 
 specialize :: Scheme Ty -> Expand Ty
 specialize sch@(Scheme n _) = do
-  freshVars <- replicateM (fromIntegral n) $ do
-    meta <- freshMeta
-    pure $ Ty $ TyF (TMetaVar meta) []
+  freshVars <- makeTypeMetas n
   inst sch freshVars
 
 varType :: Var -> Expand (Maybe (Scheme Ty))
