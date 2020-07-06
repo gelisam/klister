@@ -311,20 +311,15 @@ doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0
     match :: Eval Value -> TypePattern -> Core -> TyF Ty -> Eval Value
     match next (TypePattern t) rhs scrut =
       case (t, scrut) of
-        (TSyntax, TSyntax) -> eval rhs
-        (TSignal, TSignal) -> eval rhs
-        (TFun (n1, x1) (n2, x2), TFun dom cod) ->
-           withExtendedEnv n1 x1 (ValueType dom) $
-           withExtendedEnv n2 x2 (ValueType cod) $
-           eval rhs
-        (TMacro (n, x), TMacro a) -> withExtendedEnv n x (ValueType a) (eval rhs)
-        (TType, TType) -> eval rhs
-        (TDatatype dt xs, TDatatype dt' args)
-          | dt == dt', length xs == length args ->
-            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- xs, arg <- args] $
-            eval rhs
-        (TSchemaVar i, TSchemaVar j)
-          | i == j ->
+        -- unification variables never match; instead, type-case remains stuck
+        -- until the variable is unified with a concrete type constructor or a
+        -- skolem variable.
+        (TyF (TMetaVar _) _, _) -> next
+        (_, TyF (TMetaVar _) _) -> next
+
+        (TyF ctor1 args1, TyF ctor2 args2)
+          | ctor1 == ctor2 && length args1 == length args2 ->
+            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- args1, arg <- args2] $
             eval rhs
         (_, _) -> next
     match _next (AnyType n x) rhs scrut =

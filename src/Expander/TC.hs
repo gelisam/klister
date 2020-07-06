@@ -36,36 +36,34 @@ setTVLevel ptr l = do
   _ <- derefType ptr -- fail if not present
   modifyState $ over (expanderTypeStore . at ptr) $ fmap (set varLevel l)
 
+-- expand outermost constructor to a non-variable, if possible
 normType :: Ty -> Expand Ty
-normType t@(unTy -> TMetaVar ptr) = do
-  tv <- derefType ptr
-  case view varKind tv of
-    Link found -> do
-      t' <- normType (Ty found)
-      setTVKind ptr (Link (unTy t'))
-      return t'
-    _ -> return t
+normType t@(unTy -> TyF (TMetaVar ptr) args) =
+  if null args
+  then do
+    tv <- derefType ptr
+    case view varKind tv of
+      Link found -> do
+        t' <- normType (Ty found)
+        setTVKind ptr (Link (unTy t'))
+        return t'
+      _ -> return t
+  else throwError $ InternalError "type variable cannot have parameters (yet)"
 normType t = return t
 
 normAll :: Ty -> Expand Ty
-normAll t =
-  normType t >>= fmap Ty .
-  \case
-    (Ty (TFun a b)) -> TFun <$> normType a <*> normType b
-    (Ty (TMacro a)) -> TMacro <$> normType a
-    (Ty (TDatatype dt tArgs)) ->
-      TDatatype dt <$> traverse normType tArgs
-    other -> pure (unTy other)
+normAll t = do
+  Ty (TyF ctor tArgs) <- normType t
+  Ty <$> TyF ctor <$> traverse normType tArgs
 
 metas :: Ty -> Expand [MetaPtr]
-metas t =
-  normType t >>=
-  \case
-    Ty (TMetaVar x) -> pure [x]
-    Ty (TFun a b) -> (++) <$> metas a <*> metas b
-    Ty (TMacro a) -> metas a
-    Ty (TDatatype _ ts) -> concat <$> traverse metas ts
-    _ -> pure []
+metas t = do
+  Ty (TyF ctor tArgs) <- normType t
+  let ctorMetas = case ctor of
+                    TMetaVar x -> [x]
+                    _ -> []
+  argsMetas <- concat <$> traverse metas tArgs
+  pure $ ctorMetas ++ argsMetas
 
 occursCheck :: MetaPtr -> Ty -> Expand ()
 occursCheck ptr t = do
@@ -102,22 +100,29 @@ inst :: Scheme Ty -> [Ty] -> Expand Ty
 inst (Scheme n ty) ts
   | length ts /= fromIntegral n =
     throwError $ InternalError "Mismatch in number of type vars"
-  | otherwise = instNorm ty
+  | otherwise = instTy ty
   where
-    instNorm t = do
+    instTy :: Ty -> Expand Ty
+    instTy t = do
       t' <- normType t
-      Ty <$> inst' (unTy t')
+      Ty <$> instTyF (unTy t')
 
-    inst' (TFun a b) = TFun <$> instNorm a <*> instNorm b
-    inst' (TMacro a) = TMacro <$> instNorm a
-    inst' (TDatatype dt tArgs) = TDatatype dt <$> traverse instNorm tArgs
-    inst' (TSchemaVar i) = pure . unTy $ ts !! fromIntegral i
-    inst' otherTy = pure otherTy
+    instTyF :: TyF Ty -> Expand (TyF Ty)
+    instTyF (TyF ctor tArgs) = do
+      let TyF ctor' tArgsPrefix = instCtor ctor
+      tArgsSuffix <- traverse instTy tArgs
+      pure $ TyF ctor' (tArgsPrefix ++ tArgsSuffix)
+
+    instCtor :: TypeConstructor -> TyF Ty
+    instCtor (TSchemaVar i) = unTy $ ts !! fromIntegral i
+    instCtor ctor           = TyF ctor []
 
 
 specialize :: Scheme Ty -> Expand Ty
 specialize sch@(Scheme n _) = do
-  freshVars <- replicateM (fromIntegral n) $ Ty . TMetaVar <$> freshMeta
+  freshVars <- replicateM (fromIntegral n) $ do
+    meta <- freshMeta
+    pure $ Ty $ TyF (TMetaVar meta) []
   inst sch freshVars
 
 varType :: Var -> Expand (Maybe (Scheme Ty))
@@ -152,23 +157,19 @@ generalizeType ty = do
       StateT (Natural, Map MetaPtr Natural) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
-      Ty <$> genVars vars t'
+      Ty <$> genVarsTyF vars t'
 
-    genVars ::
+    genVarsTyF ::
       [MetaPtr] -> TyF Ty ->
       StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
-    genVars _ TSyntax = pure TSyntax
-    genVars _ TString = pure TString
-    genVars _ TSignal = pure TSignal
-    genVars vars (TFun dom ran) =
-      TFun <$> genTyVars vars dom <*> genTyVars vars ran
-    genVars vars (TMacro a) = TMacro <$> genTyVars vars a
-    genVars _ TType = pure TType
-    genVars vars (TDatatype d args) =
-      TDatatype d <$> traverse (genTyVars vars) args
-    genVars _ (TSchemaVar _) =
-      throwError $ InternalError "Can't generalize in schema"
-    genVars vars (TMetaVar v)
+    genVarsTyF vars (TyF ctor args) =
+      TyF <$> genVarsCtor vars ctor
+          <*> traverse (genTyVars vars) args
+
+    genVarsCtor ::
+      [MetaPtr] -> TypeConstructor ->
+      StateT (Natural, Map MetaPtr Natural) Expand TypeConstructor
+    genVarsCtor vars (TMetaVar v)
       | v `elem` vars = do
           (i, indices) <- get
           case Map.lookup v indices of
@@ -177,13 +178,16 @@ generalizeType ty = do
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
+    genVarsCtor _ (TSchemaVar _) =
+      throwError $ InternalError "Can't generalize in schema"
+    genVarsCtor _ ctor =
+      pure ctor
 
 
 makeTypeMetas :: Natural -> Expand [Ty]
-makeTypeMetas 0 =
-  pure []
-makeTypeMetas n =
-  (:) <$> (Ty . TMetaVar <$> freshMeta) <*> makeTypeMetas (n - 1)
+makeTypeMetas n = replicateM (fromIntegral n) $ do
+  meta <- freshMeta
+  pure $ Ty $ TyF (TMetaVar meta) []
 
 class UnificationErrorBlame a where
   getBlameLoc :: a -> Expand (Maybe SrcLoc)
@@ -202,41 +206,47 @@ unifyWithBlame :: UnificationErrorBlame blame => (blame, Ty, Ty) -> Natural -> T
 unifyWithBlame blame depth t1 t2 = do
   t1' <- normType t1
   t2' <- normType t2
-  unify' (unTy t1') (unTy t2')
+  unifyTyFs (unTy t1') (unTy t2')
 
   where
-    unify' :: TyF Ty -> TyF Ty -> Expand ()
-    -- Rigid-rigid
-    unify' TType TType = pure ()
-    unify' TSyntax TSyntax = pure ()
-    unify' TString TString = pure ()
-    unify' TSignal TSignal = pure ()
-    unify' (TFun a c) (TFun b d) = unifyWithBlame blame (depth + 1) b a >> unifyWithBlame blame (depth + 1) c d
-    unify' (TMacro a) (TMacro b) = unifyWithBlame blame (depth + 1) a b
-    unify' (TDatatype dt1 args1) (TDatatype dt2 args2)
-      | dt1 == dt2 = traverse_ (uncurry (unifyWithBlame blame (depth + 1))) (zip args1 args2)
+    unifyTyFs :: TyF Ty -> TyF Ty -> Expand ()
 
     -- Flex-flex
-    unify' (TMetaVar ptr1) (TMetaVar ptr2) = do
-      l1 <- view varLevel <$> derefType ptr1
-      l2 <- view varLevel <$> derefType ptr2
-      if | ptr1 == ptr2 -> pure ()
-         | l1 < l2 -> linkToType ptr1 t2
-         | otherwise -> linkToType ptr2 t1
+    unifyTyFs (TyF (TMetaVar ptr1) args1) (TyF (TMetaVar ptr2) args2) =
+      if null args1 && null args2
+      then do
+        l1 <- view varLevel <$> derefType ptr1
+        l2 <- view varLevel <$> derefType ptr2
+        if | ptr1 == ptr2 -> pure ()
+           | l1 < l2 -> linkToType ptr1 t2
+           | otherwise -> linkToType ptr2 t1
+      else throwError $ InternalError "type variable cannot have parameters (yet)"
 
     -- Flex-rigid
-    unify' (TMetaVar ptr1) _ = linkToType ptr1 t2
-    unify' _ (TMetaVar ptr2) = linkToType ptr2 t1
+    unifyTyFs (TyF (TMetaVar ptr1) args1) _ =
+      if null args1
+      then linkToType ptr1 t2
+      else throwError $ InternalError "type variable cannot have parameters (yet)"
+    unifyTyFs _ (TyF (TMetaVar ptr2) args2) =
+      if null args2
+      then linkToType ptr2 t1
+      else throwError $ InternalError "type variable cannot have parameters (yet)"
 
-    -- Mismatch
-    unify' expected received = do
-      let (here, outerExpected, outerReceived) = blame
-      loc <- getBlameLoc here
-      e' <- normAll $ Ty expected
-      r' <- normAll $ Ty received
-      if depth == 0
-        then throwError $ TypeCheckError $ TypeMismatch loc e' r' Nothing
-        else do
-          outerE' <- normAll outerExpected
-          outerR' <- normAll outerReceived
-          throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
+    unifyTyFs expected@(TyF ctor1 args1) received@(TyF ctor2 args2) =
+      if ctor1 == ctor2 && length args1 == length args2
+      then do
+        -- Rigid-rigid
+        for_ (zip args1 args2) $ \(arg1, arg2) -> do
+          unifyWithBlame blame (depth + 1) arg1 arg2
+      else do
+        -- Mismatch
+        let (here, outerExpected, outerReceived) = blame
+        loc <- getBlameLoc here
+        e' <- normAll $ Ty expected
+        r' <- normAll $ Ty received
+        if depth == 0
+          then throwError $ TypeCheckError $ TypeMismatch loc e' r' Nothing
+          else do
+            outerE' <- normAll outerExpected
+            outerR' <- normAll outerReceived
+            throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))

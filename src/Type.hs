@@ -25,18 +25,25 @@ newMetaPtr = MetaPtr <$> newUnique
 instance Show MetaPtr where
   show (MetaPtr i) = "(MetaPtr " ++ show (hashUnique i) ++ ")"
 
-data TyF t
+data TypeConstructor
   = TSyntax
   | TSignal
   | TString
-  | TFun t t
-  | TMacro t
+  | TFun
+  | TMacro
   | TType
-  | TDatatype Datatype [t]
+  | TDatatype Datatype
   | TSchemaVar Natural
   | TMetaVar MetaPtr
+  deriving (Eq, Show)
+makePrisms ''TypeConstructor
+
+data TyF t = TyF
+  { outermostCtor :: TypeConstructor
+  , typeArgs      :: [t]
+  }
   deriving (Eq, Foldable, Functor, Show, Traversable)
-makePrisms ''TyF
+makeLenses ''TyF
 
 data VarKind t = NoLink | Link (TyF t)
   deriving (Functor, Show)
@@ -73,23 +80,39 @@ newtype Ty = Ty
   deriving (Eq, Show)
 makePrisms ''Ty
 
+tSyntax :: Ty
+tSyntax = Ty $ TyF TSyntax []
+
+tSignal :: Ty
+tSignal = Ty $ TyF TSignal []
+
+tString :: Ty
+tString = Ty $ TyF TString []
+
+tFun :: Ty -> Ty -> Ty
+tFun t1 t2 = Ty $ TyF TFun [t1, t2]
+infixr 9 `tFun`
+
+tMacro :: Ty -> Ty
+tMacro t = Ty $ TyF TMacro [t]
+
+tType :: Ty
+tType = Ty $ TyF TType []
+
+tDatatype :: Datatype -> [Ty] -> Ty
+tDatatype x ts = Ty $ TyF (TDatatype x) ts
+
+tSchemaVar :: Natural -> Ty
+tSchemaVar x = Ty $ TyF (TSchemaVar x) []
+
+tMetaVar :: MetaPtr -> Ty
+tMetaVar x = Ty $ TyF (TMetaVar x) []
+
 instance AlphaEq a => AlphaEq (TyF a) where
-  alphaCheck TSyntax TSyntax = pure ()
-  alphaCheck TSignal TSignal = pure ()
-  alphaCheck (TFun a1 b1) (TFun a2 b2) = do
-    alphaCheck a1 a2
-    alphaCheck b1 b2
-  alphaCheck (TMacro a) (TMacro b) =
-    alphaCheck a b
-  alphaCheck (TDatatype a args1) (TDatatype b args2) = do
-    guard (a == b)
+  alphaCheck (TyF ctor1 args1) (TyF ctor2 args2) = do
+    guard (ctor1 == ctor2)
     guard (length args1 == length args2)
     for_ (zip args1 args2) (uncurry alphaCheck)
-  alphaCheck (TSchemaVar i) (TSchemaVar j) =
-    guard (i == j)
-  alphaCheck (TMetaVar α) (TMetaVar β) =
-    guard (α == β)
-  alphaCheck _ _ = notAlphaEquivalent
 
 instance ShortShow a => ShortShow (TyF a) where
   shortShow t = show (fmap shortShow t)
