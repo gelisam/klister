@@ -382,12 +382,12 @@ initializeKernel = do
   where
     typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
-      [ ("Syntax", Prims.baseType $ TyF TSyntax [])
-      , ("String", Prims.baseType $ TyF TString [])
-      , ("Signal", Prims.baseType $ TyF TSignal [])
+      [ ("Syntax", Prims.baseType tSyntax)
+      , ("String", Prims.baseType tString)
+      , ("Signal", Prims.baseType tSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
-      , ("Type", Prims.baseType $ TyF TType [])
+      , ("Type", Prims.baseType tType)
       ]
 
     funPrims :: [(Text, Scheme Ty, Value)]
@@ -504,7 +504,7 @@ initializeKernel = do
                  then throwError $ WrongDatatypeArity stx dt arity (length args)
                  else do
                    argDests <- traverse scheduleType args
-                   linkType dest $ TyF (TDatatype dt) argDests
+                   linkType dest $ tDatatype dt argDests
           patImpl =
             \dest stx -> do
               Stx _ _ (me, args) <- mustBeCons stx
@@ -520,7 +520,7 @@ initializeKernel = do
                          | (sc, n, x) <- varInfo
                          ]
                   linkTypePattern dest $
-                    TypePattern $ TyF (TDatatype dt) [(varStx, var) | (_, varStx, var) <- varInfo]
+                    TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
       let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val
@@ -1053,7 +1053,7 @@ expandOneForm prob stx
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar i -> do
           dest <- requireTypeCtx stx prob
-          linkType dest $ TyF (TSchemaVar i) []
+          linkType dest $ tSchemaVar i
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpressionCtx stx prob
           forkAwaitingDefn x n b d t dest stx

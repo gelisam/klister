@@ -499,7 +499,7 @@ arrowType = (implT, implP)
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
       argDest <- scheduleType arg
       retDest <- scheduleType ret
-      linkType dest $ TyF TFun [argDest, retDest]
+      linkType dest (argDest `tFun` retDest)
     implP dest stx = do
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
       (sc1, n1, x1) <- prepareVar arg
@@ -508,10 +508,10 @@ arrowType = (implT, implP)
       modifyState $
         set (expanderPatternBinders . at (Right dest)) $
         Just [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
-      linkTypePattern dest $ TypePattern $ TyF TFun [(n1, x1), (n2, x2)]
+      linkTypePattern dest $ TypePattern ((n1, x1) `tFun` (n2, x2))
 
 macroType :: TypePrim
-macroType = unaryType (\a -> TyF TMacro [a])
+macroType = unaryType (\a -> tMacro a)
 
 unaryType :: (forall a . a -> TyF a) -> TypePrim
 unaryType ctor = (implT, implP)
@@ -610,7 +610,7 @@ addDatatype name dt arity = do
             then throwError $ WrongDatatypeArity stx dt arity (length args)
             else do
               argDests <- traverse scheduleType args
-              linkType dest $ TyF (TDatatype dt) argDests
+              linkType dest $ tDatatype dt argDests
       implPat =
         \dest stx -> do
           Stx _ _ (me, args) <- mustBeCons stx
@@ -625,7 +625,7 @@ addDatatype name dt arity = do
                 Just [ (sc, n, x, sch)
                      | (sc, n, x) <- patVarInfo
                      ]
-              linkTypePattern dest $ TypePattern $ TyF (TDatatype dt) [(n, x) | (_, n, x) <- patVarInfo]
+              linkTypePattern dest $ TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo]
   let val = EPrimTypeMacro implType implPat
   b <- freshBinding
   addDefinedBinding name' b
