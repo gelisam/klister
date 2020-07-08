@@ -97,19 +97,18 @@ class TyLike a arg | a -> arg where
   tSyntax    :: a
   tSignal    :: a
   tString    :: a
-  tFun       :: arg -> arg -> a
+  tFun1      :: arg -> arg -> a
   tMacro     :: arg -> a
   tType      :: a
   tDatatype  :: Datatype -> [arg] -> a
   tSchemaVar :: Natural -> a
   tMetaVar   :: MetaPtr -> a
-infixr 9 `tFun`
 
 instance TyLike (TyF a) a where
   tSyntax        = TyF TSyntax []
   tSignal        = TyF TSignal []
   tString        = TyF TString []
-  tFun t1 t2     = TyF TFun [t1, t2]
+  tFun1 t1 t2    = TyF TFun [t1, t2]
   tMacro t       = TyF TMacro [t]
   tType          = TyF TType []
   tDatatype x ts = TyF (TDatatype x) ts
@@ -120,9 +119,12 @@ instance TyLike Ty Ty where
   tSyntax        = Ty $ tSyntax
   tSignal        = Ty $ tSignal
   tString        = Ty $ tString
-  tFun t1 t2     = Ty $ tFun t1 t2
+  tFun1 t1 t2    = Ty $ tFun1 t1 t2
   tMacro t       = Ty $ tMacro t
   tType          = Ty $ tType
   tDatatype x ts = Ty $ tDatatype x ts
   tSchemaVar x   = Ty $ tSchemaVar x
   tMetaVar x     = Ty $ tMetaVar x
+
+tFun :: [Ty] -> Ty -> Ty
+tFun args result = foldr tFun1 result args

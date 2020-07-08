@@ -172,7 +172,7 @@ defineMacros dest outScopesDest stx = do
     b <- freshBinding
     addDefinedBinding theName b
     macroDest <- inEarlierPhase $
-                   schedule (tSyntax `tFun` tMacro tSyntax)
+                   schedule (tFun1 tSyntax (tMacro tSyntax))
                      (addScope p mdef sc)
     v <- freshMacroVar
     bind b $ EIncompleteMacro v theName macroDest
@@ -261,7 +261,7 @@ flet t dest stx = do
              withLocalVarType x' coreX xsch $
              schedule rt $
              addScope p (addScope p (addScope p def fsc) xsc) psc
-  unify dest ft (xt `tFun` rt)
+  unify dest ft (tFun1 xt rt)
   sch <- liftIO newSchemePtr
   forkGeneralizeType defDest ft sch
   bodyDest <- withLocalVarType f' coreF sch $
@@ -278,7 +278,7 @@ lambda t dest stx = do
   psc <- phaseRoot
   argT <- tMetaVar <$> freshMeta
   retT <- tMetaVar <$> freshMeta
-  unify dest t (argT `tFun` retT)
+  unify dest t (tFun1 argT retT)
   sch <- trivialScheme argT
   bodyDest <-
     withLocalVarType arg' coreArg sch $
@@ -289,7 +289,7 @@ app :: ExprPrim
 app t dest stx = do
   argT <- tMetaVar <$> freshMeta
   Stx _ _ (_, fun, arg) <- mustHaveEntries stx
-  funDest <- schedule (argT `tFun` t) fun
+  funDest <- schedule (tFun1 argT t) fun
   argDest <- schedule argT arg
   linkExpr dest $ CoreApp funDest argDest
 
@@ -308,7 +308,7 @@ bindMacro t dest stx = do
   b <- tMetaVar <$> freshMeta
   Stx _ _ (_, act, cont) <- mustHaveEntries stx
   actDest <- schedule (tMacro a) act
-  contDest <- schedule (a `tFun` tMacro b) cont
+  contDest <- schedule (tFun1 a (tMacro b)) cont
   unify dest t (tMacro b)
   linkExpr dest $ CoreBind actDest contDest
 
@@ -431,7 +431,7 @@ letSyntax t dest stx = do
   v <- freshMacroVar
   macroDest <- inEarlierPhase $ do
     psc <- phaseRoot
-    schedule (tSyntax `tFun` tMacro tSyntax)
+    schedule (tFun1 tSyntax (tMacro tSyntax))
       (addScope (prior p) mdef psc)
   forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
 
@@ -444,7 +444,7 @@ makeIntroducer t dest stx = do
 
   where
     theType =
-      tMacro (primitiveDatatype "ScopeAction" [] `tFun` tSyntax `tFun` tSyntax)
+      tMacro (tFun [primitiveDatatype "ScopeAction" [], tSyntax] tSyntax)
 
 log :: ExprPrim
 log t dest stx = do
@@ -499,7 +499,7 @@ arrowType = (implT, implP)
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
       argDest <- scheduleType arg
       retDest <- scheduleType ret
-      linkType dest (argDest `tFun` retDest)
+      linkType dest (tFun1 argDest retDest)
     implP dest stx = do
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
       (sc1, n1, x1) <- prepareVar arg
@@ -508,7 +508,7 @@ arrowType = (implT, implP)
       modifyState $
         set (expanderPatternBinders . at (Right dest)) $
         Just [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
-      linkTypePattern dest $ TypePattern ((n1, x1) `tFun` (n2, x2))
+      linkTypePattern dest $ TypePattern (tFun1 (n1, x1) (n2, x2))
 
 macroType :: TypePrim
 macroType = unaryType (\a -> tMacro a)

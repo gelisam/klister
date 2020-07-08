@@ -393,7 +393,7 @@ initializeKernel = do
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
       [ ( "string=?"
-        , Scheme 0 (tString `tFun` tString `tFun` Prims.primitiveDatatype "Bool" [])
+        , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
@@ -403,7 +403,7 @@ initializeKernel = do
                 else primitiveCtor "false" []
         )
       , ( "string-append"
-        , Scheme 0 (tString `tFun` tString `tFun` tString)
+        , Scheme 0 $ tFun [tString, tString] tString
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
