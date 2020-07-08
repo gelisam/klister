@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Type where
@@ -80,34 +83,6 @@ newtype Ty = Ty
   deriving (Eq, Show)
 makePrisms ''Ty
 
-tSyntax :: Ty
-tSyntax = Ty $ TyF TSyntax []
-
-tSignal :: Ty
-tSignal = Ty $ TyF TSignal []
-
-tString :: Ty
-tString = Ty $ TyF TString []
-
-tFun :: Ty -> Ty -> Ty
-tFun t1 t2 = Ty $ TyF TFun [t1, t2]
-infixr 9 `tFun`
-
-tMacro :: Ty -> Ty
-tMacro t = Ty $ TyF TMacro [t]
-
-tType :: Ty
-tType = Ty $ TyF TType []
-
-tDatatype :: Datatype -> [Ty] -> Ty
-tDatatype x ts = Ty $ TyF (TDatatype x) ts
-
-tSchemaVar :: Natural -> Ty
-tSchemaVar x = Ty $ TyF (TSchemaVar x) []
-
-tMetaVar :: MetaPtr -> Ty
-tMetaVar x = Ty $ TyF (TMetaVar x) []
-
 instance AlphaEq a => AlphaEq (TyF a) where
   alphaCheck (TyF ctor1 args1) (TyF ctor2 args2) = do
     guard (ctor1 == ctor2)
@@ -116,3 +91,38 @@ instance AlphaEq a => AlphaEq (TyF a) where
 
 instance ShortShow a => ShortShow (TyF a) where
   shortShow t = show (fmap shortShow t)
+
+
+class TyLike a arg | a -> arg where
+  tSyntax    :: a
+  tSignal    :: a
+  tString    :: a
+  tFun       :: arg -> arg -> a
+  tMacro     :: arg -> a
+  tType      :: a
+  tDatatype  :: Datatype -> [arg] -> a
+  tSchemaVar :: Natural -> a
+  tMetaVar   :: MetaPtr -> a
+infixr 9 `tFun`
+
+instance TyLike (TyF a) a where
+  tSyntax        = TyF TSyntax []
+  tSignal        = TyF TSignal []
+  tString        = TyF TString []
+  tFun t1 t2     = TyF TFun [t1, t2]
+  tMacro t       = TyF TMacro [t]
+  tType          = TyF TType []
+  tDatatype x ts = TyF (TDatatype x) ts
+  tSchemaVar x   = TyF (TSchemaVar x) []
+  tMetaVar x     = TyF (TMetaVar x) []
+
+instance TyLike Ty Ty where
+  tSyntax        = Ty $ tSyntax
+  tSignal        = Ty $ tSignal
+  tString        = Ty $ tString
+  tFun t1 t2     = Ty $ tFun t1 t2
+  tMacro t       = Ty $ tMacro t
+  tType          = Ty $ tType
+  tDatatype x ts = Ty $ tDatatype x ts
+  tSchemaVar x   = Ty $ tSchemaVar x
+  tMetaVar x     = Ty $ tMetaVar x
