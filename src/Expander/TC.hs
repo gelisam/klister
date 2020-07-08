@@ -111,6 +111,10 @@ inst (Scheme n ty) ts
     instTyF (TyF ctor tArgs) = do
       let TyF ctor' tArgsPrefix = instCtor ctor
       tArgsSuffix <- traverse instTy tArgs
+
+      -- If ctor was a TSchemaVar which got instantiated to a partially applied
+      -- type constructor such as (TyF TFun [TSignal]), we want to append the remaining
+      -- type arguments, e.g. [TSyntax], in order to get (TyF TFun [TSignal, TSyntax]).
       pure $ TyF ctor' (tArgsPrefix ++ tArgsSuffix)
 
     instCtor :: TypeConstructor -> TyF Ty
