@@ -1,7 +1,10 @@
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Type where
@@ -25,18 +28,25 @@ newMetaPtr = MetaPtr <$> newUnique
 instance Show MetaPtr where
   show (MetaPtr i) = "(MetaPtr " ++ show (hashUnique i) ++ ")"
 
-data TyF t
+data TypeConstructor
   = TSyntax
   | TSignal
   | TString
-  | TFun t t
-  | TMacro t
+  | TFun
+  | TMacro
   | TType
-  | TDatatype Datatype [t]
+  | TDatatype Datatype
   | TSchemaVar Natural
   | TMetaVar MetaPtr
+  deriving (Eq, Show)
+makePrisms ''TypeConstructor
+
+data TyF t = TyF
+  { outermostCtor :: TypeConstructor
+  , typeArgs      :: [t]
+  }
   deriving (Eq, Foldable, Functor, Show, Traversable)
-makePrisms ''TyF
+makeLenses ''TyF
 
 data VarKind t = NoLink | Link (TyF t)
   deriving (Functor, Show)
@@ -74,22 +84,47 @@ newtype Ty = Ty
 makePrisms ''Ty
 
 instance AlphaEq a => AlphaEq (TyF a) where
-  alphaCheck TSyntax TSyntax = pure ()
-  alphaCheck TSignal TSignal = pure ()
-  alphaCheck (TFun a1 b1) (TFun a2 b2) = do
-    alphaCheck a1 a2
-    alphaCheck b1 b2
-  alphaCheck (TMacro a) (TMacro b) =
-    alphaCheck a b
-  alphaCheck (TDatatype a args1) (TDatatype b args2) = do
-    guard (a == b)
+  alphaCheck (TyF ctor1 args1) (TyF ctor2 args2) = do
+    guard (ctor1 == ctor2)
     guard (length args1 == length args2)
     for_ (zip args1 args2) (uncurry alphaCheck)
-  alphaCheck (TSchemaVar i) (TSchemaVar j) =
-    guard (i == j)
-  alphaCheck (TMetaVar α) (TMetaVar β) =
-    guard (α == β)
-  alphaCheck _ _ = notAlphaEquivalent
 
 instance ShortShow a => ShortShow (TyF a) where
   shortShow t = show (fmap shortShow t)
+
+
+class TyLike a arg | a -> arg where
+  tSyntax    :: a
+  tSignal    :: a
+  tString    :: a
+  tFun1      :: arg -> arg -> a
+  tMacro     :: arg -> a
+  tType      :: a
+  tDatatype  :: Datatype -> [arg] -> a
+  tSchemaVar :: Natural -> a
+  tMetaVar   :: MetaPtr -> a
+
+instance TyLike (TyF a) a where
+  tSyntax        = TyF TSyntax []
+  tSignal        = TyF TSignal []
+  tString        = TyF TString []
+  tFun1 t1 t2    = TyF TFun [t1, t2]
+  tMacro t       = TyF TMacro [t]
+  tType          = TyF TType []
+  tDatatype x ts = TyF (TDatatype x) ts
+  tSchemaVar x   = TyF (TSchemaVar x) []
+  tMetaVar x     = TyF (TMetaVar x) []
+
+instance TyLike Ty Ty where
+  tSyntax        = Ty $ tSyntax
+  tSignal        = Ty $ tSignal
+  tString        = Ty $ tString
+  tFun1 t1 t2    = Ty $ tFun1 t1 t2
+  tMacro t       = Ty $ tMacro t
+  tType          = Ty $ tType
+  tDatatype x ts = Ty $ tDatatype x ts
+  tSchemaVar x   = Ty $ tSchemaVar x
+  tMetaVar x     = Ty $ tMetaVar x
+
+tFun :: [Ty] -> Ty -> Ty
+tFun args result = foldr tFun1 result args

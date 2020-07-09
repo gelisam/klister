@@ -86,7 +86,7 @@ import qualified ScopeSet
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  t <- Ty . TMetaVar <$> freshMeta
+  t <- tMetaVar <$> freshMeta
   forkExpandSyntax (ExprDest t dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
@@ -382,18 +382,18 @@ initializeKernel = do
   where
     typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
-      [ ("Syntax", Prims.baseType TSyntax)
-      , ("String", Prims.baseType TString)
-      , ("Signal", Prims.baseType TSignal)
+      [ ("Syntax", Prims.baseType tSyntax)
+      , ("String", Prims.baseType tString)
+      , ("Signal", Prims.baseType tSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
-      , ("Type", Prims.baseType TType)
+      , ("Type", Prims.baseType tType)
       ]
 
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
       [ ( "string=?"
-        , Scheme 0 $ Ty (TFun (Ty TString) (Ty (TFun (Ty TString) (Prims.primitiveDatatype "Bool" []))))
+        , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
@@ -403,7 +403,7 @@ initializeKernel = do
                 else primitiveCtor "false" []
         )
       , ( "string-append"
-        , Scheme 0 $ Ty (TFun (Ty TString) (Ty (TFun (Ty TString) (Ty TString))))
+        , Scheme 0 $ tFun [tString, tString] tString
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
@@ -417,8 +417,8 @@ initializeKernel = do
       [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", 0, [("unit", [])])
       , ("Bool", 0, [("true", []), ("false", [])])
-      , ("Problem", 0, [("declaration", []), ("expression", [Ty TType]), ("type", []), ("pattern", [])])
-      , ("Maybe", 1, [("nothing", []), ("just", [Ty $ TSchemaVar 0])])
+      , ("Problem", 0, [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
+      , ("Maybe", 1, [("nothing", []), ("just", [tSchemaVar 0])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -504,7 +504,7 @@ initializeKernel = do
                  then throwError $ WrongDatatypeArity stx dt arity (length args)
                  else do
                    argDests <- traverse scheduleType args
-                   linkType dest $ TDatatype dt argDests
+                   linkType dest $ tDatatype dt argDests
           patImpl =
             \dest stx -> do
               Stx _ _ (me, args) <- mustBeCons stx
@@ -513,14 +513,14 @@ initializeKernel = do
                 then throwError $ WrongDatatypeArity stx dt arity (length args)
                 else do
                   varInfo <- traverse Prims.prepareVar args
-                  sch <- trivialScheme $ Ty TType
+                  sch <- trivialScheme tType
                   modifyState $
                     set (expanderPatternBinders . at (Right dest)) $
                     Just [ (sc, n, x, sch)
                          | (sc, n, x) <- varInfo
                          ]
                   linkTypePattern dest $
-                    TypePattern $ TDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
+                    TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
       let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val
@@ -745,11 +745,13 @@ runTask (tid, localData, task) = withLocal localData $ do
     AwaitingTypeCase loc dest ty env cases kont -> do
       Ty t <- normType ty
       case t of
-        TMetaVar ptr' ->
+        TyF (TMetaVar ptr') [] -> do
           -- Always wait on the canonical representative
           case ty of
-            Ty (TMetaVar ptr) | ptr == ptr' -> stillStuck tid task
-            _ -> forkAwaitingTypeCase loc dest (Ty (TMetaVar ptr')) env cases kont
+            Ty (TyF (TMetaVar ptr) []) | ptr == ptr' -> stillStuck tid task
+            _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
+        TyF (TMetaVar _) _ -> do
+          throwError $ InternalError "type variable cannot have parameters (yet)"
         other -> do
           selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           case selectedBranch of
@@ -990,7 +992,7 @@ expandOneForm prob stx
           case prob of
             ExprDest t dest -> do
               argTys <- makeTypeMetas arity
-              unify dest t (Ty (TDatatype dt argTys))
+              unify dest t $ tDatatype dt argTys
               args' <- for args \a -> inst (Scheme arity a) argTys
               Stx _ _ (foundName, foundArgs) <- mustBeCons stx
               _ <- mustBeIdent foundName
@@ -1007,7 +1009,7 @@ expandOneForm prob stx
               argTypes <- for args \ a -> do
                             t <- inst (Scheme arity a) tyArgs
                             trivialScheme t
-              unify loc (Ty (TDatatype dt tyArgs)) patTy
+              unify loc (tDatatype dt tyArgs) patTy
               if length patVars /= length argTypes
                 then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
                 else do
@@ -1051,7 +1053,7 @@ expandOneForm prob stx
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar i -> do
           dest <- requireTypeCtx stx prob
-          linkType dest (TSchemaVar i)
+          linkType dest $ tSchemaVar i
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpressionCtx stx prob
           forkAwaitingDefn x n b d t dest stx
@@ -1100,11 +1102,11 @@ expandOneForm prob stx
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
           Sig s -> do
-            unify dest (Ty TSignal) t
+            unify dest tSignal t
             expandLiteralSignal dest s
             saveExprType dest t
           String s -> do
-            unify dest (Ty TString) t
+            unify dest tString t
             expandLiteralString dest s
             saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
