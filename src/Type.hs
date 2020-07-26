@@ -48,16 +48,16 @@ data TyF t = TyF
   deriving (Eq, Foldable, Functor, Show, Traversable)
 makeLenses ''TyF
 
-data VarKind t = NoLink | Link (TyF t)
+data VarLinkage t = NoLink | Link (TyF t)
   deriving (Functor, Show)
-makePrisms ''VarKind
+makePrisms ''VarLinkage
 
 newtype BindingLevel = BindingLevel Natural
   deriving (Eq, Ord, Show)
 makePrisms ''BindingLevel
 
 data TVar t = TVar
-  { _varKind :: !(VarKind t)
+  { _varLinkage :: !(VarLinkage t)
   , _varLevel :: !BindingLevel
   }
   deriving (Functor, Show)

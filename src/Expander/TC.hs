@@ -26,10 +26,10 @@ derefType ptr =
     Just var -> pure var
 
 
-setTVKind :: MetaPtr -> VarKind Ty -> Expand ()
-setTVKind ptr k = do
+setTVLinkage :: MetaPtr -> VarLinkage Ty -> Expand ()
+setTVLinkage ptr k = do
   _ <- derefType ptr -- fail if not present
-  modifyState $ over (expanderTypeStore . at ptr) $ fmap (set varKind k)
+  modifyState $ over (expanderTypeStore . at ptr) $ fmap (set varLinkage k)
 
 setTVLevel :: MetaPtr -> BindingLevel -> Expand ()
 setTVLevel ptr l = do
@@ -42,10 +42,10 @@ normType t@(unTy -> TyF (TMetaVar ptr) args) =
   if null args
   then do
     tv <- derefType ptr
-    case view varKind tv of
+    case view varLinkage tv of
       Link found -> do
         t' <- normType (Ty found)
-        setTVKind ptr (Link (unTy t'))
+        setTVLinkage ptr (Link (unTy t'))
         return t'
       _ -> return t
   else throwError $ InternalError "type variable cannot have parameters (yet)"
@@ -87,7 +87,7 @@ linkToType var ty = do
   lvl <- view varLevel <$> derefType var
   occursCheck var ty
   pruneLevel lvl =<< metas ty
-  setTVKind var (Link (unTy ty))
+  setTVLinkage var (Link (unTy ty))
 
 freshMeta :: Expand MetaPtr
 freshMeta = do
