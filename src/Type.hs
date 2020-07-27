@@ -18,6 +18,7 @@ import Numeric.Natural
 
 import Alpha
 import Datatype
+import Kind
 import ShortShow
 
 newtype MetaPtr = MetaPtr Unique deriving (Eq, Ord)
@@ -75,7 +76,7 @@ instance Ixed (TypeStore t) where
 instance At (TypeStore t) where
   at x f (TypeStore env) = TypeStore <$> at x f env
 
-data Scheme t = Scheme Natural t deriving (Eq, Show)
+data Scheme t = Scheme [Kind] t deriving (Eq, Show)
 makeLenses ''Scheme
 
 newtype Ty = Ty

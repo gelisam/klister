@@ -66,6 +66,7 @@ import Expander.DeclScope
 import Expander.Syntax
 import Expander.Monad
 import Expander.TC
+import Kind
 import Module
 import ModuleName
 import Parser
@@ -287,7 +288,10 @@ evalMod (Expanded em _) = execWriterT $ do
             Map.insert cn (ConstructorInfo argTypes dt)
           lift $ modifyState $
             over (expanderWorld . worldDatatypes . at p . non Map.empty) $
-            Map.insert dt (DatatypeInfo arity [c | (_, c, _) <- ctors ])
+            Map.insert dt $ DatatypeInfo
+              { _datatypeArgKinds     = replicate (fromIntegral arity) KStar
+              , _datatypeConstructors = [c | (_, c, _) <- ctors ]
+              }
 
         Example loc sch expr -> do
           env <- lift currentEnv
@@ -393,7 +397,7 @@ initializeKernel = do
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
       [ ( "string=?"
-        , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
+        , Scheme [] $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
@@ -403,7 +407,7 @@ initializeKernel = do
                 else primitiveCtor "false" []
         )
       , ( "string-append"
-        , Scheme 0 $ tFun [tString, tString] tString
+        , Scheme [] $ tFun [tString, tString] tString
         , ValueClosure $ HO $
           \(ValueString str1) ->
             ValueClosure $ HO $
@@ -543,7 +547,7 @@ initializeKernel = do
 
       let info =
             DatatypeInfo
-            { _datatypeArity = arity
+            { _datatypeArgKinds = replicate (fromIntegral arity) KStar
             , _datatypeConstructors = ctors'
             }
       modifyState $
@@ -988,12 +992,12 @@ expandOneForm prob stx
           saveExprType dest t
         EConstructor ctor -> do
           ConstructorInfo args dt <- constructorInfo ctor
-          DatatypeInfo arity _ <- datatypeInfo dt
+          DatatypeInfo argKinds _ <- datatypeInfo dt
           case prob of
             ExprDest t dest -> do
-              argTys <- makeTypeMetas arity
+              argTys <- traverse makeTypeMeta argKinds
               unify dest t $ tDatatype dt argTys
-              args' <- for args \a -> inst (Scheme arity a) argTys
+              args' <- for args \a -> inst (Scheme argKinds a) argTys
               Stx _ _ (foundName, foundArgs) <- mustBeCons stx
               _ <- mustBeIdent foundName
               argDests <-
@@ -1005,9 +1009,9 @@ expandOneForm prob stx
               saveExprType dest t
             PatternDest _exprTy patTy dest -> do
               Stx _ loc (_cname, patVars) <- mustBeCons stx
-              tyArgs <- makeTypeMetas arity
+              tyArgs <- traverse makeTypeMeta argKinds
               argTypes <- for args \ a -> do
-                            t <- inst (Scheme arity a) tyArgs
+                            t <- inst (Scheme argKinds a) tyArgs
                             trivialScheme t
               unify loc (tDatatype dt tyArgs) patTy
               if length patVars /= length argTypes

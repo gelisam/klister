@@ -75,6 +75,7 @@ import Expander.DeclScope
 import Expander.Monad
 import Expander.Syntax
 import Expander.TC
+import Kind
 import Module
 import ModuleName
 import Phase
@@ -147,7 +148,7 @@ datatype dest outScopesDest stx = do
 
   let info =
         DatatypeInfo
-        { _datatypeArity = fromIntegral arity
+        { _datatypeArgKinds = replicate arity KStar
         , _datatypeConstructors =
           [ ctor | (_, ctor, _) <- ctors ]
         }

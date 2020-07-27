@@ -25,6 +25,7 @@ import Core
 import Datatype
 import Env
 import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
+import Kind
 import Module
 import ModuleName
 import KlisterPath
@@ -292,16 +293,22 @@ instance PrettyBinder VarInfo [CompleteDecl] where
                      in (doc:docs, e'')
 
 
+instance Pretty VarInfo Kind where
+  pp _   KStar        = text "*"
+  pp env (KFun k1 k2) = parens (pp env k1 <+> pp env k2)
+
 instance Pretty VarInfo (Scheme Ty) where
-  pp env (Scheme 0 t) =
+  pp env (Scheme [] t) =
     pp env t
-  pp env (Scheme n t) =
+  pp env (Scheme argKinds t) =
     text "∀" <>
     (align $ group $
      vsep [ group $
-            vsep (map text (take (fromIntegral n) typeVarNames)) <> text "."
+            vsep (zipWith ppArgKind typeVarNames argKinds) <> text "."
           , pp env t
           ])
+    where
+      ppArgKind varName kind = parens (text varName <+> text ":" <+> pp env kind)
 
 typeVarNames :: [Text]
 typeVarNames =

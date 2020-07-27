@@ -553,7 +553,7 @@ forkContinueMacroAction dest value kont = do
 trivialScheme :: Ty -> Expand SchemePtr
 trivialScheme t = do
   sch <- liftIO newSchemePtr
-  linkScheme sch (Scheme 0 t)
+  linkScheme sch (Scheme [] t)
   return sch
 
 -- | Compute the dependencies of a particular slot. The dependencies

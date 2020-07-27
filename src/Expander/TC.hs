@@ -2,7 +2,7 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS -Wno-unused-top-binds #-}
-module Expander.TC (unify, freshMeta, inst, specialize, varType, makeTypeMetas, generalizeType, normType) where
+module Expander.TC (unify, freshMeta, inst, specialize, varType, makeTypeMeta, generalizeType, normType) where
 
 import Control.Lens hiding (indices)
 import Control.Monad.Except
@@ -14,6 +14,7 @@ import Numeric.Natural
 
 import Expander.Monad
 import Core
+import Kind
 import SplitCore
 import Syntax.SrcLoc
 import Type
@@ -98,8 +99,8 @@ freshMeta = do
   return ptr
 
 inst :: Scheme Ty -> [Ty] -> Expand Ty
-inst (Scheme n ty) ts
-  | length ts /= fromIntegral n =
+inst (Scheme argKinds ty) ts
+  | length ts /= length argKinds =
     throwError $ InternalError "Mismatch in number of type vars"
   | otherwise = instTy ty
   where
@@ -124,8 +125,8 @@ inst (Scheme n ty) ts
 
 
 specialize :: Scheme Ty -> Expand Ty
-specialize sch@(Scheme n _) = do
-  freshVars <- makeTypeMetas n
+specialize sch@(Scheme argKinds _) = do
+  freshVars <- traverse makeTypeMeta argKinds
   inst sch freshVars
 
 varType :: Var -> Expand (Maybe (Scheme Ty))
@@ -150,34 +151,34 @@ notFreeInCtx var = do
 generalizeType :: Ty -> Expand (Scheme Ty)
 generalizeType ty = do
   canGeneralize <- filterM notFreeInCtx =<< metas ty
-  (body, (n, _)) <- flip runStateT (0, Map.empty) $
+  (body, (_, _, argKinds)) <- flip runStateT (0, Map.empty, []) $ do
     genTyVars canGeneralize ty
-  pure $ Scheme n body
+  pure $ Scheme argKinds body
 
   where
     genTyVars ::
       [MetaPtr] -> Ty ->
-      StateT (Natural, Map MetaPtr Natural) Expand Ty
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
       Ty <$> genVarsTyF vars t'
 
     genVarsTyF ::
       [MetaPtr] -> TyF Ty ->
-      StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand (TyF Ty)
     genVarsTyF vars (TyF ctor args) =
       TyF <$> genVarsCtor vars ctor
           <*> traverse (genTyVars vars) args
 
     genVarsCtor ::
       [MetaPtr] -> TypeConstructor ->
-      StateT (Natural, Map MetaPtr Natural) Expand TypeConstructor
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand TypeConstructor
     genVarsCtor vars (TMetaVar v)
       | v `elem` vars = do
-          (i, indices) <- get
+          (i, indices, argKinds) <- get
           case Map.lookup v indices of
             Nothing -> do
-              put (i + 1, Map.insert v i indices)
+              put (i + 1, Map.insert v i indices, argKinds ++ [KStar])
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
@@ -187,8 +188,8 @@ generalizeType ty = do
       pure ctor
 
 
-makeTypeMetas :: Natural -> Expand [Ty]
-makeTypeMetas n = replicateM (fromIntegral n) $ tMetaVar <$> freshMeta
+makeTypeMeta :: Kind -> Expand Ty
+makeTypeMeta _ = tMetaVar <$> freshMeta
 
 class UnificationErrorBlame a where
   getBlameLoc :: a -> Expand (Maybe SrcLoc)

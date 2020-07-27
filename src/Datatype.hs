@@ -5,9 +5,9 @@ module Datatype where
 import Control.Lens
 import Data.String
 import Data.Text (Text)
-import Numeric.Natural
 
 import Alpha
+import Kind
 import ModuleName
 import ShortShow
 
@@ -45,7 +45,7 @@ instance AlphaEq Constructor where
 
 data DatatypeInfo
   = DatatypeInfo
-    { _datatypeArity :: !Natural -- ^ How many arguments does it take? (first-order version of a kind)
+    { _datatypeArgKinds :: [Kind]
     , _datatypeConstructors :: ![Constructor]
     }
   deriving (Eq)
