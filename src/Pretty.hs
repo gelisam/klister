@@ -373,11 +373,11 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
           | (Stx _ _ x, v, e) <- macros
           ],
      mempty)
-  ppBind env (Data (Stx _ _ x) _dn arity ctors) =
+  ppBind env (Data (Stx _ _ x) _dn argKinds ctors) =
     (hang 2 $ group $
      vsep ( text "data" <+> text x <+>
             hsep [ text α
-                 | α <- take (fromIntegral arity) typeVarNames
+                 | α <- take (length argKinds) typeVarNames
                  ] <+>
             text "="
           : punc (space <> text "|")

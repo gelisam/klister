@@ -133,6 +133,7 @@ datatype dest outScopesDest stx = do
   realName <- mustBeIdent (addScope' name sc)
   p <- currentPhase
   let arity = length args
+  let argKinds = replicate arity KStar
   d <- freshDatatype realName
   addDatatype realName d (fromIntegral arity)
 
@@ -148,7 +149,7 @@ datatype dest outScopesDest stx = do
 
   let info =
         DatatypeInfo
-        { _datatypeArgKinds = replicate arity KStar
+        { _datatypeArgKinds = argKinds
         , _datatypeConstructors =
           [ ctor | (_, ctor, _) <- ctors ]
         }
@@ -160,7 +161,7 @@ datatype dest outScopesDest stx = do
 
   forkEstablishConstructors (ScopeSet.singleScopeAtPhase sc p) outScopesDest d ctors
 
-  linkOneDecl dest (Data realName (view datatypeName d) (fromIntegral arity) ctors)
+  linkOneDecl dest (Data realName (view datatypeName d) argKinds ctors)
 
 defineMacros :: DeclPrim
 defineMacros dest outScopesDest stx = do

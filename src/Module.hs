@@ -48,6 +48,7 @@ import Numeric.Natural
 import Binding
 import Core
 import Datatype
+import Kind
 import ModuleName
 import Phase
 import Syntax
@@ -190,8 +191,8 @@ data Decl ty scheme decl expr
   | Example SrcLoc scheme expr
   | Import ImportSpec
   | Export ExportSpec
-  | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
-    -- ^ User-written name, internal name, arity, constructors
+  | Data Ident DatatypeName [Kind] [(Ident, Constructor, [ty])]
+    -- ^ User-written name, internal name, type-argument kinds, constructors
   deriving (Functor, Show)
 
 instance Bifunctor (Decl ty scheme) where

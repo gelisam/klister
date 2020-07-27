@@ -275,7 +275,7 @@ evalMod (Expanded em _) = execWriterT $ do
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p) $
             Just . maybe (Env.singleton n x val) (Env.insert n x val)
-        Data _ dn arity ctors -> do
+        Data _ dn argKinds ctors -> do
           p <- lift currentPhase
           let mn = view moduleName em
           let dt = Datatype { _datatypeModule = mn
@@ -288,7 +288,7 @@ evalMod (Expanded em _) = execWriterT $ do
           lift $ modifyState $
             over (expanderWorld . worldDatatypes . at p . non Map.empty) $
             Map.insert dt $ DatatypeInfo
-              { _datatypeArgKinds     = replicate (fromIntegral arity) KStar
+              { _datatypeArgKinds     = argKinds
               , _datatypeConstructors = [c | (_, c, _) <- ctors ]
               }
 
