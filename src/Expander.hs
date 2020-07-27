@@ -48,7 +48,6 @@ import Data.List (nub)
 import Data.List.Extra (maximumOn)
 import qualified Data.Map as Map
 import Data.Maybe
-import Numeric.Natural
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -416,13 +415,13 @@ initializeKernel = do
         )
       ]
 
-    datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
+    datatypePrims :: [(Text, [Kind], [(Text, [Ty])])]
     datatypePrims =
-      [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
-      , ("Unit", 0, [("unit", [])])
-      , ("Bool", 0, [("true", []), ("false", [])])
-      , ("Problem", 0, [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
-      , ("Maybe", 1, [("nothing", []), ("just", [tSchemaVar 0])])
+      [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
+      , ("Unit", [], [("unit", [])])
+      , ("Bool", [], [("true", []), ("false", [])])
+      , ("Problem", [], [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
+      , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -493,8 +492,8 @@ initializeKernel = do
       where
         kernelLoc = SrcLoc "<kernel>" (SrcPos 0 0) (SrcPos 0 0)
 
-    addDatatypePrimitive :: (Text, Natural, [(Text, [Ty])]) -> Expand ()
-    addDatatypePrimitive (name, arity, ctors) = do
+    addDatatypePrimitive :: (Text, [Kind], [(Text, [Ty])]) -> Expand ()
+    addDatatypePrimitive (name, argKinds, ctors) = do
       let dn = DatatypeName name
       let dt = Datatype
                  { _datatypeModule = KernelName kernelName
@@ -504,8 +503,10 @@ initializeKernel = do
              \dest stx -> do
                Stx _ _ (me, args) <- mustBeCons stx
                _ <- mustBeIdent me
-               if length args /= fromIntegral arity
-                 then throwError $ WrongDatatypeArity stx dt arity (length args)
+               if length args /= length argKinds
+                 then throwError $ WrongDatatypeArity stx dt
+                                     (fromIntegral $ length argKinds)
+                                     (length args)
                  else do
                    argDests <- traverse scheduleType args
                    linkType dest $ tDatatype dt argDests
@@ -513,8 +514,10 @@ initializeKernel = do
             \dest stx -> do
               Stx _ _ (me, args) <- mustBeCons stx
               _ <- mustBeIdent me
-              if length args /= fromIntegral arity
-                then throwError $ WrongDatatypeArity stx dt arity (length args)
+              if length args /= length argKinds
+                then throwError $ WrongDatatypeArity stx dt
+                                    (fromIntegral $ length argKinds)
+                                    (length args)
                 else do
                   varInfo <- traverse Prims.prepareVar args
                   sch <- trivialScheme tType
@@ -547,7 +550,7 @@ initializeKernel = do
 
       let info =
             DatatypeInfo
-            { _datatypeArgKinds = replicate (fromIntegral arity) KStar
+            { _datatypeArgKinds = argKinds
             , _datatypeConstructors = ctors'
             }
       modifyState $
