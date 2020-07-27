@@ -1,1 +1,1 @@
-#<closure> : ∀α. (Syntax → α)
+#<closure> : ∀(α : *). (Syntax → α)
