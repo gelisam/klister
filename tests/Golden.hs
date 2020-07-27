@@ -13,7 +13,7 @@ import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
 import System.FilePath (replaceExtension, takeBaseName)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Golden (findByExtension, goldenVsString)
+import Test.Tasty.Golden (findByExtension, goldenVsStringDiff)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
@@ -35,13 +35,16 @@ mkGoldenTests = do
                    . filter (not . ("/failing-examples/" `List.isInfixOf`))
                    $ allKlisterFiles
   return $ testGroup "Golden tests"
-    [ goldenVsString testName goldenFile $ do
+    [ goldenVsStringDiff testName diffCmd goldenFile $ do
         outputLines <- execWriterT $ runExamples klisterFile
         pure . Text.encodeUtf8 $ outputLines
     | klisterFile <- klisterFiles
     , let testName = takeBaseName klisterFile
     , let goldenFile = replaceExtension klisterFile ".golden"
     ]
+
+diffCmd :: FilePath -> FilePath -> [String]
+diffCmd goldenFile actualFile = ["diff", "-u", goldenFile, actualFile]
 
 runExamples :: FilePath -> WriterT Text IO ()
 runExamples file = do
