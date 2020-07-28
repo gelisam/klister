@@ -604,8 +604,8 @@ getDecl ptr =
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
-    zonkDecl (Data x dn arity ctors) =
-      CompleteDecl . Data x dn arity <$> traverse zonkCtor ctors
+    zonkDecl (Data x dn argKinds ctors) =
+      CompleteDecl . Data x dn argKinds <$> traverse zonkCtor ctors
         where
           zonkCtor ::
             (Ident, Constructor, [SplitTypePtr]) ->

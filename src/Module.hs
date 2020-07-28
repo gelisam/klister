@@ -202,7 +202,7 @@ instance Bifunctor (Decl ty scheme) where
   bimap _f g (Example loc t e) = Example loc t (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
-  bimap _f _g (Data x dn arity ctors) = Data x dn arity ctors
+  bimap _f _g (Data x dn argKinds ctors) = Data x dn argKinds ctors
 
 instance (Phased decl, Phased expr) => Phased (Decl ty scheme decl expr) where
   shift i = bimap (shift i) (shift i)
