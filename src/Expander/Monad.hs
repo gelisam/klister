@@ -41,6 +41,7 @@ module Expander.Monad
   , inEarlierPhase
   , inPhase
   , isExprChecked
+  , importing
   , kernelExports
   , linkedCore
   , linkedScheme
@@ -244,6 +245,7 @@ data ExpanderLocal = ExpanderLocal
   , _expanderBindingLevels :: !(Map Phase BindingLevel)
   , _expanderVarTypes :: TypeContext Var SchemePtr
   , _expanderKlisterPath :: !KlisterPath
+  , _expanderImportStack :: [ModuleName]
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -257,6 +259,7 @@ mkInitContext mn = do
                              , _expanderBindingLevels = Map.empty
                              , _expanderVarTypes = mempty
                              , _expanderKlisterPath = kPath
+                             , _expanderImportStack = []
                              }
                            }
 
@@ -855,3 +858,10 @@ scheduleType stx = do
   dest <- liftIO newSplitTypePtr
   forkExpandType dest stx
   return dest
+
+importing :: ModuleName -> Expand a -> Expand a
+importing mn act = do
+  inProgress <- view (expanderLocal . expanderImportStack) <$> ask
+  if mn `elem` inProgress
+    then throwError $ CircularImports mn inProgress
+    else Expand $ local (over (expanderLocal . expanderImportStack) (mn:)) (runExpand act)
