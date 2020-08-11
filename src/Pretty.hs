@@ -440,7 +440,7 @@ instance Pretty VarInfo ImportSpec where
                                                   ]
 
 instance Pretty VarInfo ModuleName where
-  pp _ n = viaShow (moduleNameText n)
+  pp _ n = text (moduleNameText n)
 
 instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (Module f a) where
   pp env m =

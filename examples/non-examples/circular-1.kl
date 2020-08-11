@@ -1,0 +1,2 @@
+#lang kernel
+(import "circular-2.kl")

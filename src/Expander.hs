@@ -139,6 +139,7 @@ expandModule thisMod src = do
 
 loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
 loadModuleFile modName =
+  importing modName $
   case moduleNameToPath modName of
     Right _ ->
       do es <- kernelExports

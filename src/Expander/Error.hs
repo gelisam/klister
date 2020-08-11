@@ -12,9 +12,9 @@ import Datatype
 import Evaluator
 import Expander.Task
 import KlisterPath
+import ModuleName
 import Phase
 import Pretty
-
 import ScopeSet
 import Syntax
 import Syntax.SrcLoc
@@ -52,6 +52,7 @@ data ExpansionErr
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
   | WrongDatatypeArity Syntax Datatype Natural Int
+  | CircularImports ModuleName [ModuleName]
   deriving (Show)
 
 data TypeCheckError
@@ -176,6 +177,9 @@ instance Pretty VarInfo ExpansionErr where
                   , text "Got" <+> viaShow got
                   , text "In" <+> align (pp env stx)
                   ]
+  pp env (CircularImports current stack) =
+    hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", pp env current]
+                  , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
 
 instance Pretty VarInfo TypeCheckError where
   pp env (TypeMismatch loc expected got specifically) =
