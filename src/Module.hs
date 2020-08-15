@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Module (
@@ -38,6 +39,7 @@ module Module (
 
 import Control.Lens
 import Control.Monad.IO.Class
+import Data.Data (Data)
 import Data.Functor
 import Data.Map (Map)
 import qualified Data.Map as Map
@@ -72,10 +74,10 @@ data ImportSpec
   | ShiftImports ImportSpec Natural
   | RenameImports ImportSpec [(Ident, Ident)]
   | PrefixImports ImportSpec Text
-  deriving Show
+  deriving (Data, Show)
 
 newtype Imports = Imports (Map ModuleName (Map Phase (Set Text)))
-  deriving Show
+  deriving (Data, Show)
 
 instance Phased Imports where
   shift i (Imports imports) = Imports (Map.map (Map.mapKeys (shift i)) imports)
@@ -91,7 +93,7 @@ instance Monoid Imports where
   mappend = (<>)
 
 newtype Exports = Exports (Map Phase (Map Text Binding))
-  deriving Show
+  deriving (Data, Show)
 
 instance Phased Exports where
   shift i (Exports exports) = Exports $ Map.mapKeys (shift i) exports
@@ -142,7 +144,7 @@ data ExportSpec
   | ExportRenamed ExportSpec [(Text, Text)]
   | ExportPrefixed ExportSpec Text
   | ExportShifted ExportSpec Natural
-  deriving Show
+  deriving (Data, Show)
 
 data Module f a = Module
   { _moduleName :: ModuleName
@@ -150,12 +152,12 @@ data Module f a = Module
   , _moduleBody :: f a
   , _moduleExports :: !Exports
   }
-  deriving (Functor, Show)
+  deriving (Data, Functor, Show)
 makeLenses ''Module
 
 
 newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) [CompleteDecl] Core }
-  deriving Show
+  deriving (Data, Show)
 
 instance Phased CompleteDecl where
   shift i (CompleteDecl d) = CompleteDecl (shift i d)
@@ -163,7 +165,7 @@ instance Phased CompleteDecl where
 data CompleteModule
   = Expanded !(Module [] CompleteDecl) !BindingTable
   | KernelModule !Phase
-  deriving Show
+  deriving (Data, Show)
 
 instance Phased CompleteModule where
   shift i (Expanded m bs) = Expanded (shift i m) (shift i bs)
@@ -194,7 +196,7 @@ data Decl ty scheme decl expr
   | Export ExportSpec
   | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
     -- ^ User-written name, internal name, arity, constructors
-  deriving (Functor, Show)
+  deriving (Data, Functor, Show)
 
 instance Bifunctor (Decl ty scheme) where
   bimap _f g (Define x v t e) = Define x v t (g e)

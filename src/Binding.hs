@@ -1,8 +1,10 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 module Binding where
 
 import Control.Lens
+import Data.Data (Data)
 import Data.Map (Map)
 import qualified Data.Map as Map
 import ScopeSet
@@ -15,7 +17,7 @@ import Syntax.SrcLoc
 import Unique
 
 newtype Binding = Binding Unique
-  deriving (Eq, Ord)
+  deriving (Data, Eq, Ord)
 
 instance Show Binding where
   show (Binding b) = "(Binding " ++ show (hashUnique b) ++ ")"
@@ -24,7 +26,7 @@ instance ShortShow Binding where
   shortShow (Binding b) = "b" ++ show (hashUnique b)
 
 newtype BindingTable = BindingTable { _bindings :: Map Text [(ScopeSet, Binding, BindingInfo SrcLoc)] }
-  deriving Show
+  deriving (Data, Show)
 makeLenses ''BindingTable
 
 instance Semigroup BindingTable where

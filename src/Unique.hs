@@ -1,11 +1,14 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 -- | A drop-in replacement for Data.Unique which has a Data instance.
 module Unique (Unique, newUnique, hashUnique) where
 
+import Data.Data (Data)
 import Data.IORef
 import System.IO.Unsafe
 
 
-newtype Unique = Unique Integer deriving (Eq,Ord)
+newtype Unique = Unique Integer
+  deriving (Data, Eq, Ord)
 
 uniqSource :: IORef Integer
 uniqSource = unsafePerformIO (newIORef 0)

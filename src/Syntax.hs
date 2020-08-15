@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
@@ -5,6 +6,7 @@
 module Syntax where
 
 import Control.Lens hiding (List)
+import Data.Data (Data)
 import Data.Text (Text)
 import qualified Data.Text as T
 
@@ -23,7 +25,7 @@ data Stx a = Stx
   , _stxSrcLoc   :: !SrcLoc
   , _stxValue    :: a
   }
-  deriving (Eq, Functor, Show)
+  deriving (Data, Eq, Functor, Show)
 makeLenses ''Stx
 
 data ExprF a
@@ -31,12 +33,12 @@ data ExprF a
   | String Text
   | Sig Signal
   | List [a]
-  deriving (Eq, Functor, Show)
+  deriving (Data, Eq, Functor, Show)
 makePrisms ''ExprF
 
 
 newtype Syntax = Syntax { _unSyntax :: (Stx (ExprF Syntax)) }
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makeLenses ''Syntax
 
 type Ident = Stx Text

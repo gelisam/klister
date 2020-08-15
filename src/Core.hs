@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -11,6 +12,7 @@ module Core where
 import Control.Lens hiding (elements)
 import Control.Monad
 import Data.Bifunctor.TH
+import Data.Data (Data)
 import Data.List
 import Data.Foldable
 import Data.Text (Text)
@@ -32,17 +34,17 @@ data SyntaxError a = SyntaxError
   { _syntaxErrorLocations :: [a]
   , _syntaxErrorMessage   :: a
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''SyntaxError
 
 newtype Var = Var Unique
-  deriving (AlphaEq, Eq, Ord)
+  deriving (AlphaEq, Data, Eq, Ord)
 
 instance Show Var where
   show (Var i) = "(Var " ++ show (hashUnique i) ++ ")"
 
 newtype MacroVar = MacroVar Unique
-  deriving (AlphaEq, Eq, Ord)
+  deriving (AlphaEq, Data, Eq, Ord)
 
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
@@ -50,12 +52,12 @@ instance Show MacroVar where
 data TypePattern
   = TypePattern (TyF (Ident, Var))
   | AnyType Ident Var
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 
 data ConstructorPattern
   = ConstructorPattern !Constructor [(Ident, Var)]
   | AnyConstructor Ident Var
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makePrisms ''ConstructorPattern
 
 instance Phased ConstructorPattern where
@@ -70,20 +72,20 @@ data SyntaxPattern
   | SyntaxPatternCons Ident Var Ident Var
   | SyntaxPatternList [(Ident, Var)]
   | SyntaxPatternAny
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makePrisms ''SyntaxPattern
 
 data ScopedIdent core = ScopedIdent
   { _scopedIdentIdentifier :: core
   , _scopedIdentScope      :: core
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedIdent
 
 data ScopedEmpty core = ScopedEmpty
   { _scopedEmptyScope :: core
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedEmpty
 
 data ScopedCons core = ScopedCons
@@ -91,18 +93,18 @@ data ScopedCons core = ScopedCons
   , _scopedConsTail  :: core
   , _scopedConsScope :: core
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedCons
 
 data ScopedList core = ScopedList
   { _scopedListElements :: [core]
   , _scopedListScope    :: core
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedList
 
 data HowEq = Free | Bound
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 
 data CoreF typePat pat core
   = CoreVar Var
@@ -133,7 +135,7 @@ data CoreF typePat pat core
   | CoreList (ScopedList core)
   | CoreReplaceLoc core core
   | CoreTypeCase SrcLoc core [(typePat, core)]
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makePrisms ''CoreF
 deriveBifunctor ''CoreF
 deriveBifoldable ''CoreF
@@ -267,7 +269,7 @@ instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat 
 
 newtype Core = Core
   { unCore :: CoreF TypePattern ConstructorPattern Core }
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makePrisms ''Core
 
 instance Phased Core where

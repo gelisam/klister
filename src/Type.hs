@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE DeriveFoldable #-}
 {-# LANGUAGE DeriveTraversable #-}
@@ -9,6 +10,7 @@ module Type where
 import Control.Lens
 import Control.Monad
 import Data.Foldable
+import Data.Data (Data)
 import Data.Map (Map)
 import Numeric.Natural
 
@@ -17,7 +19,8 @@ import Datatype
 import ShortShow
 import Unique
 
-newtype MetaPtr = MetaPtr Unique deriving (Eq, Ord)
+newtype MetaPtr = MetaPtr Unique
+  deriving (Data, Eq, Ord)
 
 newMetaPtr :: IO MetaPtr
 newMetaPtr = MetaPtr <$> newUnique
@@ -34,7 +37,7 @@ data TyF t
   | TDatatype Datatype [t]
   | TSchemaVar Natural
   | TMetaVar MetaPtr
-  deriving (Eq, Foldable, Functor, Show, Traversable)
+  deriving (Data, Eq, Foldable, Functor, Show, Traversable)
 makePrisms ''TyF
 
 data VarKind t = NoLink | Link (TyF t)
@@ -64,12 +67,13 @@ instance Ixed (TypeStore t) where
 instance At (TypeStore t) where
   at x f (TypeStore env) = TypeStore <$> at x f env
 
-data Scheme t = Scheme Natural t deriving (Eq, Show)
+data Scheme t = Scheme Natural t
+  deriving (Data, Eq, Show)
 makeLenses ''Scheme
 
 newtype Ty = Ty
   { unTy :: TyF Ty }
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makePrisms ''Ty
 
 instance AlphaEq a => AlphaEq (TyF a) where

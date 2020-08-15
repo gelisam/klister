@@ -1,14 +1,16 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Phase (Phase, phaseNum, runtime, prior, Phased(..)) where
 
 import Control.Lens
+import Data.Data (Data)
 import Numeric.Natural
 
 import ShortShow
 
 newtype Phase = Phase { phaseNum :: Natural }
-  deriving (Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show)
 makePrisms ''Phase
 
 instance ShortShow Phase where
