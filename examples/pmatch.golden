@@ -7,6 +7,6 @@
 (zero) : Nat
 (zero) : Nat
 (add1 (zero)) : Nat
-(:: (pair #[pmatch.kl:131.34-131.35]<Signal 1> Signal 1)
-    (:: (pair #[pmatch.kl:131.50-131.51]<Signal 2> Signal 2)
-        (:: (pair #[pmatch.kl:131.66-131.67]<Signal 3> Signal 3) (nil)))) : (List (Pair Syntax Signal))
+(:: (pair #[pmatch.kl:131.34-131.35]<1> 1)
+    (:: (pair #[pmatch.kl:131.50-131.51]<2> 2)
+        (:: (pair #[pmatch.kl:131.66-131.67]<3> 3) (nil)))) : (List (Pair Syntax Integer))

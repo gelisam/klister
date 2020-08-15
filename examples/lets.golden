@@ -3,4 +3,4 @@
 #[lets.kl:7.72-7.76]<(a a)> : Syntax
 #[lets.kl:9.80-9.84]<(a a)> : Syntax
 #[lets.kl:13.27-13.30]<foo> : Syntax
-Signal 45 : Signal
+45 : Integer

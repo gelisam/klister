@@ -13,7 +13,6 @@ import Phase
 import Pretty
 import ScopeSet
 import ShortShow
-import Signals
 import SplitCore
 import SplitType
 import Syntax
@@ -35,7 +34,6 @@ data MacroDest
 
 data ExpanderTask
   = ExpandSyntax MacroDest Syntax
-  | AwaitingSignal MacroDest Signal [Closure]
   | AwaitingTypeCase SrcLoc MacroDest Ty VEnv [(TypePattern, Core)] [Closure]
   | AwaitingMacro MacroDest TaskAwaitMacro
   | AwaitingDefn Var Ident Binding SplitCorePtr Ty SplitCorePtr Syntax
@@ -91,7 +89,6 @@ instance ShortShow TaskAwaitMacroType where
 
 instance ShortShow ExpanderTask where
   shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
-  shortShow (AwaitingSignal _dest on _k) = "(AwaitingSignal " ++ show on ++ ")"
   shortShow (AwaitingTypeCase loc _ _ _ _ _) = "(AwaitingTypeCase " ++ shortShow loc ++ "_)"
   shortShow (AwaitingDefn _x n _b _defn _t _dest stx) =
     "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"

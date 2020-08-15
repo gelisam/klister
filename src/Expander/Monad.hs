@@ -76,7 +76,6 @@ module Expander.Monad
   , forkAwaitingDefn
   , forkAwaitingMacro
   , forkAwaitingDeclMacro
-  , forkAwaitingSignal
   , forkAwaitingTypeCase
   , forkAwaitingType
   , forkContinueMacroAction
@@ -132,7 +131,6 @@ module Expander.Monad
   , expanderModuleTop
   , expanderOriginLocations
   , expanderPatternBinders
-  , expanderReceivedSignals
   , expanderVarTypes
   , expanderTasks
   , expanderWorld
@@ -152,7 +150,6 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import Data.Maybe
 import Data.Monoid
-import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -175,7 +172,6 @@ import PartialCore
 import PartialType
 import Phase
 import ShortShow
-import Signals
 import SplitCore
 import SplitType
 import Scope
@@ -264,8 +260,7 @@ mkInitContext mn = do
                            }
 
 data ExpanderState = ExpanderState
-  { _expanderReceivedSignals :: !(Set.Set Signal)
-  , _expanderWorld :: !(World Value)
+  { _expanderWorld :: !(World Value)
   , _expanderNextScopeNum :: !Int
   , _expanderGlobalBindingTable :: !BindingTable
   , _expanderExpansionEnv :: !ExpansionEnv
@@ -302,8 +297,7 @@ data ExpanderState = ExpanderState
 
 initExpanderState :: ExpanderState
 initExpanderState = ExpanderState
-  { _expanderReceivedSignals = Set.empty
-  , _expanderWorld = initialWorld
+  { _expanderWorld = initialWorld
   , _expanderNextScopeNum = 0
   , _expanderGlobalBindingTable = mempty
   , _expanderExpansionEnv = mempty
@@ -510,10 +504,6 @@ forkGeneralizeType expr t sch =
 forkExpandVar :: Ty -> SplitCorePtr -> Syntax -> Var -> Expand ()
 forkExpandVar ty expr ident var =
   forkExpanderTask $ ExpandVar ty expr ident var
-
-forkAwaitingSignal :: MacroDest -> Signal -> [Closure] -> Expand ()
-forkAwaitingSignal dest signal kont =
-  forkExpanderTask $ AwaitingSignal dest signal kont
 
 forkAwaitingTypeCase :: SrcLoc -> MacroDest -> Ty -> VEnv -> [(TypePattern, Core)] -> [Closure] -> Expand ()
 forkAwaitingTypeCase loc dest ty env cases kont =

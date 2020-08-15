@@ -41,7 +41,6 @@ import Scope
 import qualified ScopeSet
 import ScopeSet (ScopeSet)
 import ShortShow
-import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
@@ -75,10 +74,10 @@ operationTests =
     let sc = Scope 42 "Test suite"
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
-        expr = Core (CoreApp (Core (CoreSignal (Signal 2)))
+        expr = Core (CoreApp (Core (CoreInteger 2))
                              (Core (CoreSyntax stx)))
     in case shift 1 expr of
-         Core (CoreApp (Core (CoreSignal (Signal 2)))
+         Core (CoreApp (Core (CoreInteger 2))
                        (Core (CoreSyntax stx'))) ->
            case stx' of
              Syntax (Stx scs' _ (Id "hey")) ->
@@ -107,11 +106,7 @@ miniTests =
           )
         , ( "42"
           , "42"
-          , sig 42
-          )
-        , ( "[send-signal 0]"
-          , "[send-signal 0]"
-          , sendSig =<< sig 0
+          , int 42
           )
         , ( "[lambda [f] [lambda [x] [f x]]]"
           , "[lambda [f] [lambda [x] [f x]]]"
@@ -142,30 +137,6 @@ miniTests =
             \                        stx]]])])]] \n\
             \  [let1 [x [lambda [x] x]] \n\
             \    x]]"
-          , (lam $ \x -> x) `app` (lam $ \x -> x)
-          )
-        , ( "send a signal nobody is waiting for"
-          , "[let-syntax \n\
-            \  [signaling-id [lambda [_] \n\
-            \                  [>>= [send-signal 0] [lambda [_] \n\
-            \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [let-syntax \n\
-            \      [blocked-id [lambda [_] \n\
-            \                    [>>= [wait-signal 0] [lambda [_] \n\
-            \                    [pure [quote [lambda [x] x]]]]]]] \n\
-            \        [signaling-id]]]"
-          , lam $ \x -> x
-          )
-        , ( "send and receive the same signal"
-          , "[let-syntax \n\
-            \  [signaling-id [lambda [_] \n\
-            \                  [>>= [send-signal 0] [lambda [_] \n\
-            \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [let-syntax \n\
-            \      [blocked-id [lambda [_] \n\
-            \                    [>>= [wait-signal 0] [lambda [_] \n\
-            \                    [pure [quote [lambda [x] x]]]]]]] \n\
-            \        [[signaling-id] [blocked-id]]]]"
           , (lam $ \x -> x) `app` (lam $ \x -> x)
           )
         ]
@@ -202,34 +173,6 @@ miniTests =
                 -- Make sure it's the use site in the macro body that
                 -- throws the error
                 view (srcLocStart . srcPosCol) loc == 29
-              _ -> False
-          )
-        , ( "wait for a signal which is never coming"
-          , "[let-syntax \n\
-            \  [signaling-id [lambda [_] \n\
-            \                  [>>= [send-signal 0] [lambda [_] \n\
-            \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [let-syntax \n\
-            \      [blocked-id [lambda [_] \n\
-            \                    [>>= [wait-signal 0] [lambda [_] \n\
-            \                    [pure [quote [lambda [x] x]]]]]]] \n\
-            \        [blocked-id]]]"
-          , \case
-              NoProgress [AwaitingSignal _ (Signal 0) _] -> True
-              _ -> False
-          )
-        , ( "send and receive different signals"
-          , "[let-syntax \n\
-            \  [signaling-id [lambda [_] \n\
-            \                  [>>= [send-signal 0] [lambda [_] \n\
-            \                  [pure [quote [lambda [x] x]]]]]]] \n\
-            \    [let-syntax \n\
-            \      [blocked-id [lambda [_] \n\
-            \                    [>>= [wait-signal 1] [lambda [_] \n\
-            \                    [pure [quote [lambda [x] x]]]]]]] \n\
-            \        [[signaling-id] [blocked-id]]]]"
-          , \case
-              NoProgress [AwaitingSignal _ (Signal 1) _] -> True
               _ -> False
           )
         ]
@@ -303,7 +246,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                       ],
                  DefineMacros [(_, _, _)],
                  Example _ _ ex] ->
-                  assertAlphaEq "Example is signal" ex (Core (CoreSignal (Signal 1)))
+                  assertAlphaEq "Example is int" ex (Core (CoreInteger 1))
                 _ -> assertFailure "Expected an import, two meta-defs, a macro def, and an example"
           )
         , ( "examples/imports-shifted-macro.kl"
@@ -388,23 +331,23 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         , ( "examples/fun-exports.kl"
           , \_m exampleVals ->
               case exampleVals of
-                [ValueSignal a, ValueSignal b, ValueSignal c, ValueSignal d] -> do
-                  assertAlphaEq "First example is 1" a (Signal 1)
-                  assertAlphaEq "Second example is 2" b (Signal 2)
-                  assertAlphaEq "Third example is 3" c (Signal 3)
-                  assertAlphaEq "Fourth example is 4" d (Signal 4)
+                [ValueInteger a, ValueInteger b, ValueInteger c, ValueInteger d] -> do
+                  a @?= 1
+                  b @?= 2
+                  c @?= 3
+                  d @?= 4
                 _ ->
                   assertFailure "Expected four signals in example"
           )
         , ( "examples/fun-exports-test.kl"
           , \_m exampleVals ->
               case exampleVals of
-                [ValueSignal a, ValueSignal b, ValueSignal c] -> do
-                  assertAlphaEq "First example is 1" a (Signal 1)
-                  assertAlphaEq "Second example is 2" b (Signal 2)
-                  assertAlphaEq "Third example is 3" c (Signal 3)
+                [ValueInteger a, ValueInteger b, ValueInteger c] -> do
+                  a @?= 1
+                  b @?= 2
+                  c @?= 3
                 _ ->
-                  assertFailure "Expected three signals in example"
+                  assertFailure "Expected three integers in example"
           )
         , ( "examples/syntax-loc.kl"
           , \_m exampleVals ->
@@ -715,7 +658,7 @@ genCoreF subgen varGen =
         <*> sameVars (constructor False False True)
       nonRecursive =
         [ (\b -> corePrimitiveCtor (if b then "true" else "false") []) <$> Gen.bool
-        , CoreSignal . Signal <$> Gen.int range1024
+        , CoreInteger . fromIntegral <$> Gen.int range1024
         ] ++ map (fmap CoreVar) (maybeToList varGen)
       recursive =
         [ genLam sameVars
@@ -723,8 +666,6 @@ genCoreF subgen varGen =
         , unary CorePure
         , binary CoreBind
         , CoreSyntaxError <$> genSyntaxError (sameVars (CoreSyntaxError (SyntaxError [] True)))
-        , unary CoreSendSignal
-        , unary CoreWaitSignal
         -- , CoreIdentEq _ <$> sameVars <*> sameVars
         -- , CoreSyntax Syntax
         -- , CoreCase sameVars [(Pattern, core)]
