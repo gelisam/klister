@@ -68,6 +68,7 @@ instance Phased TypePattern where
 
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
+  | SyntaxPatternString Ident Var
   | SyntaxPatternEmpty
   | SyntaxPatternCons Ident Var Ident Var
   | SyntaxPatternList [(Ident, Var)]
@@ -103,6 +104,14 @@ data ScopedList core = ScopedList
   deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedList
 
+data ScopedString core = ScopedString
+  { _scopedString      :: core
+  , _scopedStringScope :: core
+  }
+  deriving (Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedString
+
+
 data HowEq = Free | Bound
   deriving (Data, Eq, Show)
 
@@ -114,6 +123,7 @@ data CoreF typePat pat core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
   | CoreDataCase SrcLoc core [(pat, core)]
+  | CoreString Text
   | CoreError core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
@@ -133,6 +143,7 @@ data CoreF typePat pat core
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
+  | CoreStringSyntax (ScopedString core)
   | CoreReplaceLoc core core
   | CoreTypeCase SrcLoc core [(typePat, core)]
   deriving (Data, Eq, Functor, Foldable, Show, Traversable)
@@ -159,6 +170,8 @@ mapCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor (map h args)
 mapCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc (h scrut) [(g pat, h c) | (pat, c) <- cases]
+mapCoreF _f _g _h (CoreString str) =
+  CoreString str
 mapCoreF _f _g h (CoreError msg) =
   CoreError (h msg)
 mapCoreF _f _g h (CorePure core) =
@@ -195,6 +208,8 @@ mapCoreF _f _g h (CoreCons args) =
   CoreCons (fmap h args)
 mapCoreF _f _g h (CoreList args) =
   CoreList (fmap h args)
+mapCoreF _f _g h (CoreStringSyntax str) =
+  CoreStringSyntax (fmap h str)
 mapCoreF _f _g h (CoreReplaceLoc src dest) =
   CoreReplaceLoc (h src) (h dest)
 mapCoreF f _g h (CoreTypeCase loc scrut cases) =
@@ -215,6 +230,8 @@ traverseCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor <$> traverse h args
 traverseCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc <$> h scrut <*> for cases \ (pat, c) -> (,) <$> g pat <*> h c
+traverseCoreF _f _g _h (CoreString str) =
+  pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
   CoreError <$> h msg
 traverseCoreF _f _g h (CorePure core) =
@@ -251,6 +268,8 @@ traverseCoreF _f _g h (CoreCons args) =
   CoreCons <$> traverse h args
 traverseCoreF _f _g h (CoreList args) =
   CoreList <$> traverse h args
+traverseCoreF _f _g h (CoreStringSyntax arg) =
+  CoreStringSyntax <$> traverse h arg
 traverseCoreF _f _g h (CoreReplaceLoc src dest) =
   CoreReplaceLoc <$> (h src) <*> (h dest)
 traverseCoreF f _g h (CoreTypeCase loc scrut cases) =
@@ -471,6 +490,8 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
    ++ " "
    ++ intercalate ", " (map shortShow cases)
    ++ ")"
+  shortShow (CoreString str)
+    = "(String " ++ show str ++ ")"
   shortShow (CoreError what)
     = "(Error "
    ++ shortShow what
@@ -539,6 +560,10 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(List "
    ++ shortShow scopedVec
    ++ ")"
+  shortShow (CoreStringSyntax scopedStr)
+    = "(StringSyntax "
+   ++ shortShow scopedStr
+   ++ ")"
   shortShow (CoreReplaceLoc loc stx)
     = "(ReplaceLoc "
    ++ shortShow loc ++ " "
@@ -571,6 +596,7 @@ instance ShortShow TypePattern where
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x
+  shortShow (SyntaxPatternString _ x) = "(String " ++ shortShow x ++ ")"
   shortShow SyntaxPatternEmpty = "Empty"
   shortShow (SyntaxPatternCons _ x _ xs)
     = "(Cons "
@@ -612,6 +638,14 @@ instance ShortShow core => ShortShow (ScopedList core) where
   shortShow (ScopedList elements scope)
     = "(ScopedList "
    ++ shortShow elements
+   ++ " "
+   ++ shortShow scope
+   ++ ")"
+
+instance ShortShow core => ShortShow (ScopedString core) where
+  shortShow (ScopedString str scope)
+    = "(ScopedStringSyntax "
+   ++ shortShow str
    ++ " "
    ++ shortShow scope
    ++ ")"

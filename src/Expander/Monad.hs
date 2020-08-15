@@ -41,6 +41,7 @@ module Expander.Monad
   , inEarlierPhase
   , inPhase
   , isExprChecked
+  , importing
   , kernelExports
   , linkedCore
   , linkedScheme
@@ -124,6 +125,7 @@ module Expander.Monad
   , expanderKernelExports
   , expanderKernelDatatypes
   , expanderKernelConstructors
+  , expanderKernelValues
   , expanderModuleExports
   , expanderModuleImports
   , expanderModuleName
@@ -243,6 +245,7 @@ data ExpanderLocal = ExpanderLocal
   , _expanderBindingLevels :: !(Map Phase BindingLevel)
   , _expanderVarTypes :: TypeContext Var SchemePtr
   , _expanderKlisterPath :: !KlisterPath
+  , _expanderImportStack :: [ModuleName]
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -256,6 +259,7 @@ mkInitContext mn = do
                              , _expanderBindingLevels = Map.empty
                              , _expanderVarTypes = mempty
                              , _expanderKlisterPath = kPath
+                             , _expanderImportStack = []
                              }
                            }
 
@@ -283,6 +287,7 @@ data ExpanderState = ExpanderState
   , _expanderKernelExports :: !Exports
   , _expanderKernelDatatypes :: !(Map Datatype DatatypeInfo)
   , _expanderKernelConstructors :: !(Map Constructor (ConstructorInfo Ty))
+  , _expanderKernelValues :: !(Env Var (SchemePtr, Value))
   , _expanderDeclOutputScopes :: !(Map DeclOutputScopesPtr ScopeSet)
   , _expanderCurrentEnvs :: !(Map Phase (Env Var Value))
   , _expanderCurrentTransformerEnvs :: !(Map Phase (Env MacroVar Value))
@@ -320,6 +325,7 @@ initExpanderState = ExpanderState
   , _expanderKernelExports = noExports
   , _expanderKernelDatatypes = mempty
   , _expanderKernelConstructors = mempty
+  , _expanderKernelValues = mempty
   , _expanderDeclOutputScopes = Map.empty
   , _expanderCurrentEnvs = Map.empty
   , _expanderCurrentTransformerEnvs = Map.empty
@@ -852,3 +858,10 @@ scheduleType stx = do
   dest <- liftIO newSplitTypePtr
   forkExpandType dest stx
   return dest
+
+importing :: ModuleName -> Expand a -> Expand a
+importing mn act = do
+  inProgress <- view (expanderLocal . expanderImportStack) <$> ask
+  if mn `elem` inProgress
+    then throwError $ CircularImports mn inProgress
+    else Expand $ local (over (expanderLocal . expanderImportStack) (mn:)) (runExpand act)

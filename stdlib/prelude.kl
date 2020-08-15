@@ -14,6 +14,7 @@
         -> 
         Macro
         Type
+        String string-append string=?
 
         -- primitive datatypes
         ScopeAction flip add remove
@@ -56,6 +57,7 @@
         empty-list-syntax
         cons-list-syntax
         list-syntax
+        string-syntax
         replace-loc
         syntax-case
         let-syntax

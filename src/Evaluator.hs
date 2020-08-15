@@ -123,6 +123,7 @@ eval (Core (CoreCtor c args)) =
 eval (Core (CoreDataCase loc scrut cases)) = do
   value <- eval scrut
   doDataCase loc value cases
+eval (Core (CoreString str)) = pure (ValueString str)
 eval (Core (CoreError what)) = do
   msg <- evalAsSyntax what
   throwError $ EvalErrorUser msg
@@ -215,6 +216,9 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
+eval (Core (CoreStringSyntax (ScopedString str scope))) = do
+  strV <- evalAsString str
+  withScopeOf scope (String strV)
 eval (Core (CoreReplaceLoc loc stx)) = do
   Syntax (Stx _ newLoc _) <- evalAsSyntax loc
   Syntax (Stx scs _ contents) <- evalAsSyntax stx
@@ -252,6 +256,13 @@ evalAsSyntax core = do
   case value of
     ValueSyntax syntax -> pure syntax
     other -> evalErrorType "syntax" other
+
+evalAsString :: Core -> Eval Text
+evalAsString core = do
+  value <- eval core
+  case value of
+    ValueString str -> pure str
+    other -> evalErrorType "string" other
 
 evalAsMacroAction :: Core -> Eval MacroAction
 evalAsMacroAction core = do
@@ -300,20 +311,15 @@ doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0
     match :: Eval Value -> TypePattern -> Core -> TyF Ty -> Eval Value
     match next (TypePattern t) rhs scrut =
       case (t, scrut) of
-        (TSyntax, TSyntax) -> eval rhs
-        (TSignal, TSignal) -> eval rhs
-        (TFun (n1, x1) (n2, x2), TFun dom cod) ->
-           withExtendedEnv n1 x1 (ValueType dom) $
-           withExtendedEnv n2 x2 (ValueType cod) $
-           eval rhs
-        (TMacro (n, x), TMacro a) -> withExtendedEnv n x (ValueType a) (eval rhs)
-        (TType, TType) -> eval rhs
-        (TDatatype dt xs, TDatatype dt' args)
-          | dt == dt', length xs == length args ->
-            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- xs, arg <- args] $
-            eval rhs
-        (TSchemaVar i, TSchemaVar j)
-          | i == j ->
+        -- unification variables never match; instead, type-case remains stuck
+        -- until the variable is unified with a concrete type constructor or a
+        -- skolem variable.
+        (TyF (TMetaVar _) _, _) -> next
+        (_, TyF (TMetaVar _) _) -> next
+
+        (TyF ctor1 args1, TyF ctor2 args2)
+          | ctor1 == ctor2 && length args1 == length args2 ->
+            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- args1, arg <- args2] $
             eval rhs
         (_, _) -> next
     match _next (AnyType n x) rhs scrut =
@@ -327,6 +333,11 @@ doCase blameLoc v0 ((p, rhs0) : ps) = match (doCase blameLoc v0 ps) p rhs0 v0
       \case
         v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
           withExtendedEnv n x v (eval rhs)
+        _ -> next
+    match next (SyntaxPatternString n x) rhs =
+      \case
+        ValueSyntax (Syntax (Stx _ _ (String str))) ->
+          withExtendedEnv n x (ValueString str) (eval rhs)
         _ -> next
     match next SyntaxPatternEmpty rhs =
       \case

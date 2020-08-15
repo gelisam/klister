@@ -86,7 +86,7 @@ import qualified ScopeSet
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  t <- Ty . TMetaVar <$> freshMeta
+  t <- tMetaVar <$> freshMeta
   forkExpandSyntax (ExprDest t dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
@@ -139,6 +139,7 @@ expandModule thisMod src = do
 
 loadModuleFile :: ModuleName -> Expand (CompleteModule, Exports)
 loadModuleFile modName =
+  importing modName $
   case moduleNameToPath modName of
     Right _ ->
       do es <- kernelExports
@@ -242,8 +243,6 @@ visit modName = do
 -- recursively loading its run-time dependencies.
 evalMod :: CompleteModule -> Expand [EvalResult]
 evalMod (KernelModule _) = do
-  -- Builtins go here, suitably shifted. There are no built-in values
-  -- yet, only built-in syntax and datatypes, but this may change.
   p <- currentPhase
   dts <- view expanderKernelDatatypes <$> getState
   modifyState $
@@ -253,7 +252,14 @@ evalMod (KernelModule _) = do
   modifyState $
     over (expanderWorld . worldConstructors . at p . non Map.empty) $
     Map.union ctors
-
+  vals <- view expanderKernelValues <$> getState
+  modifyState $
+    over (expanderWorld . worldEnvironments . at p) $
+    \case
+      Nothing -> Just (snd <$> vals)
+      Just env -> Just (env <> (snd <$> vals))
+  modifyState $
+    over (expanderWorld . worldTypeContexts . at p . non mempty) $ (<> (fst <$> vals))
   return []
 evalMod (Expanded em _) = execWriterT $ do
     traverseOf_ (moduleBody . each) evalDecl em
@@ -372,17 +378,41 @@ initializeKernel = do
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
   traverse_ addDatatypePrimitive datatypePrims
+  traverse_ addFunPrimitive funPrims
   addUniversalPrimitive "with-unknown-type" Prims.makeLocalType
 
 
   where
     typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
-      [ ("Syntax", Prims.baseType TSyntax)
-      , ("Signal", Prims.baseType TSignal)
+      [ ("Syntax", Prims.baseType tSyntax)
+      , ("String", Prims.baseType tString)
+      , ("Signal", Prims.baseType tSignal)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
-      , ("Type", Prims.baseType TType)
+      , ("Type", Prims.baseType tType)
+      ]
+
+    funPrims :: [(Text, Scheme Ty, Value)]
+    funPrims =
+      [ ( "string=?"
+        , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
+        , ValueClosure $ HO $
+          \(ValueString str1) ->
+            ValueClosure $ HO $
+            \(ValueString str2) ->
+              if str1 == str2
+                then primitiveCtor "true" []
+                else primitiveCtor "false" []
+        )
+      , ( "string-append"
+        , Scheme 0 $ tFun [tString, tString] tString
+        , ValueClosure $ HO $
+          \(ValueString str1) ->
+            ValueClosure $ HO $
+            \(ValueString str2) ->
+              ValueString (str1 <> str2)
+        )
       ]
 
     datatypePrims :: [(Text, Natural, [(Text, [Ty])])]
@@ -390,8 +420,8 @@ initializeKernel = do
       [ ("ScopeAction", 0, [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", 0, [("unit", [])])
       , ("Bool", 0, [("true", []), ("false", [])])
-      , ("Problem", 0, [("declaration", []), ("expression", [Ty TType]), ("type", []), ("pattern", [])])
-      , ("Maybe", 1, [("nothing", []), ("just", [Ty $ TSchemaVar 0])])
+      , ("Problem", 0, [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
+      , ("Maybe", 1, [("nothing", []), ("just", [tSchemaVar 0])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -431,6 +461,7 @@ initializeKernel = do
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)
       , ("list-syntax", Prims.listSyntax)
+      , ("string-syntax", Prims.stringSyntax)
       , ("replace-loc", Prims.replaceLoc)
       , ("syntax-case", Prims.syntaxCase)
       , ("let-syntax", Prims.letSyntax)
@@ -447,6 +478,20 @@ initializeKernel = do
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
 
+    addFunPrimitive :: (Text, Scheme Ty, Value) -> Expand ()
+    addFunPrimitive (name, sch, val) = do
+      x <- freshVar
+      ptr <- liftIO newSchemePtr
+      linkScheme ptr sch
+
+      modifyState $ set (expanderKernelValues . at x) $ Just $ (Stx mempty kernelLoc name, (ptr, val))
+      b <- freshBinding
+      bind b $ EVarMacro x
+      addToKernel name runtime b
+
+      where
+        kernelLoc = SrcLoc "<kernel>" (SrcPos 0 0) (SrcPos 0 0)
+
     addDatatypePrimitive :: (Text, Natural, [(Text, [Ty])]) -> Expand ()
     addDatatypePrimitive (name, arity, ctors) = do
       let dn = DatatypeName name
@@ -462,7 +507,7 @@ initializeKernel = do
                  then throwError $ WrongDatatypeArity stx dt arity (length args)
                  else do
                    argDests <- traverse scheduleType args
-                   linkType dest $ TDatatype dt argDests
+                   linkType dest $ tDatatype dt argDests
           patImpl =
             \dest stx -> do
               Stx _ _ (me, args) <- mustBeCons stx
@@ -471,14 +516,14 @@ initializeKernel = do
                 then throwError $ WrongDatatypeArity stx dt arity (length args)
                 else do
                   varInfo <- traverse Prims.prepareVar args
-                  sch <- trivialScheme $ Ty TType
+                  sch <- trivialScheme tType
                   modifyState $
                     set (expanderPatternBinders . at (Right dest)) $
                     Just [ (sc, n, x, sch)
                          | (sc, n, x) <- varInfo
                          ]
                   linkTypePattern dest $
-                    TypePattern $ TDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
+                    TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
       let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val
@@ -703,11 +748,13 @@ runTask (tid, localData, task) = withLocal localData $ do
     AwaitingTypeCase loc dest ty env cases kont -> do
       Ty t <- normType ty
       case t of
-        TMetaVar ptr' ->
+        TyF (TMetaVar ptr') [] -> do
           -- Always wait on the canonical representative
           case ty of
-            Ty (TMetaVar ptr) | ptr == ptr' -> stillStuck tid task
-            _ -> forkAwaitingTypeCase loc dest (Ty (TMetaVar ptr')) env cases kont
+            Ty (TyF (TMetaVar ptr) []) | ptr == ptr' -> stillStuck tid task
+            _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
+        TyF (TMetaVar _) _ -> do
+          throwError $ InternalError "type variable cannot have parameters (yet)"
         other -> do
           selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           case selectedBranch of
@@ -948,7 +995,7 @@ expandOneForm prob stx
           case prob of
             ExprDest t dest -> do
               argTys <- makeTypeMetas arity
-              unify dest t (Ty (TDatatype dt argTys))
+              unify dest t $ tDatatype dt argTys
               args' <- for args \a -> inst (Scheme arity a) argTys
               Stx _ _ (foundName, foundArgs) <- mustBeCons stx
               _ <- mustBeIdent foundName
@@ -965,7 +1012,7 @@ expandOneForm prob stx
               argTypes <- for args \ a -> do
                             t <- inst (Scheme arity a) tyArgs
                             trivialScheme t
-              unify loc (Ty (TDatatype dt tyArgs)) patTy
+              unify loc (tDatatype dt tyArgs) patTy
               if length patVars /= length argTypes
                 then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
                 else do
@@ -1009,7 +1056,7 @@ expandOneForm prob stx
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar i -> do
           dest <- requireTypeCtx stx prob
-          linkType dest (TSchemaVar i)
+          linkType dest $ tSchemaVar i
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpressionCtx stx prob
           forkAwaitingDefn x n b d t dest stx
@@ -1058,10 +1105,13 @@ expandOneForm prob stx
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
           Sig s -> do
-            unify dest (Ty TSignal) t
+            unify dest tSignal t
             expandLiteralSignal dest s
             saveExprType dest t
-          String s -> expandLiteralString dest s
+          String s -> do
+            unify dest tString t
+            expandLiteralString dest s
+            saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
 
 
@@ -1103,8 +1153,8 @@ expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
 expandLiteralSignal dest signal = linkExpr dest (CoreSignal signal)
 
 expandLiteralString :: SplitCorePtr -> Text -> Expand ()
-expandLiteralString _dest str =
-  throwError $ InternalError $ "Strings are not valid expressions yet: " ++ show str
+expandLiteralString dest str = do
+  linkExpr dest (CoreString str)
 
 data MacroOutput
   = StuckOnSignal Signal [Closure]

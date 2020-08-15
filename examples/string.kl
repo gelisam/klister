@@ -1,0 +1,9 @@
+#lang kernel
+
+(example "hello world")
+
+(example ((string-append "hello ") "world"))
+
+(example ((string=? ((string-append "hello") " world")) "hello world"))
+
+(example ((string=? ((string-append "hello") "world")) "hello world"))

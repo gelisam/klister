@@ -1,9 +1,9 @@
-#[quasiquote.kl:67.22-67.29]<nothing> : Syntax
-#[quasiquote.kl:70.22-70.27]<thing> : Syntax
-#[quasiquote.kl:67.22-67.29]<nothing> : Syntax
-#[quasiquote.kl:49.63-49.66]<(thing)> : Syntax
-#[quasiquote.kl:56.57-56.60]<(nothing)> : Syntax
-#[quasiquote.kl:49.63-49.66]<(list-syntax (nothing thing) thing)> : Syntax
-#[quasiquote.kl:49.63-49.66]<(list-syntax (nothing thing ()) thing)> : Syntax
-#[quasiquote.kl:49.63-49.66]<(thing nothing thing)> : Syntax
-#[quasiquote.kl:67.22-67.29]<(thing nothing)> : Syntax
+#[quasiquote.kl:70.22-70.29]<nothing> : Syntax
+#[quasiquote.kl:73.22-73.27]<thing> : Syntax
+#[quasiquote.kl:70.22-70.29]<nothing> : Syntax
+#[quasiquote.kl:76.22-76.29]<(thing)> : Syntax
+#[quasiquote.kl:77.22-77.39]<(nothing)> : Syntax
+#[quasiquote.kl:79.22-79.65]<(list-syntax (nothing thing) thing)> : Syntax
+#[quasiquote.kl:81.22-81.68]<(list-syntax (nothing thing ()) thing)> : Syntax
+#[quasiquote.kl:83.22-83.51]<(thing nothing thing)> : Syntax
+#[quasiquote.kl:70.22-70.29]<(thing nothing)> : Syntax

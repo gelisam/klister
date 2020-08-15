@@ -24,6 +24,9 @@
            [[ident x]
             [pure [list-syntax [[quote quote] x]
                                x]]]
+           [[string str]
+            [pure [list-syntax [[quote quote] (string-syntax str e)]
+                               e]]]
            [()
             [pure
              [list-syntax [[quote empty-list-syntax]
@@ -46,14 +49,14 @@
                                                       (list-syntax ('quasiquote s)
                                                                    s))
                                                     e)
-                                        (list-syntax ('quote 'foo) 'foo))
+                                        (list-syntax ('quote (replace-loc e 'foo)) 'foo))
                                       e)]]]]]
               [_ [pure
                   (list-syntax ('list-syntax
                                   (map-syntax (lambda (s)
                                                 (list-syntax ('quasiquote s) s))
                                               e)
-                                  (list-syntax ('quote 'foo) 'foo))
+                                  (list-syntax ('quote (replace-loc e 'foo)) 'foo))
                                 e)]])])]
         [_ (syntax-error [list-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
 
