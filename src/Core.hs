@@ -108,7 +108,7 @@ data ScopedString core = ScopedString
   { _scopedString      :: core
   , _scopedStringScope :: core
   }
-  deriving (Eq, Functor, Foldable, Show, Traversable)
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedString
 
 
