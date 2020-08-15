@@ -1,4 +1,4 @@
-(:: Signal 3 (:: Signal 2 (:: Signal 1 (nil)))) : (List Signal)
-(:: Signal 3 (:: Signal 2 (:: Signal 1 (nil)))) : (List Signal)
+(:: 3 (:: 2 (:: 1 (nil)))) : (List Integer)
+(:: 3 (:: 2 (:: 1 (nil)))) : (List Integer)
 #[datatype-macro.kl:49.38-49.39]<a> : Syntax
-Signal 3 : Signal
+3 : Integer

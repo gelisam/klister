@@ -10,7 +10,6 @@ import Core
 import Datatype
 import Env
 import ModuleName
-import Signals
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -22,8 +21,6 @@ data MacroAction
   = MacroActionPure Value
   | MacroActionBind MacroAction Closure
   | MacroActionSyntaxError (SyntaxError Syntax)
-  | MacroActionSendSignal Signal
-  | MacroActionWaitSignal Signal
   | MacroActionIdentEq HowEq Value Value
   | MacroActionLog Syntax
   | MacroActionIntroducer
@@ -38,7 +35,7 @@ data Value
   = ValueClosure Closure
   | ValueSyntax Syntax
   | ValueMacroAction MacroAction
-  | ValueSignal Signal
+  | ValueInteger Integer
   | ValueCtor Constructor [Value]
   | ValueType Ty
   | ValueString Text
@@ -55,7 +52,7 @@ valueText :: Value -> Text
 valueText (ValueClosure _) = "#<closure>"
 valueText (ValueSyntax stx) = "'" <> syntaxText stx
 valueText (ValueMacroAction _) = "#<macro>"
-valueText (ValueSignal s) = "#!" <> T.pack (show s)
+valueText (ValueInteger s) = "#!" <> T.pack (show s)
 valueText (ValueCtor c args) =
   "(" <> view (constructorName . constructorNameText) c <> " " <>
   T.intercalate " " (map valueText args) <> ")"
@@ -67,7 +64,7 @@ describeVal :: Value -> Text
 describeVal (ValueClosure _) = "function"
 describeVal (ValueSyntax _) = "syntax"
 describeVal (ValueMacroAction _) = "macro action"
-describeVal (ValueSignal _) = "signal"
+describeVal (ValueInteger _) = "integer"
 describeVal (ValueCtor c _args) =
   view (constructorName . constructorNameText) c
 describeVal (ValueType _) = "type"

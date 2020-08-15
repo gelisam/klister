@@ -36,11 +36,9 @@ module Expander.Primitives
   , pureMacro
   , quote
   , replaceLoc
-  , sendSignal
   , syntaxCase
   , syntaxError
   , the
-  , waitSignal
   , typeCase
   -- * Type primitives
   , arrowType
@@ -321,20 +319,6 @@ syntaxError t dest stx = do
   msgDest <- schedule tSyntax msg
   locDests <- traverse (schedule tSyntax) locs
   linkExpr dest $ CoreSyntaxError (SyntaxError locDests msgDest)
-
-sendSignal :: ExprPrim
-sendSignal t dest stx = do
-  unify dest t (tMacro (primitiveDatatype "Unit" []))
-  Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
-  sigDest <- schedule tSignal sig
-  linkExpr dest $ CoreSendSignal sigDest
-
-waitSignal :: ExprPrim
-waitSignal t dest stx = do
-  unify dest t (tMacro (primitiveDatatype "Unit" []))
-  Stx _ _ (_ :: Syntax, sig) <- mustHaveEntries stx
-  sigDest <- schedule tSignal sig
-  linkExpr dest $ CoreWaitSignal sigDest
 
 identEqual :: HowEq -> ExprPrim
 identEqual how t dest stx = do

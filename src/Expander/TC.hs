@@ -113,8 +113,8 @@ inst (Scheme n ty) ts
       tArgsSuffix <- traverse instTy tArgs
 
       -- If ctor was a TSchemaVar which got instantiated to a partially applied
-      -- type constructor such as (TyF TFun [TSignal]), we want to append the remaining
-      -- type arguments, e.g. [TSyntax], in order to get (TyF TFun [TSignal, TSyntax]).
+      -- type constructor such as (TyF TFun [TInteger]), we want to append the remaining
+      -- type arguments, e.g. [TSyntax], in order to get (TyF TFun [TInteger, TSyntax]).
       pure $ TyF ctor' (tArgsPrefix ++ tArgsSuffix)
 
     instCtor :: TypeConstructor -> TyF Ty

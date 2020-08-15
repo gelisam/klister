@@ -14,12 +14,10 @@ import qualified Text.Megaparsec.Char.Lexer as L
 
 import ModuleName
 import Parser.Common
-import Signals
 import Syntax
 import Syntax.Lexical
 import Syntax.SrcLoc
 import qualified ScopeSet
-
 
 
 readModule :: FilePath -> IO (Either Text (ParsedModule Syntax))
@@ -43,17 +41,17 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> ident <|> signal <|> string <|> quoted <|> quasiquoted <|> unquoted
+expr = list <|> ident <|> integer <|> string <|> quoted <|> quasiquoted <|> unquoted
 
 ident :: Parser Syntax
 ident =
   do Located srcloc x <- lexeme identName
      return $ Syntax $ Stx ScopeSet.empty srcloc (Id x)
 
-signal :: Parser Syntax
-signal =
-  do Located srcloc s <- lexeme signalNum
-     return $ Syntax $ Stx ScopeSet.empty srcloc (Sig s)
+integer :: Parser Syntax
+integer =
+  do Located srcloc s <- lexeme integerNum
+     return $ Syntax $ Stx ScopeSet.empty srcloc (LitInt s)
 
 list :: Parser Syntax
 list = parenned "(" ")" <|> parenned "[" "]"
@@ -159,11 +157,9 @@ identName =
     subseqCats = [DecimalNumber, SpacingCombiningMark, EnclosingMark]
 
 
-signalNum :: Parser Signal
-signalNum = toSignal <$> takeWhile1P (Just "signal (digits)") isDigit
-  where
-    toSignal :: Text -> Signal
-    toSignal = Signal . read . T.unpack
+integerNum :: Parser Integer
+integerNum =
+  read . T.unpack <$> takeWhile1P (Just "integer (digits)") isDigit
 
 lexeme :: Parser a -> Parser (Located a)
 lexeme p = located p <* eatWhitespace

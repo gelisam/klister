@@ -23,7 +23,6 @@ import Datatype
 import ModuleName
 import Phase
 import ShortShow
-import Signals
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -128,8 +127,6 @@ data CoreF typePat pat core
   | CorePure core                       -- :: a -> Macro a
   | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
-  | CoreSendSignal core                 -- :: Signal -> Macro ()
-  | CoreWaitSignal core                 -- :: Signal -> Macro ()
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
   | CoreLog core
@@ -138,7 +135,7 @@ data CoreF typePat pat core
   | CoreSyntax Syntax
   | CoreCase SrcLoc core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
-  | CoreSignal Signal
+  | CoreInteger Integer
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
@@ -180,10 +177,6 @@ mapCoreF _f _g h (CoreBind act k) =
   CoreBind (h act) (h k)
 mapCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError (fmap h err)
-mapCoreF _f _g h (CoreSendSignal core) =
-  CoreSendSignal (h core)
-mapCoreF _f _g h (CoreWaitSignal core) =
-  CoreWaitSignal (h core)
 mapCoreF _f _g h (CoreIdentEq how l r) =
   CoreIdentEq how (h l) (h r)
 mapCoreF _f _g h (CoreLog core) =
@@ -198,8 +191,8 @@ mapCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc (h scrut) [(pat, h c) | (pat, c) <- cases]
 mapCoreF _f _g _h (CoreIdentifier n) =
   CoreIdentifier n
-mapCoreF _f _g _h (CoreSignal s) =
-  CoreSignal s
+mapCoreF _f _g _h (CoreInteger i) =
+  CoreInteger i
 mapCoreF _f _g h (CoreIdent ident) =
   CoreIdent (fmap h ident)
 mapCoreF _f _g h (CoreEmpty args) =
@@ -240,10 +233,6 @@ traverseCoreF _f _g h (CoreBind act k) =
   CoreBind <$> h act <*> h k
 traverseCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError <$> traverse h err
-traverseCoreF _f _g h (CoreSendSignal core) =
-  CoreSendSignal <$> h core
-traverseCoreF _f _g h (CoreWaitSignal core) =
-  CoreWaitSignal <$> h core
 traverseCoreF _f _g h (CoreIdentEq how l r) =
   CoreIdentEq how <$> h l <*> h r
 traverseCoreF _f _g h (CoreLog core) =
@@ -258,8 +247,8 @@ traverseCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc <$> h scrut <*> for cases \(pat, c) -> (pat,) <$> h c
 traverseCoreF _f _g _h (CoreIdentifier n) =
   pure $ CoreIdentifier n
-traverseCoreF _f _g _h (CoreSignal s) =
-  pure $ CoreSignal s
+traverseCoreF _f _g _h (CoreInteger integer) =
+  pure $ CoreInteger integer
 traverseCoreF _f _g h (CoreIdent ident) =
   CoreIdent <$> traverse h ident
 traverseCoreF _f _g h (CoreEmpty args) =
@@ -323,12 +312,6 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
              (CoreSyntaxError syntaxError2) = do
     alphaCheck syntaxError1 syntaxError2
     alphaCheck syntaxError1 syntaxError2
-  alphaCheck (CoreSendSignal signal1)
-             (CoreSendSignal signal2) = do
-    alphaCheck signal1 signal2
-  alphaCheck (CoreWaitSignal signal1)
-             (CoreWaitSignal signal2) = do
-    alphaCheck signal1 signal2
   alphaCheck (CoreIdentEq how1 e1 g1)
              (CoreIdentEq how2 e2 g2) = do
     guard $ how1 == how2
@@ -344,9 +327,9 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
   alphaCheck (CoreIdentifier stx1)
              (CoreIdentifier stx2) = do
     alphaCheck stx1 stx2
-  alphaCheck (CoreSignal s1)
-             (CoreSignal s2) =
-    guard $ s1 == s2
+  alphaCheck (CoreInteger i1)
+             (CoreInteger i2) =
+    guard $ i1 == i2
   alphaCheck (CoreIdent scopedIdent1)
              (CoreIdent scopedIdent2) = do
     alphaCheck scopedIdent1 scopedIdent2
@@ -510,14 +493,6 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(SyntaxError "
    ++ shortShow syntaxError
    ++ ")"
-  shortShow (CoreSendSignal signal)
-    = "(SendSignal "
-   ++ shortShow signal
-   ++ ")"
-  shortShow (CoreWaitSignal signal)
-    = "(WaitSignal "
-   ++ shortShow signal
-   ++ ")"
   shortShow (CoreIdentEq how e1 e2)
     = "(CoreIdentEq " ++ show how
     ++ " " ++ shortShow e1
@@ -542,8 +517,8 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(Identifier "
    ++ shortShow stx
    ++ ")"
-  shortShow (CoreSignal signal)
-    = shortShow signal
+  shortShow (CoreInteger i)
+    = show i
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
    ++ shortShow scopedIdent

@@ -10,8 +10,8 @@
 
 (export -- primitive types
         Syntax
-        Signal
         ->
+        Integer
         Macro
         Type
         String string-append string=?
@@ -47,8 +47,6 @@
         pure
         >>=
         syntax-error
-        send-signal
-        wait-signal
         bound-identifier=?
         free-identifier=?
         quote
