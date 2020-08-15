@@ -5,10 +5,10 @@ import Control.Lens hiding (children)
 import Control.Monad.Writer
 import Data.Map (Map)
 import qualified Data.Map as Map
-import Data.Unique
 
 import PartialType
 import Type
+import Unique
 
 newtype SplitTypePtr = SplitTypePtr Unique
   deriving (Eq, Ord)

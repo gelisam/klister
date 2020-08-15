@@ -44,7 +44,6 @@ import qualified Data.Map as Map
 import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text (Text)
-import Data.Unique
 import Numeric.Natural
 
 import Binding
@@ -55,6 +54,7 @@ import Phase
 import Syntax
 import Syntax.SrcLoc
 import Type
+import Unique
 
 
 newtype ModulePtr = ModulePtr Unique

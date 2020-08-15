@@ -7,12 +7,12 @@ import Data.Map (Map)
 import qualified Data.Map as Map
 import ScopeSet
 import Data.Text (Text)
-import Data.Unique
 
 import Binding.Info
 import Phase
 import ShortShow
 import Syntax.SrcLoc
+import Unique
 
 newtype Binding = Binding Unique
   deriving (Eq, Ord)

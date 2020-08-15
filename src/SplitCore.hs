@@ -8,12 +8,12 @@ module SplitCore where
 import Control.Lens hiding (children)
 import Control.Monad.Except
 import Control.Monad.Writer
-import Data.Unique
 import Data.Map (Map)
 import qualified Data.Map as Map
 
 import Core
 import PartialCore
+import Unique
 
 newtype SplitCorePtr = SplitCorePtr Unique
   deriving (Eq, Ord)

@@ -15,7 +15,6 @@ import Data.List
 import Data.Foldable
 import Data.Text (Text)
 import Data.Traversable
-import Data.Unique
 
 import Alpha
 import Datatype
@@ -26,6 +25,7 @@ import Signals
 import Syntax
 import Syntax.SrcLoc
 import Type
+import Unique
 
 
 data SyntaxError a = SyntaxError

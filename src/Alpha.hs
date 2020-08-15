@@ -9,8 +9,9 @@ import Control.Monad.State
 import Data.Map (Map)
 import Data.Maybe
 import Data.Text
-import Data.Unique
 import qualified Data.Map as Map
+
+import Unique
 
 
 data AlphaState = AlphaState

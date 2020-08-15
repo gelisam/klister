@@ -154,7 +154,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Unique
 import Numeric.Natural
 
 import Binding
@@ -183,6 +182,7 @@ import Syntax
 import Syntax.SrcLoc
 import Type
 import Type.Context
+import Unique
 import Value
 import World
 

@@ -1,6 +1,6 @@
 module Expander.DeclScope where
 
-import Data.Unique
+import Unique
 
 -- | A 'DeclOutputScopesPtr' gets filled with a 'ScopeSet' consisting of all the
 -- scopes introduced by a declaration or a declaration group, so that later code

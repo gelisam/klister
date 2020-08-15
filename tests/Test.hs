@@ -14,7 +14,6 @@ import Data.Maybe (maybeToList)
 import Data.Text (Text)
 import Data.Set (Set)
 import qualified Data.Text as T
-import Data.Unique (newUnique)
 
 import Test.Tasty
 import Test.Tasty.HUnit
@@ -46,6 +45,7 @@ import Signals
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
+import Unique
 import Value
 import World
 

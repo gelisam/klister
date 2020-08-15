@@ -10,12 +10,12 @@ import Control.Lens
 import Control.Monad
 import Data.Foldable
 import Data.Map (Map)
-import Data.Unique
 import Numeric.Natural
 
 import Alpha
 import Datatype
 import ShortShow
+import Unique
 
 newtype MetaPtr = MetaPtr Unique deriving (Eq, Ord)
 
