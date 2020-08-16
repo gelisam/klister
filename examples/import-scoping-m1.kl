@@ -1,5 +1,7 @@
 #lang kernel
 
+-- See "import-scoping.kl" for an explanation.
+
 (import (shift kernel 1))
 
 (define-macros

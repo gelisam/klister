@@ -1,6 +1,0 @@
-#lang kernel
-
-(import (shift "m2.kl" 1))
-(import "m2.kl")
-
-(example (m2))
