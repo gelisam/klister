@@ -1,8 +1,9 @@
 module ShortShow where
 
 import Data.Text
-import Data.Unique
 import qualified Data.List as List
+
+import Unique
 
 
 class ShortShow a where

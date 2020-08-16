@@ -1,7 +1,12 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
+{-# LANGUAGE GADTs #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 module ScopeSet (
   -- * Scope Sets and their construction
     ScopeSet
@@ -19,10 +24,13 @@ module ScopeSet (
   , deleteAtPhase
   , deleteUniversally
   , flipUniversally
+  , allScopeSets
   ) where
 
 import Control.Lens
 import Control.Monad
+import Data.Data (Data, gfoldl)
+import Data.Typeable
 import Data.Map.Strict (Map)
 import qualified Data.Map.Strict as Map
 import Data.Set (Set)
@@ -37,7 +45,7 @@ data ScopeSet = ScopeSet
   { _universalScopes :: Set Scope
   , _phaseScopes :: Map Phase (Set Scope)
   }
-  deriving (Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show)
 makeLenses ''ScopeSet
 
 instance ShortShow ScopeSet where
@@ -112,3 +120,25 @@ contents scs = (view universalScopes scs, view phaseScopes scs)
 
 instance AlphaEq ScopeSet where
   alphaCheck x y = guard (x == y)
+
+allScopeSets :: Data d => Traversal' d ScopeSet
+allScopeSets = allScopeSets'
+  where
+    allScopeSets' :: forall f d. (Applicative f, Data d)
+                  => (ScopeSet -> f ScopeSet)
+                  -> d -> f d
+    allScopeSets' f = gmapA go
+      where
+        go :: forall a. Data a => a -> f a
+        go a = case eqT @a @ScopeSet of
+          Just Refl -> f a
+          Nothing -> allScopeSets' f a
+
+    -- A variant of Data.Data.gmapM which uses Applicative instead of Monad
+    gmapA :: forall f d. (Applicative f, Data d)
+          => (forall x. Data x => x -> f x)
+          -> d -> f d
+    gmapA g = gfoldl combine pure
+      where
+        combine :: Data a => f (a -> b) -> a -> f b
+        combine ff a = (<*>) ff (g a)

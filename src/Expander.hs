@@ -227,11 +227,13 @@ visit modName = do
               getState
   unless visitedp $ do
     let m' = shift i m -- Shift the syntax literals in the module source code
-    evalResults <- inPhase p $ evalMod m'
+    sc <- freshScope $ T.pack $ "For module-phase " ++ shortShow modName ++ "-" ++ shortShow p
+    let m'' = over ScopeSet.allScopeSets (ScopeSet.insertUniversally sc) m'
+    evalResults <- inPhase p $ evalMod m''
     modifyState $
       set (expanderWorld . worldEvaluated . at modName)
           (Just evalResults)
-    let bs = getModuleBindings m'
+    let bs = getModuleBindings m''
     modifyState $ over expanderGlobalBindingTable $ (<> bs)
   return (shift i es)
   where getModuleBindings (Expanded _ bs) = bs

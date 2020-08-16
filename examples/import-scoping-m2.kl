@@ -1,0 +1,13 @@
+#lang kernel
+
+-- See "import-scoping.kl" for an explanation.
+
+(import (shift kernel 1))
+(import "import-scoping-m1.kl")
+
+(define-macros
+  ([m2
+    (lambda (stx)
+      (pure '(m1)))]))
+
+(export m2)

@@ -1,0 +1,33 @@
+#lang kernel
+
+-- This tests a tricky case around imports and scoping.
+--
+-- * "import-scoping-m1.kl" defines m1.
+-- * "import-scoping-m2.kl" defines a macro m2 which produces code referring to m1.
+-- * In this module, we import "import-scoping-m2.kl" at two different phases.
+-- * We then refer to m2 at phase 0.
+-- * Since m2 is a macro, its definition then executes at phase 1.
+-- * It expands to code referring to m1.
+-- * We now have a reference to m1 at phase 0.
+--
+-- With our old approach for imports and scoping, that reference to m1 was
+-- ambiguous. The two imports of "import-scoping-m2.kl" each cause a different
+-- m1 to be imported, but hidden. It is hidden, because "import-scoping-m2.kl"
+-- doesn't re-export m1; but it is nevertheless imported, so that once m2
+-- expands to code containing m1, that code has a chance to be well-scoped.
+--
+-- If the imports form a diamond, we only import one imported-but-hidden
+-- instance of m1, so that the imported macros can cooperate with each other.
+-- In this case, however, the two imports are at different phases, so we
+-- import two different instances of m1.
+--
+-- Previously, we were distinguishing the shifted instance of m1 by shifting
+-- all its phase-specific scopes by one phase. Unfortunately, in this case,
+-- this is not sufficient, because those phase-specific scopes happen to also
+-- be present in the universal scopes shared by the two instances of m1. The
+-- solution was add a scope for each (imported module, phase) pair.
+
+(import (shift "import-scoping-m2.kl" 1))
+(import "import-scoping-m2.kl")
+
+(example (m2))

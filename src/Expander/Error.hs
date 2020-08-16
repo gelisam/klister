@@ -74,9 +74,12 @@ data MacroContext
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
     hang 4 $
-      text "Ambiguous identifier in phase" <+> pp env p <+>
-      pp env x <> line <>
-      vsep [viaShow c | c <- candidates]
+      text "Ambiguous identifier in phase" <+> pp env p <+> line <>
+      text "Identifier:" <+> pp env x <> line <>
+      text "Scope set of the identifier:" <> line <>
+        viaShow (_stxScopeSet x) <> line <>
+      text "Scope sets of the candidates:" <> line <>
+        vsep [viaShow c | c <- candidates]
   pp env (Unknown x) = text "Unknown:" <+> pp env x
   pp env (NoProgress tasks) =
     hang 4 $

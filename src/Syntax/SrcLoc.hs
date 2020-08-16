@@ -1,8 +1,10 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Syntax.SrcLoc where
 
 import Control.Monad
 import Control.Lens
+import Data.Data (Data)
 
 import Alpha
 import ShortShow
@@ -11,7 +13,7 @@ data SrcPos = SrcPos
   { _srcPosLine :: !Int
   , _srcPosCol  :: !Int
   }
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makeLenses ''SrcPos
 
 instance ShortShow SrcPos where
@@ -22,7 +24,7 @@ data SrcLoc = SrcLoc
   , _srcLocStart    :: !SrcPos
   , _srcLocEnd      :: !SrcPos
   }
-  deriving (Eq, Show)
+  deriving (Data, Eq, Show)
 makeLenses ''SrcLoc
 
 instance AlphaEq SrcLoc where
