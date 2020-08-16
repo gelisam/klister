@@ -1,8 +1,18 @@
+{-|
+Module           : Syntax
+Description      : User-facing syntax of Klister
+
+'Syntax' is the user-facing syntax for Klister. It can come from parsing Klister
+code or from the expansion of user macros. It is transformed into Klister\'s
+core language by the expander.
+-}
+
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 module Syntax where
 
 import Control.Lens hiding (List)

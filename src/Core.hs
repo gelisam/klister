@@ -1,3 +1,12 @@
+{-|
+Module           : Core
+Description      : An extensible datatype for expressions
+
+The various instantiations of the openly recursive 'CoreF' datatype represent
+expressions in different states of expansion, with the fixpoint 'Core'
+representing fully-expanded expressions.
+-}
+
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
@@ -7,6 +16,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
+
 module Core where
 
 import Control.Lens hiding (elements)
@@ -286,6 +296,7 @@ instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat 
   shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
   shift i other = bimap (shift i) (shift i) other
 
+-- | A fully-expanded expression, ready to be evaluated.
 newtype Core = Core
   { unCore :: CoreF TypePattern ConstructorPattern Core }
   deriving (Data, Eq, Show)
