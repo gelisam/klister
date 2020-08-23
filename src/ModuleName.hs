@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 module ModuleName (
   -- * Module names
     ModuleName(..)
@@ -8,6 +9,7 @@ module ModuleName (
   , moduleNameText
   ) where
 
+import Data.Data (Data)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Directory
@@ -15,13 +17,13 @@ import System.Directory
 import ShortShow
 
 newtype KernelName = Kernel ()
-  deriving (Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show)
 
 kernelName :: KernelName
 kernelName = Kernel ()
 
 data ModuleName = ModuleName FilePath | KernelName KernelName
-  deriving (Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show)
 
 instance ShortShow ModuleName where
   shortShow (ModuleName x) = x

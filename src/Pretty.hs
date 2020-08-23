@@ -17,7 +17,6 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.Prettyprint.Doc as PP
 import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
-import Data.Unique
 import System.FilePath (takeFileName)
 
 import Binding
@@ -36,6 +35,7 @@ import ScopeSet
 import Syntax
 import Syntax.SrcLoc
 import Type
+import Unique
 import Value
 import World
 
@@ -450,7 +450,7 @@ instance Pretty VarInfo ImportSpec where
                                                   ]
 
 instance Pretty VarInfo ModuleName where
-  pp _ n = viaShow (moduleNameText n)
+  pp _ n = text (moduleNameText n)
 
 instance (Functor f, Traversable f, PrettyBinder VarInfo a) => Pretty VarInfo (Module f a) where
   pp env m =

@@ -41,6 +41,7 @@ module Expander.Monad
   , inEarlierPhase
   , inPhase
   , isExprChecked
+  , importing
   , kernelExports
   , linkedCore
   , linkedScheme
@@ -159,7 +160,6 @@ import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
-import Data.Unique
 import Numeric.Natural
 
 import Binding
@@ -189,6 +189,7 @@ import Syntax
 import Syntax.SrcLoc
 import Type
 import Type.Context
+import Unique
 import Value
 import World
 
@@ -250,6 +251,7 @@ data ExpanderLocal = ExpanderLocal
   , _expanderBindingLevels :: !(Map Phase BindingLevel)
   , _expanderVarTypes :: TypeContext Var SchemePtr
   , _expanderKlisterPath :: !KlisterPath
+  , _expanderImportStack :: [ModuleName]
   }
 
 mkInitContext :: ModuleName -> IO ExpanderContext
@@ -263,6 +265,7 @@ mkInitContext mn = do
                              , _expanderBindingLevels = Map.empty
                              , _expanderVarTypes = mempty
                              , _expanderKlisterPath = kPath
+                             , _expanderImportStack = []
                              }
                            }
 
@@ -870,6 +873,7 @@ scheduleType kind stx = do
   forkExpandType kind dest stx
   return dest
 
+
 scheduleTypeInferKind :: Syntax -> Expand SplitTypePtr
 scheduleTypeInferKind stx = do
   kind <- KMetaVar <$> liftIO newKindVar
@@ -886,3 +890,10 @@ zonkKind (KMetaVar v) =
     Nothing -> pure (KMetaVar v)
 zonkKind KStar = pure KStar
 zonkKind (KFun k1 k2) = KFun <$> zonkKind k1 <*> zonkKind k2
+
+importing :: ModuleName -> Expand a -> Expand a
+importing mn act = do
+  inProgress <- view (expanderLocal . expanderImportStack) <$> ask
+  if mn `elem` inProgress
+    then throwError $ CircularImports mn inProgress
+    else Expand $ local (over (expanderLocal . expanderImportStack) (mn:)) (runExpand act)

@@ -1,5 +1,8 @@
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 module Binding.Info where
+
+import Data.Data (Data)
 
 import ShortShow
 
@@ -9,7 +12,7 @@ data BindingInfo loc
   -- TODO add the binding info of the exported name to Imported, to
   -- enable go to definition
   | Imported loc
-  deriving (Eq, Functor, Show)
+  deriving (Data, Eq, Functor, Show)
 
 instance ShortShow loc => ShortShow (BindingInfo loc) where
   shortShow (BoundLocally l) = "BoundLocally " ++ shortShow l

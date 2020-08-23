@@ -1,7 +1,6 @@
 module Core.Builder where
 
 import qualified Data.Text as T
-import Data.Unique
 
 
 import Core
@@ -9,6 +8,7 @@ import ScopeSet ()
 import Signals
 import Syntax
 import Syntax.SrcLoc
+import Unique
 
 fakeLoc :: SrcLoc
 fakeLoc = SrcLoc "<fake>" (SrcPos 0 0) (SrcPos 0 0)

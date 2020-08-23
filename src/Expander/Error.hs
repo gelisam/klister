@@ -13,6 +13,7 @@ import Evaluator
 import Expander.Task
 import Kind
 import KlisterPath
+import ModuleName
 import Phase
 import Pretty
 import ScopeSet
@@ -53,6 +54,7 @@ data ExpansionErr
   | NotAConstructor Syntax
   | WrongDatatypeArity Syntax Datatype Natural Int
   | KindMismatch (Maybe SrcLoc) Kind Kind
+  | CircularImports ModuleName [ModuleName]
   deriving (Show)
 
 data TypeCheckError
@@ -74,9 +76,12 @@ data MacroContext
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
     hang 4 $
-      text "Ambiguous identifier in phase" <+> pp env p <+>
-      pp env x <> line <>
-      vsep [viaShow c | c <- candidates]
+      text "Ambiguous identifier in phase" <+> pp env p <+> line <>
+      text "Identifier:" <+> pp env x <> line <>
+      text "Scope set of the identifier:" <> line <>
+        viaShow (_stxScopeSet x) <> line <>
+      text "Scope sets of the candidates:" <> line <>
+        vsep [viaShow c | c <- candidates]
   pp env (Unknown x) = text "Unknown:" <+> pp env x
   pp env (NoProgress tasks) =
     hang 4 $
@@ -182,6 +187,9 @@ instance Pretty VarInfo ExpansionErr where
                             maybe (text "unknown location") (pp env) loc <> text "."
                           , group $ vsep [pp env k1, text "≠", pp env k2]
                           ]
+  pp env (CircularImports current stack) =
+    hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", pp env current]
+                  , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
 
 instance Pretty VarInfo TypeCheckError where
   pp env (TypeMismatch loc expected got specifically) =

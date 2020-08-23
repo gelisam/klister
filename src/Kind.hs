@@ -1,6 +1,4 @@
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -10,10 +8,12 @@
 module Kind (Kind(..), KindVar, newKindVar, kFun, KindStore) where
 
 import Control.Lens
+import Data.Data (Data)
 import Data.Map.Strict (Map)
-import Data.Unique
 
-newtype KindVar = KindVar Unique deriving (Eq, Ord)
+import Unique
+
+newtype KindVar = KindVar Unique deriving (Data, Eq, Ord)
 
 instance Show KindVar where
   show (KindVar i) = "(KindVar " ++ show (hashUnique i) ++ ")"
@@ -22,7 +22,7 @@ data Kind
   = KStar
   | KFun Kind Kind
   | KMetaVar KindVar
-  deriving (Show, Eq)
+  deriving (Data, Eq, Show)
 makePrisms ''Kind
 
 
