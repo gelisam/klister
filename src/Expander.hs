@@ -86,7 +86,7 @@ import qualified ScopeSet
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr
-  t <- tMetaVar <$> freshMeta
+  t <- tMetaVar <$> freshMeta (Just KStar)
   forkExpandSyntax (ExprDest t dest) stx
   expandTasks
   children <- view expanderCompletedCore <$> getState
@@ -863,7 +863,7 @@ runTask (tid, localData, task) = withLocal localData $ do
       \case
         Nothing -> stillStuck tid task
         Just sch -> do
-          specialize sch >>= unify eDest ty
+          specialize eDest sch >>= unify eDest ty
           saveExprType eDest ty
           linkExpr eDest (CoreVar x)
     EstablishConstructors scs outScopesDest dt ctors -> do
@@ -999,7 +999,7 @@ expandOneForm prob stx
             ExprDest t dest -> do
               argTys <- traverse makeTypeMeta argKinds
               unify dest t $ tDatatype dt argTys
-              args' <- for args \a -> inst (Scheme argKinds a) argTys
+              args' <- for args \a -> inst dest (Scheme argKinds a) argTys
               Stx _ _ (foundName, foundArgs) <- mustBeCons stx
               _ <- mustBeIdent foundName
               argDests <-
@@ -1013,7 +1013,7 @@ expandOneForm prob stx
               Stx _ loc (_cname, patVars) <- mustBeCons stx
               tyArgs <- traverse makeTypeMeta argKinds
               argTypes <- for args \ a -> do
-                            t <- inst (Scheme argKinds a) tyArgs
+                            t <- inst loc (Scheme argKinds a) tyArgs
                             trivialScheme t
               unify loc (tDatatype dt tyArgs) patTy
               if length patVars /= length argTypes

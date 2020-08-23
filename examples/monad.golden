@@ -1,0 +1,8 @@
+#<closure> : ∀(α : *). (α → α)
+#<closure> : ∀(α : (* → *)) (β : *) (γ : *). ((Functor α β γ) → ((β → γ) → ((α β) → (α γ))))
+(applicative (functor #<closure>) #<closure> #<closure>) : ∀(α : *) (β : *). (Applicative Macro α β)
+#<closure> : ∀(α : (* → *)) (β : *) (γ : *). ((Applicative α β γ) → (β → (α β)))
+#<closure> : ∀(α : (* → *)) (β : *) (γ : *).
+ ((Applicative α β γ) → ((α (β → γ)) → ((α β) → (α γ))))
+#<closure> : ∀(α : (* → *)) (β : *) (γ : *).
+ ((Monad α β γ) → ((α β) → ((β → (α γ)) → (α γ))))

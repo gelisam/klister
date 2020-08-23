@@ -112,7 +112,7 @@ define dest outScopesDest stx = do
   schPtr <- liftIO $ newSchemePtr
   linkOneDecl dest (Define x var schPtr exprDest)
   t <- inTypeBinder do
-    t <- tMetaVar <$> freshMeta
+    t <- tMetaVar <$> freshMeta (Just KStar)
     forkExpandSyntax (ExprDest t exprDest) expr
     return t
   ph <- currentPhase
@@ -189,7 +189,7 @@ example dest outScopesDest stx = do
   sch <- liftIO newSchemePtr
   linkOneDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
   t <- inTypeBinder do
-    t <- tMetaVar <$> freshMeta
+    t <- tMetaVar <$> freshMeta (Just KStar)
     forkExpandSyntax (ExprDest t exprDest) expr
     return t
   forkGeneralizeType exprDest t sch
@@ -235,7 +235,7 @@ letExpr t dest stx = do
   p <- currentPhase
   psc <- phaseRoot
   (defDest, xTy) <- inTypeBinder do
-    xt <- tMetaVar <$> freshMeta
+    xt <- tMetaVar <$> freshMeta (Just KStar)
     defDest <- schedule xt def
     return (defDest, xt)
   sch <- liftIO $ newSchemePtr
@@ -246,9 +246,9 @@ letExpr t dest stx = do
 
 flet :: ExprPrim
 flet t dest stx = do
-  ft <- inTypeBinder $ tMetaVar <$> freshMeta
-  xt <- inTypeBinder $ tMetaVar <$> freshMeta
-  rt <- inTypeBinder $ tMetaVar <$> freshMeta
+  ft <- inTypeBinder $ tMetaVar <$> freshMeta (Just KStar)
+  xt <- inTypeBinder $ tMetaVar <$> freshMeta (Just KStar)
+  rt <- inTypeBinder $ tMetaVar <$> freshMeta (Just KStar)
   fsch <- trivialScheme ft
   xsch <- trivialScheme xt
   Stx _ _ (_, b, body) <- mustHaveEntries stx
@@ -278,8 +278,8 @@ lambda t dest stx = do
   (sc, arg', coreArg) <- prepareVar theArg
   p <- currentPhase
   psc <- phaseRoot
-  argT <- tMetaVar <$> freshMeta
-  retT <- tMetaVar <$> freshMeta
+  argT <- tMetaVar <$> freshMeta (Just KStar)
+  retT <- tMetaVar <$> freshMeta (Just KStar)
   unify dest t (tFun1 argT retT)
   sch <- trivialScheme argT
   bodyDest <-
@@ -289,7 +289,7 @@ lambda t dest stx = do
 
 app :: ExprPrim
 app t dest stx = do
-  argT <- tMetaVar <$> freshMeta
+  argT <- tMetaVar <$> freshMeta (Just KStar)
   Stx _ _ (_, fun, arg) <- mustHaveEntries stx
   funDest <- schedule (tFun1 argT t) fun
   argDest <- schedule argT arg
@@ -298,7 +298,7 @@ app t dest stx = do
 pureMacro :: ExprPrim
 pureMacro t dest stx = do
   Stx _ _ (_ :: Syntax, v) <- mustHaveEntries stx
-  innerT <- tMetaVar <$> freshMeta
+  innerT <- tMetaVar <$> freshMeta (Just KStar)
   unify dest (tMacro innerT) t
   argDest <- schedule innerT v
   linkExpr dest $ CorePure argDest
@@ -306,8 +306,8 @@ pureMacro t dest stx = do
 
 bindMacro :: ExprPrim
 bindMacro t dest stx = do
-  a <- tMetaVar <$> freshMeta
-  b <- tMetaVar <$> freshMeta
+  a <- tMetaVar <$> freshMeta (Just KStar)
+  b <- tMetaVar <$> freshMeta (Just KStar)
   Stx _ _ (_, act, cont) <- mustHaveEntries stx
   actDest <- schedule (tMacro a) act
   contDest <- schedule (tFun1 a (tMacro b)) cont
@@ -316,7 +316,7 @@ bindMacro t dest stx = do
 
 syntaxError :: ExprPrim
 syntaxError t dest stx = do
-  a <- tMetaVar <$> freshMeta
+  a <- tMetaVar <$> freshMeta (Just KStar)
   unify dest t (tMacro a)
   Stx scs srcloc (_, args) <- mustBeCons stx
   Stx _ _ (msg, locs) <- mustBeCons $ Syntax $ Stx scs srcloc (List args)
@@ -464,7 +464,7 @@ whichProblem t dest stx = do
 dataCase :: ExprPrim
 dataCase t dest stx = do
   Stx _ loc (_, scrut, cases) <- mustBeConsCons stx
-  a <- tMetaVar <$> freshMeta
+  a <- tMetaVar <$> freshMeta (Just KStar)
   scrutineeDest <- schedule a scrut
   cases' <- traverse (mustHaveEntries >=> scheduleDataPattern t a) cases
   linkExpr dest $ CoreDataCase loc scrutineeDest cases'
@@ -472,7 +472,7 @@ dataCase t dest stx = do
 typeCase :: ExprPrim
 typeCase t dest stx = do
   Stx _ loc (_, scrut, cases) <- mustBeConsCons stx
-  a <- tMetaVar <$> freshMeta
+  a <- tMetaVar <$> freshMeta (Just KStar)
   unify dest (tMacro a) t
   scrutineeDest <- schedule tType scrut
   cases' <- traverse (mustHaveEntries >=> scheduleTypePattern t) cases
@@ -567,7 +567,7 @@ makeLocalType dest stx = do
   Stx _ _ (_ :: Syntax, binder, body) <- mustHaveEntries stx
   Stx _ _ theVar <- mustHaveEntries binder
   (sc, n, b) <- varPrepHelper theVar
-  meta <- freshMeta
+  meta <- freshMeta Nothing
   let t = TMetaVar meta
 
   let tyImpl k tdest tstx = do

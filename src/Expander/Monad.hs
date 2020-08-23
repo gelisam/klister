@@ -604,7 +604,9 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Define x v sch e'
+            Just (Scheme ks t) -> do
+              ks' <- traverse zonkKind ks
+              pure $ CompleteDecl $ Define x v (Scheme ks' t) e'
     zonkDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
       for macros \(x, v, e) ->
@@ -640,7 +642,9 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Example loc sch e'
+            Just (Scheme ks t) -> do
+              ks' <- traverse zonkKind ks
+              pure $ CompleteDecl $ Example loc (Scheme ks' t) e'
     zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
     zonkDecl (Export x) = return $ CompleteDecl $ Export x
 

@@ -1,0 +1,89 @@
+#lang "prelude.kl"
+
+(import "defun.kl")
+(import "lambda-case.kl")
+
+(example (lambda (x) x))
+
+(datatype (Functor F A B)
+  (functor (-> (-> A B) (-> (F A) (F B)))))
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(defun map (f xs)
+  (case xs
+    [(nil) (nil)]
+    [(:: y ys) (:: (f y) (map f ys))]))
+
+(define list-functor
+  (functor map))
+
+(datatype (Maybe A)
+  (nothing)
+  (just A))
+
+(define maybe-functor
+  (functor
+    (lambda (f x)
+      (case x
+        [(nothing) (nothing)]
+        [(just x) (just (f x))]))))
+
+(define macro-functor
+  (functor
+    (lambda (f x)
+      (>>= x (lambda (y) (pure (f y)))))))
+
+(define fmap
+  (lambda (inst f x)
+    (case inst
+      [(functor op) (op f x)])))
+
+(example fmap)
+
+(datatype (Applicative F A B)
+  (applicative (Functor F A B)
+               (-> A (F A))
+               (-> (F (-> A B)) (F A) (F B))))
+
+
+(define macro-applicative
+  (applicative
+    macro-functor
+    (lambda (x) (pure x))
+    (lambda (fun arg)
+      (>>= fun (lambda (g) (>>= arg (lambda (x) (pure (g x)))))))))
+
+(example macro-applicative)
+
+(define return
+  (lambda (inst x)
+    (case inst
+      [(applicative fun p ap) (p x)])))
+
+(example return)
+
+(define ap
+  (lambda (inst f arg)
+    (case inst
+      [(applicative fun p ap) (ap f arg)])))
+
+(example ap)
+
+(datatype (Monad M A B)
+  (monad (Applicative M A B)
+         (-> (M A) (-> A (M B))
+             (M B))))
+
+(define macro-monad
+  (monad macro-applicative (lambda (m f) (>>= m f))))
+
+(define bind
+  (lambda (inst m f)
+    (case inst
+      [(monad app >>=) (>>= m f)])))
+
+(example bind)
+
