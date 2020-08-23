@@ -129,13 +129,12 @@ datatype dest outScopesDest stx = do
   typeArgs <- for (zip [0..] args) $ \(i, a) ->
     prepareTypeVar i a
   sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
-  let typeScopes = map fst typeArgs ++ [sc]
+  let typeScopes = map (view _1) typeArgs ++ [sc]
   realName <- mustBeIdent (addScope' name sc)
   p <- currentPhase
-  let arity = length args
-  let argKinds = replicate arity KStar
   d <- freshDatatype realName
-  addDatatype realName d (fromIntegral arity)
+  let argKinds = map (view _3) typeArgs
+  addDatatype realName d argKinds
 
   ctors <- for ctorSpecs \ spec -> do
     Stx _ _ (cn, ctorArgs) <- mustBeCons spec
@@ -144,7 +143,7 @@ datatype dest outScopesDest stx = do
     let ctorArgs' = [ foldr (flip (addScope p)) t typeScopes
                     | t <- ctorArgs
                     ]
-    argTypes <- traverse scheduleType ctorArgs'
+    argTypes <- traverse (scheduleType KStar) ctorArgs'
     return (realCN, ctor, argTypes)
 
   let info =
@@ -224,7 +223,7 @@ err _t dest stx = do
 the :: ExprPrim
 the t dest stx = do
   Stx _ _ (_, ty, expr) <- mustHaveEntries stx
-  tyDest <- scheduleType ty
+  tyDest <- scheduleType KStar ty
   -- TODO add type to elaborated program? Or not?
   forkAwaitingType tyDest [TypeThenUnify dest t, TypeThenExpandExpr dest expr]
 
@@ -483,12 +482,13 @@ typeCase t dest stx = do
 -- Type Primitives --
 ---------------------
 type TypePrim =
-  (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ())
+  (Kind -> SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ())
 
 baseType :: (forall a . TyF a) -> TypePrim
 baseType ctor = (implT, implP)
   where
-    implT dest stx = do
+    implT k dest stx = do
+      equateKinds stx KStar k
       _actualName <- mustBeIdent stx
       linkType dest ctor
     implP dest stx = do
@@ -498,10 +498,11 @@ baseType ctor = (implT, implP)
 arrowType :: TypePrim
 arrowType = (implT, implP)
   where
-    implT dest stx = do
+    implT k dest stx = do
+      equateKinds stx KStar k
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
-      argDest <- scheduleType arg
-      retDest <- scheduleType ret
+      argDest <- scheduleType KStar arg
+      retDest <- scheduleType KStar ret
       linkType dest (tFun1 argDest retDest)
     implP dest stx = do
       Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
@@ -519,9 +520,10 @@ macroType = unaryType (\a -> tMacro a)
 unaryType :: (forall a . a -> TyF a) -> TypePrim
 unaryType ctor = (implT, implP)
   where
-    implT dest stx = do
+    implT k dest stx = do
+      equateKinds stx KStar k
       Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
-      tDest <- scheduleType t
+      tDest <- scheduleType KStar t
       linkType dest (ctor tDest)
     implP dest stx = do
       Stx _ _ (_ :: Syntax, a) <- mustHaveEntries stx
@@ -557,14 +559,20 @@ makeModule expandDeclForms stx =
 -- Anywhere --
 --------------
 
+-- | with-unknown-type's implementation: create a named fresh
+-- unification variable for macros that only can annotate part of a
+-- type.
 makeLocalType :: MacroDest -> Syntax -> Expand ()
 makeLocalType dest stx = do
   Stx _ _ (_ :: Syntax, binder, body) <- mustHaveEntries stx
   Stx _ _ theVar <- mustHaveEntries binder
   (sc, n, b) <- varPrepHelper theVar
-  t <- TMetaVar <$> freshMeta
+  meta <- freshMeta
+  let t = TMetaVar meta
 
-  let tyImpl tdest tstx = do
+  let tyImpl k tdest tstx = do
+        k' <- typeVarKind meta
+        equateKinds tstx k k'
         _ <- mustBeIdent tstx
         linkType tdest $ TyF t []
   let patImpl _ tstx =
@@ -602,33 +610,31 @@ elsePattern (Right (_exprTy, dest)) stx = do
 -- Helpers --
 -------------
 
-addDatatype :: Ident -> Datatype -> Natural -> Expand ()
-addDatatype name dt arity = do
+-- | Add the primitive macros that expand to datatype invocations
+addDatatype :: Ident -> Datatype -> [Kind] -> Expand ()
+addDatatype name dt argKinds = do
   name' <- addRootScope' name
   let implType =
-        \dest stx -> do
+        \k dest stx -> do
           Stx _ _ (me, args) <- mustBeCons stx
           _ <- mustBeIdent me
-          if length args /= fromIntegral arity
-            then throwError $ WrongDatatypeArity stx dt arity (length args)
-            else do
-              argDests <- traverse scheduleType args
-              linkType dest $ tDatatype dt argDests
+          argDests <- traverse (uncurry scheduleType) (zip argKinds args)
+          let appKind = kFun (drop (length args) argKinds) KStar
+          equateKinds stx k appKind
+          linkType dest $ tDatatype dt argDests
       implPat =
         \dest stx -> do
           Stx _ _ (me, args) <- mustBeCons stx
           _ <- mustBeIdent me
-          if length args /= fromIntegral arity
-            then throwError $ WrongDatatypeArity stx dt arity (length args)
-            else do
-              patVarInfo <- traverse prepareVar args
-              sch <- trivialScheme tType
-              modifyState $
-                set (expanderPatternBinders . at (Right dest)) $
-                Just [ (sc, n, x, sch)
-                     | (sc, n, x) <- patVarInfo
-                     ]
-              linkTypePattern dest $ TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo]
+          patVarInfo <- traverse prepareVar args
+          sch <- trivialScheme tType
+          modifyState $
+            set (expanderPatternBinders . at (Right dest)) $
+            Just [ (sc, n, x, sch)
+                 | (sc, n, x) <- patVarInfo
+                 ]
+          -- FIXME kind check here
+          linkTypePattern dest $ TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo]
   let val = EPrimTypeMacro implType implPat
   b <- freshBinding
   addDefinedBinding name' b
@@ -706,11 +712,12 @@ scheduleTypePattern exprTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = d
   forkExpanderTask $ AwaitingPattern (Right dest) exprTy rhsDest rhsStx
   return (dest, rhsDest)
 
-prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
+prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident, Kind)
 prepareTypeVar i varStx = do
   (sc, α, b) <- varPrepHelper varStx
-  bind b (ETypeVar i)
-  return (sc, α)
+  k <- KMetaVar <$> liftIO newKindVar
+  bind b (ETypeVar k i)
+  return (sc, α, k)
 
 varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
 varPrepHelper varStx = do

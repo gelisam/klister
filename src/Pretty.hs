@@ -3,6 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Pretty (Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
@@ -295,7 +296,8 @@ instance PrettyBinder VarInfo [CompleteDecl] where
 
 instance Pretty VarInfo Kind where
   pp _   KStar        = text "*"
-  pp env (KFun k1 k2) = parens (pp env k1 <+> pp env k2)
+  pp env (KFun k1 k2) = parens (pp env k1 <+> text "→" <+> pp env k2)
+  pp _   (KMetaVar v) = text "META" <> viaShow v -- TODO make it look better
 
 instance Pretty VarInfo (Scheme Ty) where
   pp env (Scheme [] t) =
@@ -376,8 +378,9 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
   ppBind env (Data (Stx _ _ x) _dn argKinds ctors) =
     (hang 2 $ group $
      vsep ( text "data" <+> text x <+>
-            hsep [ text α
-                 | α <- take (length argKinds) typeVarNames
+            hsep [ parens (text α <+> ":" <+> pp env k)
+                 | α <- typeVarNames
+                 | k <- argKinds
                  ] <+>
             text "="
           : punc (space <> text "|")

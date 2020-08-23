@@ -60,6 +60,7 @@ makePrisms ''BindingLevel
 data TVar t = TVar
   { _varLinkage :: !(VarLinkage t)
   , _varLevel :: !BindingLevel
+  , _varKind :: !Kind
   }
   deriving (Functor, Show)
 makeLenses ''TVar
@@ -102,30 +103,30 @@ class TyLike a arg | a -> arg where
   tMacro     :: arg -> a
   tType      :: a
   tDatatype  :: Datatype -> [arg] -> a
-  tSchemaVar :: Natural -> a
+  tSchemaVar :: Natural -> [arg] -> a
   tMetaVar   :: MetaPtr -> a
 
 instance TyLike (TyF a) a where
-  tSyntax        = TyF TSyntax []
-  tSignal        = TyF TSignal []
-  tString        = TyF TString []
-  tFun1 t1 t2    = TyF TFun [t1, t2]
-  tMacro t       = TyF TMacro [t]
-  tType          = TyF TType []
-  tDatatype x ts = TyF (TDatatype x) ts
-  tSchemaVar x   = TyF (TSchemaVar x) []
-  tMetaVar x     = TyF (TMetaVar x) []
+  tSyntax         = TyF TSyntax []
+  tSignal         = TyF TSignal []
+  tString         = TyF TString []
+  tFun1 t1 t2     = TyF TFun [t1, t2]
+  tMacro t        = TyF TMacro [t]
+  tType           = TyF TType []
+  tDatatype x ts  = TyF (TDatatype x) ts
+  tSchemaVar x ts = TyF (TSchemaVar x) ts
+  tMetaVar x      = TyF (TMetaVar x) []
 
 instance TyLike Ty Ty where
-  tSyntax        = Ty $ tSyntax
-  tSignal        = Ty $ tSignal
-  tString        = Ty $ tString
-  tFun1 t1 t2    = Ty $ tFun1 t1 t2
-  tMacro t       = Ty $ tMacro t
-  tType          = Ty $ tType
-  tDatatype x ts = Ty $ tDatatype x ts
-  tSchemaVar x   = Ty $ tSchemaVar x
-  tMetaVar x     = Ty $ tMetaVar x
+  tSyntax         = Ty $ tSyntax
+  tSignal         = Ty $ tSignal
+  tString         = Ty $ tString
+  tFun1 t1 t2     = Ty $ tFun1 t1 t2
+  tMacro t        = Ty $ tMacro t
+  tType           = Ty $ tType
+  tDatatype x ts  = Ty $ tDatatype x ts
+  tSchemaVar x ts = Ty $ tSchemaVar x ts
+  tMetaVar x      = Ty $ tMetaVar x
 
 tFun :: [Ty] -> Ty -> Ty
 tFun args result = foldr tFun1 result args

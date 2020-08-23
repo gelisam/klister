@@ -383,7 +383,7 @@ initializeKernel = do
 
 
   where
-    typePrims :: [(Text, (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
+    typePrims :: [(Text, (Kind -> SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
       [ ("Syntax", Prims.baseType tSyntax)
       , ("String", Prims.baseType tString)
@@ -421,7 +421,7 @@ initializeKernel = do
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
       , ("Problem", [], [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
-      , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0])])
+      , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -500,7 +500,8 @@ initializeKernel = do
                  , _datatypeName = dn
                  }
       let tyImpl =
-             \dest stx -> do
+             \k dest stx -> do
+               equateKinds stx KStar k
                Stx _ _ (me, args) <- mustBeCons stx
                _ <- mustBeIdent me
                if length args /= length argKinds
@@ -508,7 +509,7 @@ initializeKernel = do
                                      (fromIntegral $ length argKinds)
                                      (length args)
                  else do
-                   argDests <- traverse scheduleType args
+                   argDests <- traverse (uncurry scheduleType) (zip argKinds args)
                    linkType dest $ tDatatype dt argDests
           patImpl =
             \dest stx -> do
@@ -583,7 +584,7 @@ initializeKernel = do
 
     addTypePrimitive ::
       Text ->
-      (SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()) ->
+      (Kind -> SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()) ->
       Expand ()
     addTypePrimitive name (implT, implP) = do
       let val = EPrimTypeMacro implT implP
@@ -724,8 +725,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneExpression t d stx
         DeclTreeDest d outScopesDest ->
           expandDeclForm d outScopesDest stx
-        TypeDest d ->
-          expandOneType d stx
+        TypeDest k d ->
+          expandOneType k d stx
         PatternDest exprT scrutT d ->
           expandOnePattern exprT scrutT d stx
         TypePatternDest exprT d ->
@@ -752,13 +753,11 @@ runTask (tid, localData, task) = withLocal localData $ do
     AwaitingTypeCase loc dest ty env cases kont -> do
       Ty t <- normType ty
       case t of
-        TyF (TMetaVar ptr') [] -> do
+        TyF (TMetaVar ptr') _ -> do
           -- Always wait on the canonical representative
           case ty of
-            Ty (TyF (TMetaVar ptr) []) | ptr == ptr' -> stillStuck tid task
+            Ty (TyF (TMetaVar ptr) _) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
-        TyF (TMetaVar _) _ -> do
-          throwError $ InternalError "type variable cannot have parameters (yet)"
         other -> do
           selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           case selectedBranch of
@@ -938,8 +937,8 @@ expandOneTypePattern exprTy dest stx =
   expandOneForm (TypePatternDest exprTy dest) stx
 
 
-expandOneType :: SplitTypePtr -> Syntax -> Expand ()
-expandOneType dest stx = expandOneForm (TypeDest dest) stx
+expandOneType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
+expandOneType k dest stx = expandOneForm (TypeDest k dest) stx
 
 expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
@@ -969,8 +968,8 @@ requireExpressionCtx _ (ExprDest ty dest) = return (ty, dest)
 requireExpressionCtx stx other =
   throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
 
-requireTypeCtx :: Syntax -> MacroDest -> Expand SplitTypePtr
-requireTypeCtx _ (TypeDest dest) = return dest
+requireTypeCtx :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
+requireTypeCtx _ (TypeDest kind dest) = return (kind, dest)
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
@@ -1039,8 +1038,8 @@ expandOneForm prob stx
           impl dest outScopesDest stx
         EPrimTypeMacro implT implP ->
           case prob of
-            TypeDest dest ->
-              implT dest stx
+            TypeDest k dest ->
+              implT k dest stx
             TypePatternDest _exprTy dest ->
               implP dest stx
             otherDest ->
@@ -1058,9 +1057,23 @@ expandOneForm prob stx
             String _ -> error "Impossible - string not ident"
             Sig _ -> error "Impossible - signal not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
-        ETypeVar i -> do
-          dest <- requireTypeCtx stx prob
-          linkType dest $ tSchemaVar i
+        ETypeVar k i -> do
+          (k', dest) <- requireTypeCtx stx prob
+          case syntaxE stx of
+            List (vStx@(syntaxE -> Id _) : arg : args) -> do
+              kindedArgs <- for (arg : args) $
+                            \a -> do
+                              newKind <- KMetaVar <$> liftIO newKindVar
+                              pure (newKind, a)
+              equateKinds vStx k $ kFun (map fst kindedArgs) k'
+              argDests <- traverse (uncurry scheduleType) kindedArgs
+              -- TODO schedule args
+              linkType dest $ tSchemaVar i argDests
+            Id _ -> do
+              equateKinds stx k k'
+              linkType dest $ tSchemaVar i []
+            _ -> throwError $ NotValidType stx
+
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpressionCtx stx prob
           forkAwaitingDefn x n b d t dest stx
