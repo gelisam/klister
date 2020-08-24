@@ -2,6 +2,10 @@
 
 (import "defun.kl")
 (import "lambda-case.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "let.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
 
 (example (lambda (x) x))
 
@@ -58,6 +62,18 @@
 
 (example macro-applicative)
 
+(define maybe-applicative
+  (applicative
+    maybe-functor
+    (lambda (x) (just x))
+    (lambda (fun arg)
+      (case fun
+        ((nothing) (nothing))
+        ((just f)
+         (case arg
+           ((nothing) (nothing))
+           ((just x) (just (f x)))))))))
+
 (define return
   (lambda (inst x)
     (case inst
@@ -80,6 +96,13 @@
 (define macro-monad
   (monad macro-applicative (lambda (m f) (>>= m f))))
 
+(define maybe-monad
+  (monad maybe-applicative
+    (lambda (m f)
+      (case m
+        ((nothing) (nothing))
+        ((just x) (f x))))))
+
 (define bind
   (lambda (inst m f)
     (case inst
@@ -87,3 +110,46 @@
 
 (example bind)
 
+(define monad->applicative
+  (lambda (m)
+    (case m ((monad app _) app))))
+
+(define-macros
+  ((<-
+    (lambda (stx)
+      (syntax-error (quote "<- used out of context") stx)))
+   (do (lambda (stx)
+         (syntax-case stx
+          ((cons _ inst-and-actions)
+           (syntax-case inst-and-actions
+            ((cons inst all-actions)
+             (syntax-case all-actions
+               ((list (last-action))
+                (pure last-action))
+               ((cons first-action actions)
+                (let ((otherwise (pure `(bind ,inst
+                                              ,first-action (lambda (_)
+                                                              ,(cons-list-syntax
+                                                                 'do
+                                                                 (cons-list-syntax inst actions stx)
+                                                                 stx))))))
+                  (syntax-case first-action
+                    ((list (<-? var action))
+                     (>>= (free-identifier=? '<- <-?)
+                          (lambda (isArrow)
+                                  (if isArrow
+                                      (pure `(bind ,inst
+                                                   ,action (lambda (,var)
+                                                              ,(cons-list-syntax
+                                                                'do
+                                                                (cons-list-syntax inst actions stx)
+                                                                stx))))
+                                      otherwise))))
+                    (_
+                     otherwise)))))))))))))
+
+(example
+  (do maybe-monad
+      (<- f (just (lambda (x) x)))
+      (<- y (just "hey"))
+      (return (monad->applicative maybe-monad) (f y))))
