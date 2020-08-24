@@ -608,7 +608,7 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing scheme after expansion"
             Just (Scheme ks t) -> do
-              ks' <- traverse zonkKind ks
+              ks' <- traverse zonkKindDefault ks
               pure $ CompleteDecl $ Define x v (Scheme ks' t) e'
     zonkDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
@@ -618,7 +618,7 @@ getDecl ptr =
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
     zonkDecl (Data x dn argKinds ctors) = do
-      argKinds' <- traverse zonkKind argKinds
+      argKinds' <- traverse zonkKindDefault argKinds
       ctors' <- traverse zonkCtor ctors
       return $ CompleteDecl $ Data x dn argKinds' ctors'
         where
@@ -646,10 +646,11 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
             Just (Scheme ks t) -> do
-              ks' <- traverse zonkKind ks
+              ks' <- traverse zonkKindDefault ks
               pure $ CompleteDecl $ Example loc (Scheme ks' t) e'
     zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
     zonkDecl (Export x) = return $ CompleteDecl $ Export x
+
 
 currentBindingLevel :: Expand BindingLevel
 currentBindingLevel = do
@@ -890,6 +891,16 @@ zonkKind (KMetaVar v) =
     Nothing -> pure (KMetaVar v)
 zonkKind KStar = pure KStar
 zonkKind (KFun k1 k2) = KFun <$> zonkKind k1 <*> zonkKind k2
+
+zonkKindDefault :: Kind -> Expand Kind
+zonkKindDefault (KMetaVar v) =
+  (view (expanderKindStore . at v) <$> getState) >>=
+  \case
+    Just k -> zonkKindDefault k
+    Nothing -> pure KStar
+zonkKindDefault KStar = pure KStar
+zonkKindDefault (KFun k1 k2) = KFun <$> zonkKindDefault k1 <*> zonkKindDefault k2
+
 
 importing :: ModuleName -> Expand a -> Expand a
 importing mn act = do

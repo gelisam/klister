@@ -1,0 +1,8 @@
+#lang kernel
+
+-- If we didn't default kinds to * at the end of elaborating modules,
+-- the kind of A would be left as a meta rather than becoming *.
+(datatype (T A)
+  (ctor))
+
+(example (ctor))
