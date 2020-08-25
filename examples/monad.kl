@@ -153,3 +153,30 @@
       (<- f (just (lambda (x) x)))
       (<- y (just "hey"))
       (return (monad->applicative maybe-monad) (f y))))
+
+
+(define-macros
+  ((define-do
+    (lambda (stx)
+      (syntax-case stx
+       ((list (_ kw inst))
+        (pure
+          (quasiquote/loc stx
+            (group
+              (define the-instance ,inst)
+              (define-macros
+                ((,kw
+                  (lambda (stx)
+                    (syntax-case stx
+                      ((cons _ cases)
+                       (pure (cons-list-syntax 'do (cons-list-syntax 'the-instance cases stx) stx)))))))))))))))))
+
+(define-do maybe-do maybe-monad)
+
+
+(example
+  (maybe-do
+    (<- f (just (lambda (x) x)))
+    (<- y (just "hey"))
+    (return (monad->applicative maybe-monad) (f y))))
+

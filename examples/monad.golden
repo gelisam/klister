@@ -7,3 +7,4 @@
 #<closure> : ∀(α : (* → *)) (β : *) (γ : *).
  ((Monad α β γ) → ((α β) → ((β → (α γ)) → (α γ))))
 (just "hey") : (Maybe String)
+(just "hey") : (Maybe String)
