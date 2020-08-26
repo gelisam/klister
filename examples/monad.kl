@@ -88,6 +88,55 @@
 
 (example ap)
 
+(define-macros
+  ([idiom
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ inst-and-args)
+         (syntax-case inst-and-args
+           [(cons inst args)
+            (syntax-case args
+              [(cons fun more)
+               (pure
+                (quasiquote/loc stx
+                  (let (inst ,inst)
+                    (idiom-helper inst (return inst ,fun) ,more))))])])]))]
+   [idiom-helper
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ inst fun args))
+         (syntax-case args
+           [() (pure fun)]
+           [(cons x xs)
+            (pure
+             (quasiquote/loc stx
+               (idiom-helper ,inst (ap ,inst ,fun ,x) ,xs)))])]))]))
+
+(example (idiom maybe-applicative string-append (just "applicative") (just " notation")))
+(example (idiom maybe-applicative string-append (just "applicative") (nothing)))
+
+(define-macros
+  ([define-idiom
+    (lambda (stx)
+      (syntax-case stx
+       [(list (_ kw inst))
+        (pure
+         (quasiquote/loc stx
+           (group
+            (define inst ,inst)
+            (define-macros
+              ([,kw
+                (lambda (stx)
+                  (syntax-case stx
+                    [(cons _ args)
+                     (pure (cons-list-syntax 'idiom (cons-list-syntax 'inst args stx) stx))]))])))))]))]))
+
+(define-idiom perhaps maybe-applicative)
+
+(example (perhaps string-append (just "applicative") (just " notation")))
+(example (perhaps string-append (just "applicative") (nothing)))
+
+
 (datatype (Monad M A B)
   (monad (Applicative M A B)
          (-> (M A) (-> A (M B))
