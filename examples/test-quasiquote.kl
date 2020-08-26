@@ -1,0 +1,21 @@
+#lang "prelude.kl"
+
+[import [shift "prelude.kl" 1]]
+[import [shift "defun.kl" 1]]
+
+[define thing [quote nothing]]
+
+[example thing]
+[example [quasiquote thing]]
+[example [quasiquote [unquote thing]]]
+
+[example [quasiquote [thing]]]
+[example [quasiquote [[unquote thing]]]]
+
+[example [quasiquote [list-syntax [[unquote thing] thing] thing]]]
+
+[example [quasiquote [list-syntax [[unquote thing] thing ()] thing]]]
+
+[example [quasiquote (thing [unquote thing] thing)]]
+
+(example (quasiquote/loc thing (thing ,thing)))

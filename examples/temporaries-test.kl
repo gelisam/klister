@@ -2,7 +2,7 @@
 
 (import (shift "prelude.kl" 1))
 (import (shift "lispy-do.kl" 1))
-(import (shift "list-datatype.kl" 1))
+(import (shift "list.kl" 1))
 (import (shift "pair-datatype.kl" 1))
 (import (shift "quasiquote.kl" 1))
 (import (shift "temporaries.kl" 1))

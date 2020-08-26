@@ -1,6 +1,6 @@
 #lang "prelude.kl"
 
-(import "list-datatype.kl")
+(import "list.kl")
 
 (import "lispy-do.kl")
 

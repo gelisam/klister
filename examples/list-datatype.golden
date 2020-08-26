@@ -1,0 +1,1 @@
+(:: Signal 3 (:: Signal 2 (:: Signal 1 (nil)))) : (List Signal)
