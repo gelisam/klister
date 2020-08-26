@@ -24,3 +24,5 @@
 (true) : Bool
 (false) : Bool
 (true) : Bool
+"4" : String
+"-5" : String
