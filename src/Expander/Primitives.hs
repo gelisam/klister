@@ -53,6 +53,10 @@ module Expander.Primitives
   , makeLocalType
   -- * Local primitives
   , prepareVar
+  -- * Primitive values
+  , unaryIntPrim
+  , binaryIntPrim
+  , binaryIntPred
   ) where
 
 import Control.Lens hiding (List)
@@ -83,6 +87,7 @@ import SplitCore
 import SplitType
 import Syntax
 import Type
+import Value
 
 ----------------------------
 -- Declaration primitives --
@@ -719,3 +724,26 @@ primitiveDatatype name args =
                     }
   in tDatatype dt args
 
+unaryIntPrim :: (Integer -> Integer) -> Value
+unaryIntPrim f =
+  ValueClosure $ HO $
+  \(ValueInteger i) ->
+    ValueInteger (f i)
+
+binaryIntPrim :: (Integer -> Integer -> Integer) -> Value
+binaryIntPrim f =
+  ValueClosure $ HO $
+  \(ValueInteger i1) ->
+    ValueClosure $ HO $
+    \(ValueInteger i2) ->
+      ValueInteger (f i1 i2)
+
+binaryIntPred :: (Integer -> Integer -> Bool) -> Value
+binaryIntPred f =
+  ValueClosure $ HO $
+  \(ValueInteger i1) ->
+    ValueClosure $ HO $
+    \(ValueInteger i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
