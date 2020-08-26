@@ -11,7 +11,7 @@
 (export -- primitive types
         Syntax
         ->
-        Integer
+        Integer + - * / abs negate > >= < <= = /= integer->string
         Macro
         Type
         String string-append string=?

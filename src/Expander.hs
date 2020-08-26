@@ -414,6 +414,31 @@ initializeKernel = do
             \(ValueString str2) ->
               ValueString (str1 <> str2)
         )
+      , ( "integer->string"
+        , Scheme [] $ tFun [tInteger] tString
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueString (T.pack (show int))
+        )
+      ] ++
+      [
+        ( name
+        , Scheme [] $ tFun [tInteger] tInteger
+        , Prims.unaryIntPrim fun
+        )
+      | (name, fun) <- [("abs", abs), ("negate", negate)]
+      ] ++
+      [ ( name
+        , Scheme [] $ tFun [tInteger, tInteger] tInteger
+        , Prims.binaryIntPrim fun
+        )
+      | (name, fun) <- [("+", (+)), ("-", (-)), ("*", (*)), ("/", div)]
+      ] ++
+      [ ( name
+        , Scheme [] $ tFun [tInteger, tInteger] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryIntPred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ]
 
     datatypePrims :: [(Text, [Kind], [(Text, [Ty])])]
