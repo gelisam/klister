@@ -140,10 +140,6 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
     hang 2 $ group (pp env act <+> text ">>=") <+> pp env k
   pp env (CoreSyntaxError err) =
     group $ text "syntax-error" <+> pp env err
-  pp env (CoreSendSignal arg) =
-    group $ text "send-signal" <+> pp env arg
-  pp env (CoreWaitSignal arg) =
-    group $ text "wait-signal" <+> pp env arg
   pp env (CoreIdentEq how e1 e2) =
     group $ text opName <+> pp env e1 <+> pp env e2
     where
@@ -168,7 +164,7 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
          | (pat, body) <- pats
          ]
   pp _env (CoreIdentifier x) = viaShow x
-  pp _env (CoreSignal s) = viaShow s
+  pp _env (CoreInteger s) = viaShow s
   pp env (CoreIdent x) = pp env x
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
@@ -330,7 +326,7 @@ typeVarNames =
 
 instance Pretty VarInfo TypeConstructor where
   pp _   TSyntax        = text "Syntax"
-  pp _   TSignal        = text "Signal"
+  pp _   TInteger       = text "Integer"
   pp _   TString        = text "String"
   pp _   TFun           = text "(→)"
   pp _   TMacro         = text "Macro"
@@ -492,7 +488,7 @@ instance Pretty VarInfo Syntax where
 instance Pretty VarInfo (ExprF Syntax) where
   pp _   (Id x)     = text x
   pp _   (String s) = viaShow s
-  pp _   (Sig s)    = viaShow s
+  pp _   (LitInt s)    = viaShow s
   pp env (List xs)  = parens (group (vsep (map (pp env . syntaxE) xs)))
 
 instance Pretty VarInfo Closure where
@@ -502,7 +498,7 @@ instance Pretty VarInfo Value where
   pp env (ValueClosure c) = pp env c
   pp env (ValueSyntax stx) = pp env stx
   pp env (ValueMacroAction act) = pp env act
-  pp _env (ValueSignal s) = viaShow s
+  pp _env (ValueInteger s) = viaShow s
   pp _env (ValueCtor c []) =
     parens $
     text (view (constructorName . constructorNameText) c)
@@ -522,10 +518,6 @@ instance Pretty VarInfo MacroAction where
       pp env k
   pp env (MacroActionSyntaxError err) =
     text "syntax-error" <+> pp env err
-  pp _env (MacroActionSendSignal s) =
-    text "send-signal" <+> viaShow s
-  pp _env (MacroActionWaitSignal s) =
-    text "wait-signal" <+> viaShow s
   pp env (MacroActionIdentEq how v1 v2) =
     group $ parens $ vsep [text opName, pp env v1, pp env v2]
     where

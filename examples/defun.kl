@@ -1,21 +1,4 @@
 #lang "prelude.kl"
-[import [shift "prelude.kl" 1]]
-
-
-(define-macros
-  ([defun
-    [lambda (stx)
-      (syntax-case stx
-        [[list [_ f args body]]
-         (pure (list-syntax
-                ('define f
-                 (list-syntax ('flet (list-syntax (f args body) stx) f) stx))
-                stx))]
-        [_ (syntax-error '"bad syntax" stx)])]]))
-
-[defun const (x y) x]
-
-[example (const 'a 'b)]
 
 [defun last-stx (stx)
   (syntax-case stx
@@ -26,7 +9,5 @@
                            -- we'd have to return the syntax of a macro call to last-stx.
     [_ stx])]
 
+[example (last-stx '(a))]
 [example (last-stx '(a b c d e f g))]
-
-[export defun]
-

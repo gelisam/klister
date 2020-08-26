@@ -5,7 +5,6 @@ import qualified Data.Text as T
 
 import Core
 import ScopeSet ()
-import Signals
 import Syntax
 import Syntax.SrcLoc
 import Unique
@@ -26,12 +25,5 @@ app :: IO Core -> IO Core -> IO Core
 app fun arg = Core
           <$> (CoreApp <$> fun <*> arg)
 
-sig :: Int -> IO Core
-sig s = return $ Core $ CoreSignal $ Signal s
-
-sendSig :: Core -> IO Core
-sendSig = return . Core . CoreSendSignal
-
-waitSig :: Core -> IO Core
-waitSig = return . Core . CoreWaitSignal
-
+int :: Integer -> IO Core
+int i = return $ Core $ CoreInteger $ i

@@ -40,6 +40,14 @@ The ``import`` form will search for modules in the same directory as the
 importing module, and in directories listed in the ``KLISTERPATH`` environment
 variable, a ``:``-separated list of directories.
 
+Other Resources
+===============
+
+We presented the status of Klister as of Summer 2020 at the TyDe workshop. An `abstract`_ and a `recorded talk`_ are available.
+
+.. _abstract: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
+.. _recorded talk: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros.webm
+
 Overall Design
 ==============
 
@@ -82,13 +90,6 @@ generalization time.
 .. _Programming Language Concepts: https://www.itu.dk/~sestoft/plc/
 
 .. _optimization: https://hal.inria.fr/inria-00077006/document
-
-Initially, macros can get stuck by blocking until a signal has been
-sent. Signals are essentially just integers. Other macros can send
-signals, at which point the blocked macros get un-stuck. This is
-reminiscent of the ``blockOnMeta`` operation in Agda's reflection
-system. Eventually, we plan to replace this with the ability to block
-on the solution to a type unification variable.
 
 FAQ
 ===

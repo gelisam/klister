@@ -55,7 +55,6 @@ import Data.Traversable
 import System.Directory
 
 import Binding
-import Control.Lens.IORef
 import Core
 import Datatype
 import qualified Env
@@ -72,7 +71,6 @@ import Parser
 import Phase
 import Pretty
 import ScopeSet (ScopeSet)
-import Signals
 import ShortShow
 import SplitCore
 import SplitType
@@ -390,7 +388,7 @@ initializeKernel = do
     typePrims =
       [ ("Syntax", Prims.baseType tSyntax)
       , ("String", Prims.baseType tString)
-      , ("Signal", Prims.baseType tSignal)
+      , ("Integer", Prims.baseType tInteger)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
       , ("Type", Prims.baseType tType)
@@ -454,8 +452,6 @@ initializeKernel = do
       , ("pure", Prims.pureMacro)
       , (">>=", Prims.bindMacro)
       , ("syntax-error", Prims.syntaxError)
-      , ("send-signal", Prims.sendSignal)
-      , ("wait-signal", Prims.waitSignal)
       , ("bound-identifier=?", Prims.identEqual Bound)
       , ("free-identifier=?", Prims.identEqual Free)
       , ("quote", Prims.quote)
@@ -632,7 +628,7 @@ primImportModule dest outScopesDest importStx = do
       | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
           subSpec <- importSpec spec
           RenameImports subSpec <$> traverse getRename renamings
-      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Sig (Signal i)))] <- elts = do
+      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (LitInt i))] <- elts = do
           subSpec <- importSpec spec
           return $ ShiftImports subSpec (fromIntegral i)
       | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
@@ -675,7 +671,7 @@ primExport dest outScopesDest stx = do
                 _ -> throwError $ NotExportSpec blame
             "shift" ->
               case args of
-                (Syntax (Stx _ _ (Sig (Signal i))) : more) -> do
+                (Syntax (Stx _ _ (LitInt i)) : more) -> do
                   spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
                   if i >= 0
                     then return $ ExportShifted spec (fromIntegral i)
@@ -745,14 +741,6 @@ runTask (tid, localData, task) = withLocal localData $ do
               unify dest ty ty'
             TypeThenExpandExpr dest stx ->
               forkExpandSyntax (ExprDest ty dest) stx
-    AwaitingSignal dest signal kont -> do
-      signalWasSent <- viewIORef expanderState (expanderReceivedSignals . at signal)
-      case signalWasSent of
-        Nothing -> do
-          stillStuck tid task
-        Just () -> do
-          let result = primitiveCtor "unit" []
-          forkContinueMacroAction dest result kont
     AwaitingTypeCase loc dest ty env cases kont -> do
       Ty t <- normType ty
       case t of
@@ -822,8 +810,6 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes stx newScopeSet)
     InterpretMacroAction dest act outerKont ->
       interpretMacroAction dest act >>= \case
-        StuckOnSignal signal innerKont ->
-          forkAwaitingSignal dest signal (innerKont ++ outerKont)
         StuckOnType loc ty env cases innerKont ->
           forkAwaitingTypeCase loc dest ty env cases (innerKont ++ outerKont)
         Done value -> do
@@ -1058,7 +1044,7 @@ expandOneForm prob stx
             Id _ ->
               forkExpandVar t dest stx var
             String _ -> error "Impossible - string not ident"
-            Sig _ -> error "Impossible - signal not ident"
+            LitInt _ -> error "Impossible - literal integer not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar k i -> do
           (k', dest) <- requireTypeCtx stx prob
@@ -1095,8 +1081,6 @@ expandOneForm prob stx
                 ValueMacroAction act -> do
                   res <- interpretMacroAction prob act
                   case res of
-                    StuckOnSignal sig kont ->
-                      forkAwaitingSignal prob sig kont
                     StuckOnType loc ty env cases kont ->
                       forkAwaitingTypeCase loc prob ty env cases kont
                     Done expanded ->
@@ -1124,9 +1108,9 @@ expandOneForm prob stx
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
-          Sig s -> do
-            unify dest tSignal t
-            expandLiteralSignal dest s
+          LitInt s -> do
+            unify dest tInteger t
+            expandLiteralInteger dest s
             saveExprType dest t
           String s -> do
             unify dest tString t
@@ -1168,22 +1152,21 @@ expandDeclForms _dest _scs _outScopesDest _stx =
   error "TODO real error message - malformed module body"
 
 
--- | Link the destination to a literal signal object
-expandLiteralSignal :: SplitCorePtr -> Signal -> Expand ()
-expandLiteralSignal dest signal = linkExpr dest (CoreSignal signal)
+-- | Link the destination to a literal integer object
+expandLiteralInteger :: SplitCorePtr -> Integer -> Expand ()
+expandLiteralInteger dest i = linkExpr dest (CoreInteger i)
 
 expandLiteralString :: SplitCorePtr -> Text -> Expand ()
 expandLiteralString dest str = do
   linkExpr dest (CoreString str)
 
 data MacroOutput
-  = StuckOnSignal Signal [Closure]
-  | StuckOnType SrcLoc Ty VEnv [(TypePattern, Core)] [Closure]
+  = StuckOnType SrcLoc Ty VEnv [(TypePattern, Core)] [Closure]
   | Done Value
 
--- If we're stuck waiting on a signal, we return that signal and a continuation
--- in the form of a sequence of closures. The first closure should be applied to
--- the result of wait-signal, the second to the result of the first, etc.
+-- If we're stuck waiting on type information, we return a continuation in the
+-- form of a sequence of closures. The first closure should be applied to the
+-- resulting information, the second to the result of the first, etc.
 interpretMacroAction :: MacroDest -> MacroAction -> Expand MacroOutput
 interpretMacroAction prob =
   \case
@@ -1192,8 +1175,6 @@ interpretMacroAction prob =
     MacroActionBind macroAction closure ->
       interpretMacroAction prob macroAction >>=
       \case
-        StuckOnSignal signal closures ->
-          pure $ StuckOnSignal signal (closures ++ [closure])
         StuckOnType loc ty env cases closures ->
           pure $ StuckOnType loc ty env cases (closures ++ [closure])
         Done boundResult -> do
@@ -1208,11 +1189,6 @@ interpretMacroAction prob =
             other -> throwError $ ValueNotMacro other
     MacroActionSyntaxError syntaxError ->
       throwError $ MacroRaisedSyntaxError syntaxError
-    MacroActionSendSignal signal -> do
-      setIORef expanderState (expanderReceivedSignals . at signal) (Just ())
-      pure $ Done $ primitiveCtor "unit" []
-    MacroActionWaitSignal signal ->
-      pure $ StuckOnSignal signal []
     MacroActionIdentEq how v1 v2 -> do
       id1 <- getIdent v1
       id2 <- getIdent v2

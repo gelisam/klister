@@ -4,6 +4,10 @@
 #<closure> : ∀(α : (* → *)) (β : *) (γ : *). ((Applicative α β γ) → (β → (α β)))
 #<closure> : ∀(α : (* → *)) (β : *) (γ : *).
  ((Applicative α β γ) → ((α (β → γ)) → ((α β) → (α γ))))
+(just "applicative notation") : (Maybe String)
+(nothing) : (Maybe String)
+(just "applicative notation") : (Maybe String)
+(nothing) : (Maybe String)
 #<closure> : ∀(α : (* → *)) (β : *) (γ : *).
  ((Monad α β γ) → ((α β) → ((β → (α γ)) → (α γ))))
 (just "hey") : (Maybe String)

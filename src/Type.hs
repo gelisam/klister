@@ -34,7 +34,7 @@ instance Show MetaPtr where
 
 data TypeConstructor
   = TSyntax
-  | TSignal
+  | TInteger
   | TString
   | TFun
   | TMacro
@@ -101,7 +101,7 @@ instance ShortShow a => ShortShow (TyF a) where
 
 class TyLike a arg | a -> arg where
   tSyntax    :: a
-  tSignal    :: a
+  tInteger   :: a
   tString    :: a
   tFun1      :: arg -> arg -> a
   tMacro     :: arg -> a
@@ -112,7 +112,7 @@ class TyLike a arg | a -> arg where
 
 instance TyLike (TyF a) a where
   tSyntax         = TyF TSyntax []
-  tSignal         = TyF TSignal []
+  tInteger        = TyF TInteger []
   tString         = TyF TString []
   tFun1 t1 t2     = TyF TFun [t1, t2]
   tMacro t        = TyF TMacro [t]
@@ -123,7 +123,7 @@ instance TyLike (TyF a) a where
 
 instance TyLike Ty Ty where
   tSyntax         = Ty $ tSyntax
-  tSignal         = Ty $ tSignal
+  tInteger        = Ty $ tInteger
   tString         = Ty $ tString
   tFun1 t1 t2     = Ty $ tFun1 t1 t2
   tMacro t        = Ty $ tMacro t

@@ -15,7 +15,6 @@ import qualified Data.Text as T
 import Core
 import Env
 import ShortShow
-import Signals
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -140,14 +139,6 @@ eval (Core (CoreSyntaxError syntaxErrorExpr)) = do
   syntaxErrorValue <- traverse evalAsSyntax syntaxErrorExpr
   pure $ ValueMacroAction
        $ MacroActionSyntaxError syntaxErrorValue
-eval (Core (CoreSendSignal signalExpr)) = do
-  theSignal <- evalAsSignal signalExpr
-  pure $ ValueMacroAction
-       $ MacroActionSendSignal theSignal
-eval (Core (CoreWaitSignal signalExpr)) = do
-  theSignal <- evalAsSignal signalExpr
-  pure $ ValueMacroAction
-       $ MacroActionWaitSignal theSignal
 eval (Core (CoreIdentEq how e1 e2)) =
   ValueMacroAction <$> (MacroActionIdentEq how <$> eval e1 <*> eval e2)
 eval (Core (CoreLog msg)) = do
@@ -157,8 +148,8 @@ eval (Core CoreMakeIntroducer) =
   return $ ValueMacroAction MacroActionIntroducer
 eval (Core CoreWhichProblem) = do
   return $ ValueMacroAction MacroActionWhichProblem
-eval (Core (CoreSignal signal)) =
-  pure $ ValueSignal signal
+eval (Core (CoreInteger i)) =
+  pure $ ValueInteger i
 eval (Core (CoreSyntax syntax)) = do
   pure $ ValueSyntax syntax
 eval (Core (CoreCase loc scrutinee cases)) = do
@@ -174,10 +165,10 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   case identSyntax of
     Syntax (Stx _ _ expr) ->
       case expr of
-        Sig _ ->
+        LitInt _ ->
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "id"
-            , _typeErrorActual   = "signal"
+            , _typeErrorActual   = "integer"
             }
         String _ ->
           throwError $ EvalErrorType $ TypeError
@@ -208,10 +199,10 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
             { _typeErrorExpected = "list"
             , _typeErrorActual   = "id"
             }
-        Sig _ ->
+        LitInt _ ->
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "list"
-            , _typeErrorActual   = "signal"
+            , _typeErrorActual   = "integer"
             }
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
@@ -243,12 +234,12 @@ evalAsClosure core = do
       pure closure
     other -> evalErrorType "function" other
 
-evalAsSignal :: Core -> Eval Signal
-evalAsSignal core = do
+evalAsInteger :: Core -> Eval Integer
+evalAsInteger core = do
   value <- eval core
   case value of
-    ValueSignal s -> pure s
-    other -> evalErrorType "signal" other
+    ValueInteger i -> pure i
+    other -> evalErrorType "integer" other
 
 evalAsSyntax :: Core -> Eval Syntax
 evalAsSyntax core = do

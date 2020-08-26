@@ -1,17 +1,17 @@
 #lang kernel
 
 (import "builtins.kl")
+(import "defun.kl")
 (import "n-ary-app.kl")
 
-[define id [lambda (x) x]]
-[define const [lambda (x y) x]]
-[define compose [lambda (f g x) (f (g x))]]
-(define compose* (flet (comp (f g x) (f (g x))) comp))
+(defun id (x) x)
+(define const (lambda (x y) x))
+(define compose (lambda (f g x) (f (g x))))
 
 (export -- primitive types
         Syntax
-        Signal
-        -> 
+        ->
+        Integer
         Macro
         Type
         String string-append string=?
@@ -47,8 +47,6 @@
         pure
         >>=
         syntax-error
-        send-signal
-        wait-signal
         bound-identifier=?
         free-identifier=?
         quote
@@ -73,9 +71,13 @@
         -- primitive universal macros
         with-unknown-type
 
-        -- non-primitives
+        -- non-primitive declaration macros
+        defun
+
+        -- non-primitive expression macros
+
+        -- non-primitive expressions
         if
         id
         const
-        compose
-        compose*)
+        compose)

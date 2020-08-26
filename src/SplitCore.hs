@@ -1,8 +1,26 @@
+{-|
+Module           : SplitCore
+Description      : An intermediate datatype for partially expanded expressions.
+
+'SplitCore' is a partially-constructed AST in which zero or more sub-trees may
+be absent that's represented as an explicit pointer graph in the @Map@
+component.
+
+The expander uses 'SplitCore' while converting from 'Syntax' (what the user
+types) to 'Core' (what the evaluator operates on). While the expander is
+working, a given expression might have subtrees that have yet to be expanded
+(for example, they might involve macros that are stalled waiting for some type
+information). Such incomplete subexpressions are represented by 'SplitCorePtr',
+which is essentially a unique identifier that will be looked up later, when
+coalescing a 'SplitCore' expression into a fully-formed 'Core' expression.
+-}
+
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ViewPatterns #-}
+
 module SplitCore where
 
 import Control.Lens hiding (children)

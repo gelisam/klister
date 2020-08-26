@@ -154,6 +154,8 @@
   (setq font-lock-defaults klister-font-lock-defaults)
   (setq font-lock-multiline t)
 
+  (setq-local indent-line-function 'indent-relative)
+
   ;; Comment syntax
   (setq-local comment-start "-- ")
   (setq-local comment-end ""))

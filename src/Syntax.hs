@@ -1,8 +1,18 @@
+{-|
+Module           : Syntax
+Description      : User-facing syntax of Klister
+
+'Syntax' is the user-facing syntax for Klister. It can come from parsing Klister
+code or from the expansion of user macros. It is transformed into Klister\'s
+core language by the expander.
+-}
+
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+
 module Syntax where
 
 import Control.Lens hiding (List)
@@ -17,7 +27,6 @@ import Scope
 import ScopeSet (ScopeSet)
 import ShortShow
 import qualified ScopeSet
-import Signals (Signal)
 import Syntax.SrcLoc
 
 data Stx a = Stx
@@ -31,7 +40,7 @@ makeLenses ''Stx
 data ExprF a
   = Id Text
   | String Text
-  | Sig Signal
+  | LitInt Integer
   | List [a]
   deriving (Data, Eq, Functor, Show)
 makePrisms ''ExprF
@@ -71,7 +80,7 @@ instance HasScopes Syntax where
     where
       mapRec (Id x) = Id x
       mapRec (String str) = String str
-      mapRec (Sig s) = Sig s
+      mapRec (LitInt i) = LitInt i
       mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
 
 instance Phased (Stx Text) where
@@ -131,7 +140,7 @@ syntaxText (Syntax (Stx _ _ e)) = go e
   where
     go (Id x) = x
     go (String str) = T.pack $ show str
-    go (Sig s) = T.pack (show s)
+    go (LitInt s) = T.pack (show s)
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
 
 instance AlphaEq a => AlphaEq (Stx a) where
@@ -163,7 +172,7 @@ instance ShortShow a => ShortShow (ExprF a) where
   shortShow (Id x) = shortShow x
   shortShow (String s) = show s
   shortShow (List xs) = shortShow xs
-  shortShow (Sig s) = shortShow s
+  shortShow (LitInt s) = show s
 
 instance ShortShow Syntax where
   shortShow (Syntax x) = shortShow x

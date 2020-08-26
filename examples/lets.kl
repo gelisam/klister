@@ -11,4 +11,4 @@
 (define id (lambda (x) x))
 
 (example (the Syntax (id 'foo)))
-(example (the Signal (id 45)))
+(example (the Integer (id 45)))
