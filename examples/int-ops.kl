@@ -9,6 +9,7 @@
 (example (abs minus-two))
 (example (abs 4))
 (example (negate 4))
+(example -4)
 
 (example (< 1 2))
 (example (< 1 1))
