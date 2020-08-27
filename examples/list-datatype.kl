@@ -1,22 +1,5 @@
 #lang "prelude.kl"
 
-(import "defun.kl")
+(import "list.kl")
 
-(datatype (List A)
-  (nil)
-  (:: A (List A)))
-
-(defun map (f lst)
-  (case lst
-    [(:: x xs) (:: (f x) (map f xs))]
-    [(nil) (nil)]))
-
-(defun foldr (f base lst)
-  (case lst
-    [(:: x xs)
-     (f x (foldr f base xs))]
-    [(nil)
-     base]))
-
-
-(export List nil :: foldr map)
+(example (reverse (list 1 2 3)))

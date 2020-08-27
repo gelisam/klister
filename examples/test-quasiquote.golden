@@ -1,0 +1,9 @@
+#[test-quasiquote.kl:6.22-6.29]<nothing> : Syntax
+#[test-quasiquote.kl:9.22-9.27]<thing> : Syntax
+#[test-quasiquote.kl:6.22-6.29]<nothing> : Syntax
+#[test-quasiquote.kl:12.22-12.29]<(thing)> : Syntax
+#[test-quasiquote.kl:13.22-13.39]<(nothing)> : Syntax
+#[test-quasiquote.kl:15.22-15.65]<(list-syntax (nothing thing) thing)> : Syntax
+#[test-quasiquote.kl:17.22-17.68]<(list-syntax (nothing thing ()) thing)> : Syntax
+#[test-quasiquote.kl:19.22-19.51]<(thing nothing thing)> : Syntax
+#[test-quasiquote.kl:6.22-6.29]<(thing nothing)> : Syntax

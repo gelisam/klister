@@ -1,0 +1,57 @@
+#lang kernel
+
+(import (shift kernel 1))
+(import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(import "n-ary-app.kl")
+(import "defun.kl")
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(defun foldr (f base lst)
+  (case lst
+    [(:: x xs)
+     (f x (foldr f base xs))]
+    [(nil)
+     base]))
+
+(defun map (f lst)
+  (foldr
+    (lambda (elem accum) (:: (f elem) accum))
+    (nil)
+    lst))
+
+(defun filter (predicate lst)
+  (foldr
+    (lambda (elem accum)
+      (if (predicate elem)
+        (:: elem accum)
+        accum))
+    (nil)
+    lst))
+
+(defun snoc (xs x)
+  (case xs
+    [(nil) (:: x (nil))]
+    [(:: y ys) (:: y (snoc ys x))]))
+
+(defun reverse (xs)
+  (case xs
+    [(nil) (nil)]
+    [(:: x xs) (snoc (reverse xs) x)]))
+
+(define-macros
+  ([list
+     (lambda (stx)
+       (syntax-case stx
+         [(cons _ more)
+          (syntax-case more
+           [()
+            (pure (replace-loc more '(nil)))]
+           [(cons x xs)
+            (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
+
+(export List nil :: foldr map filter snoc reverse list)
