@@ -417,6 +417,46 @@ initializeKernel = do
           \(ValueInteger int) ->
             ValueString (T.pack (show int))
         )
+      , ( "substring"
+        , Scheme 0 $
+          tFun [tInteger, tInteger, tString] (Prims.primitiveDatatype "Maybe" [tString])
+        , ValueClosure $ HO $
+          \(ValueInteger (fromInteger -> start)) ->
+            ValueClosure $ HO $
+            \(ValueInteger (fromInteger -> len)) ->
+              ValueClosure $ HO $
+              \(ValueString str) ->
+                if | start < 0 || start       >= T.length str -> primitiveCtor "nothing" []
+                   | len   < 0 || start + len >  T.length str -> primitiveCtor "nothing" []
+                   | otherwise ->
+                     ValueString $ T.take len $ T.drop start str
+        )
+      , ( "string-length"
+        , Scheme 0 $ tFun [tString] tInteger
+        , ValueClosure $ HO $ \(ValueString str) -> ValueInteger $ toInteger $ T.length str
+        )
+      , ( "string-downcase"
+        , Scheme 0 $ tFun [tString] tString
+        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toLower str
+        )
+      , ( "string-upcase"
+        , Scheme 0 $ tFun [tString] tString
+        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toUpper str
+        )
+      , ( "string-titlecase"
+        , Scheme 0 $ tFun [tString] tString
+        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toTitle str
+        )
+      , ( "string-foldcase"
+        , Scheme 0 $ tFun [tString] tString
+        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toCaseFold str
+        )
+      ] ++
+      [ ( "string" <> name <> "?"
+        , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryStringPred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
       [
         ( name

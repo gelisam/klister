@@ -2,3 +2,40 @@
 "hello world" : String
 (true) : Bool
 (false) : Bool
+"cde" : (Maybe String)
+(nothing) : (Maybe String)
+"ab" : (Maybe String)
+(nothing) : (Maybe String)
+3 : Integer
+0 : Integer
+(false) : Bool
+(true) : Bool
+(false) : Bool
+(true) : Bool
+(false) : Bool
+(true) : Bool
+(true) : Bool
+(false) : Bool
+(false) : Bool
+(true) : Bool
+(true) : Bool
+(false) : Bool
+(false) : Bool
+(false) : Bool
+(true) : Bool
+(false) : Bool
+(true) : Bool
+(true) : Bool
+"ABC!" : String
+"STRASSE" : String
+"abc!" : String
+"stra\223e" : String
+"\954\945\959\963" : String
+"\963" : String
+"Abc  Two" : String
+"Y2k" : String
+"Main Stra\223e" : String
+"Stra Sse" : String
+"abc!" : String
+"strasse" : String
+"\954\945\959\963" : String
