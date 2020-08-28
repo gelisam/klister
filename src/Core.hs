@@ -134,8 +134,8 @@ data CoreF typePat pat core
   | CoreDataCase SrcLoc core [(pat, core)]
   | CoreString Text
   | CoreError core
-  | CorePureMacro core                       -- :: a -> Macro a
-  | CoreBindMacro core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
+  | CorePureMacro core                  -- :: a -> Macro a
+  | CoreBindMacro core core             -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
