@@ -624,11 +624,11 @@ getDecl ptr =
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
             Just sch -> pure $ CompleteDecl $ Example loc sch e'
-    zonkDecl (Run e) =
+    zonkDecl (Run loc e) =
       linkedCore e >>=
       \case
         Nothing -> throwError $ InternalError "Missing action after expansion"
-        Just e' -> pure $ CompleteDecl $ Run e'
+        Just e' -> pure $ CompleteDecl $ Run loc e'
     zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
     zonkDecl (Export x) = return $ CompleteDecl $ Export x
 

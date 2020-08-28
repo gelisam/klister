@@ -396,7 +396,7 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
                         , pp env t
                         ])),
      mempty)
-  ppBind env (Run e) =
+  ppBind env (Run _loc e) =
     (hang 4 $
      text "run" <+> align (pp env e),
      mempty)

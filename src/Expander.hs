@@ -296,12 +296,15 @@ evalMod (Expanded em _) = execWriterT $ do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
           tell $ [ExampleResult loc env expr sch value]
-        Run expr -> do
+        Run loc expr -> do
           lift (expandEval (eval expr)) >>=
             \case
               (ValueIOAction act) ->
                 tell $ [IOResult $ void $ act]
-              _ -> error "Impossible - bug in type checker"
+              _ -> throwError $ InternalError $
+                   "While running an action at " ++
+                   T.unpack (pretty loc) ++
+                   " an unexpected non-IO value was encountered."
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do

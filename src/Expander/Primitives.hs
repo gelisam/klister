@@ -203,7 +203,7 @@ run :: DeclPrim
 run dest outScopesDest stx = do
   Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
   exprDest <- liftIO $ newSplitCorePtr
-  linkOneDecl dest (Run exprDest)
+  linkOneDecl dest (Run (stxLoc stx) exprDest)
   forkExpandSyntax (ExprDest (tIO (primitiveDatatype "Unit" [])) exprDest) expr
   linkDeclOutputScopes outScopesDest mempty
 
