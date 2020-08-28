@@ -132,9 +132,9 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
   pp _env (CoreString str) = text (T.pack (show str))
   pp env (CoreError what) =
     text "error" <+> pp env what
-  pp env (CorePure arg) =
+  pp env (CorePureMacro arg) =
     text "pure" <+> pp env arg
-  pp env (CoreBind act k) =
+  pp env (CoreBindMacro act k) =
     hang 2 $ group (pp env act <+> text ">>=") <+> pp env k
   pp env (CoreSyntaxError err) =
     group $ text "syntax-error" <+> pp env err
@@ -319,8 +319,10 @@ instance Pretty VarInfo TypeConstructor where
   pp _   TSyntax        = text "Syntax"
   pp _   TInteger       = text "Integer"
   pp _   TString        = text "String"
+  pp _   TOutputPort    = text "Output-Port"
   pp _   TFun           = text "(→)"
   pp _   TMacro         = text "Macro"
+  pp _   TIO            = text "IO"
   pp _   TType          = text "Type"
   pp env (TDatatype t)  = pp env t
   pp _   (TSchemaVar n) = text $ typeVarNames !! fromIntegral n
@@ -393,6 +395,10 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
      align (group (vsep [ group (pp env e) <+> text ":"
                         , pp env t
                         ])),
+     mempty)
+  ppBind env (Run e) =
+    (hang 4 $
+     text "run" <+> align (pp env e),
      mempty)
 
 instance Pretty VarInfo ExportSpec where
@@ -488,6 +494,8 @@ instance Pretty VarInfo Value where
   pp env (ValueClosure c) = pp env c
   pp env (ValueSyntax stx) = pp env stx
   pp env (ValueMacroAction act) = pp env act
+  pp _env (ValueIOAction _) = "#<IO action>"
+  pp _env (ValueOutputPort _) = "#<output port>"
   pp _env (ValueInteger s) = viaShow s
   pp _env (ValueCtor c []) =
     parens $
@@ -595,7 +603,7 @@ instance Pretty VarInfo EvalError where
     group $ hang 2 $ vsep [pp env loc <> ":", pp env msg]
 
 instance Pretty VarInfo EvalResult where
-  pp env (EvalResult loc valEnv coreExpr sch val) =
+  pp env (ExampleResult loc valEnv coreExpr sch val) =
     let varEnv = fmap (const ()) valEnv
     in group $ hang 2 $
        vsep [ text "Example at" <+> pp env loc <> text ":"
@@ -605,6 +613,7 @@ instance Pretty VarInfo EvalResult where
                    ] <+> text "↦"
             , pp varEnv val
             ]
+  pp _env (IOResult _) = text "IO action"
 
 
 instance Pretty VarInfo BindingTable where

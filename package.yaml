@@ -38,6 +38,7 @@ tests:
       - deepseq
       - hedgehog
       - klister
+      - silently
       - tasty
       - tasty-golden
       - tasty-hunit

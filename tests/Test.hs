@@ -523,7 +523,7 @@ testFile f p = do
             case Map.lookup mn (view worldEvaluated w) of
               Nothing -> assertFailure "Module values not in its own expansion"
               Just evalResults ->
-                p m [val | EvalResult _ _ _ _ val <- evalResults]
+                p m [val | ExampleResult _ _ _ _ val <- evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
@@ -663,8 +663,8 @@ genCoreF subgen varGen =
       recursive =
         [ genLam sameVars
         , binary CoreApp
-        , unary CorePure
-        , binary CoreBind
+        , unary CorePureMacro
+        , binary CoreBindMacro
         , CoreSyntaxError <$> genSyntaxError (sameVars (CoreSyntaxError (SyntaxError [] True)))
         -- , CoreIdentEq _ <$> sameVars <*> sameVars
         -- , CoreSyntax Syntax

@@ -15,6 +15,7 @@
         Macro
         Type
         String string-append string=?
+        IO pure-IO bind-IO
 
         -- primitive datatypes
         ScopeAction flip add remove
@@ -31,6 +32,7 @@
         datatype
         define-macros
         example
+        run
         import
         export
         meta
@@ -73,6 +75,10 @@
 
         -- non-primitive declaration macros
         defun
+
+        -- IO primitives
+        stdout
+        write
 
         -- non-primitive expression macros
 

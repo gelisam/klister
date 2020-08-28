@@ -5,6 +5,7 @@ module Value where
 import Control.Lens
 import Data.Text (Text)
 import qualified Data.Text as T
+import System.IO (Handle)
 
 import Core
 import Datatype
@@ -35,6 +36,8 @@ data Value
   = ValueClosure Closure
   | ValueSyntax Syntax
   | ValueMacroAction MacroAction
+  | ValueIOAction (IO Value)
+  | ValueOutputPort Handle
   | ValueInteger Integer
   | ValueCtor Constructor [Value]
   | ValueType Ty
@@ -52,6 +55,8 @@ valueText :: Value -> Text
 valueText (ValueClosure _) = "#<closure>"
 valueText (ValueSyntax stx) = "'" <> syntaxText stx
 valueText (ValueMacroAction _) = "#<macro>"
+valueText (ValueIOAction _) = "#<IO>"
+valueText (ValueOutputPort _) = "#<ouptut port>"
 valueText (ValueInteger s) = "#!" <> T.pack (show s)
 valueText (ValueCtor c args) =
   "(" <> view (constructorName . constructorNameText) c <> " " <>
@@ -64,6 +69,8 @@ describeVal :: Value -> Text
 describeVal (ValueClosure _) = "function"
 describeVal (ValueSyntax _) = "syntax"
 describeVal (ValueMacroAction _) = "macro action"
+describeVal (ValueIOAction _) = "IO action"
+describeVal (ValueOutputPort _) = "output port"
 describeVal (ValueInteger _) = "integer"
 describeVal (ValueCtor c _args) =
   view (constructorName . constructorNameText) c
@@ -85,3 +92,4 @@ instance Show Closure where
 makePrisms ''MacroAction
 makePrisms ''Value
 makeLenses ''Closure
+makeLenses ''FOClosure

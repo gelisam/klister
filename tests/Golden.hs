@@ -11,6 +11,7 @@ import Control.Monad.Except
 import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
+import qualified Data.Text.Lazy as T
 import System.FilePath (replaceExtension, takeBaseName)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Golden (findByExtension, goldenVsString)
@@ -18,6 +19,7 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
 import qualified Data.Text.Lazy.Encoding as Text
+import System.IO.Silently (capture_)
 
 import Evaluator
 import Expander
@@ -51,10 +53,15 @@ runExamples file = do
     Just results -> do
       -- Show just the results of evaluation in the module the user
       -- asked to run
-      for_ results $ \(EvalResult _ _ _ tp val) -> do
-        prettyTell val
-        tell " : "
-        prettyTellLn tp
+      for_ results $
+        \case
+          (ExampleResult _ _ _ tp val) -> do
+            prettyTell val
+            tell " : "
+            prettyTellLn tp
+          (IOResult io) -> do
+            output <- liftIO $ capture_ io
+            tell (T.pack output)
   where
 
 expandFile :: FilePath -> WriterT Text IO (ModuleName, ExpanderState)

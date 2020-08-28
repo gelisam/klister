@@ -11,6 +11,7 @@ module Expander.Primitives
   , datatype
   , defineMacros
   , example
+  , run
   , group
   , meta
   -- * Expression primitives
@@ -44,6 +45,7 @@ module Expander.Primitives
   , arrowType
   , baseType
   , macroType
+  , ioType
   , primitiveDatatype
   -- * Pattern primitives
   , elsePattern
@@ -196,6 +198,14 @@ example dest outScopesDest stx = do
   forkGeneralizeType exprDest t sch
   linkDeclOutputScopes outScopesDest mempty
 
+run :: DeclPrim
+run dest outScopesDest stx = do
+  Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
+  exprDest <- liftIO $ newSplitCorePtr
+  linkOneDecl dest (Run exprDest)
+  forkExpandSyntax (ExprDest (tIO (primitiveDatatype "Unit" [])) exprDest) expr
+  linkDeclOutputScopes outScopesDest mempty
+
 meta :: DeclExpander -> DeclPrim
 meta expandDeclForms dest outScopesDest stx = do
   (_ :: Syntax, subDecls) <- mustHaveShape stx
@@ -302,7 +312,7 @@ pureMacro t dest stx = do
   innerT <- tMetaVar <$> freshMeta
   unify dest (tMacro innerT) t
   argDest <- schedule innerT v
-  linkExpr dest $ CorePure argDest
+  linkExpr dest $ CorePureMacro argDest
 
 
 bindMacro :: ExprPrim
@@ -313,7 +323,7 @@ bindMacro t dest stx = do
   actDest <- schedule (tMacro a) act
   contDest <- schedule (tFun1 a (tMacro b)) cont
   unify dest t (tMacro b)
-  linkExpr dest $ CoreBind actDest contDest
+  linkExpr dest $ CoreBindMacro actDest contDest
 
 syntaxError :: ExprPrim
 syntaxError t dest stx = do
@@ -501,6 +511,9 @@ arrowType = (implT, implP)
 
 macroType :: TypePrim
 macroType = unaryType (\a -> tMacro a)
+
+ioType :: TypePrim
+ioType = unaryType tIO
 
 unaryType :: (forall a . a -> TyF a) -> TypePrim
 unaryType ctor = (implT, implP)

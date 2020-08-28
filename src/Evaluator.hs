@@ -66,14 +66,10 @@ withManyExtendedEnv exts act = local (inserter exts) act
     inserter [] = id
     inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
 
--- | 'resultValue' is the result of evaluating the 'resultExpr' in 'resultCtx'
-data EvalResult =
-  EvalResult { resultLoc :: SrcLoc
-             , resultEnv :: VEnv
-             , resultExpr :: Core
-             , resultType :: Scheme Ty
-             , resultValue :: Value
-             }
+
+data EvalResult
+  = ExampleResult SrcLoc VEnv Core (Scheme Ty) Value
+  | IOResult (IO ())
 
 apply :: Closure -> Value -> Eval Value
 apply (FO (FOClosure {..})) value = do
@@ -126,11 +122,11 @@ eval (Core (CoreString str)) = pure (ValueString str)
 eval (Core (CoreError what)) = do
   msg <- evalAsSyntax what
   throwError $ EvalErrorUser msg
-eval (Core (CorePure arg)) = do
+eval (Core (CorePureMacro arg)) = do
   value <- eval arg
   pure $ ValueMacroAction
        $ MacroActionPure value
-eval (Core (CoreBind hd tl)) = do
+eval (Core (CoreBindMacro hd tl)) = do
   macroAction <- evalAsMacroAction hd
   closure <- evalAsClosure tl
   pure $ ValueMacroAction
