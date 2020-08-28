@@ -429,7 +429,7 @@ initializeKernel = do
                 if | start < 0 || start       >= T.length str -> primitiveCtor "nothing" []
                    | len   < 0 || start + len >  T.length str -> primitiveCtor "nothing" []
                    | otherwise ->
-                     ValueString $ T.take len $ T.drop start str
+                     primitiveCtor "just" [ValueString $ T.take len $ T.drop start str]
         )
       , ( "string-length"
         , Scheme 0 $ tFun [tString] tInteger

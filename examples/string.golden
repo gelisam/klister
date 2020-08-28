@@ -2,9 +2,9 @@
 "hello world" : String
 (true) : Bool
 (false) : Bool
-"cde" : (Maybe String)
+(just "cde") : (Maybe String)
 (nothing) : (Maybe String)
-"ab" : (Maybe String)
+(just "ab") : (Maybe String)
 (nothing) : (Maybe String)
 3 : Integer
 0 : Integer
