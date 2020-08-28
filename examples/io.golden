@@ -1,2 +1,3 @@
+#<output port> : Output-Port
 #<IO action> : (IO Integer)
 hello world!

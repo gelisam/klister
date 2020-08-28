@@ -391,6 +391,7 @@ initializeKernel = do
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
       , ("IO", Prims.ioType)
+      , ("Output-Port", Prims.baseType tOutputPort)
       , ("Type", Prims.baseType tType)
       ]
 

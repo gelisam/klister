@@ -1,5 +1,7 @@
 #lang "prelude.kl"
 
+(example (the Output-Port stdout))
+
 (example (bind-IO (pure-IO 5) (lambda (x) (pure-IO (+ x 3)))))
 
 (run (write stdout "hello world!\n"))
