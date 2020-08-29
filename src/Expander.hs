@@ -393,6 +393,54 @@ initializeKernel = do
 
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
+      [ ( "open-syntax"
+        , Scheme 0 $ tFun [tSyntax] (Prims.primitiveDatatype "Syntax-Contents" [tSyntax])
+        , ValueClosure $ HO $
+          \(ValueSyntax stx) ->
+            case syntaxE stx of
+              Id name ->
+                primitiveCtor "identifier-contents" [ValueString name]
+              String str ->
+                primitiveCtor "string-contents" [ValueString str]
+              LitInt i ->
+                primitiveCtor "integer-contents" [ValueInteger i]
+              List xs ->
+                primitiveCtor "list-contents" [foldr consVal nilVal xs]
+                where
+                  nilVal = primitiveCtor "nil" []
+                  consVal x v = primitiveCtor "::" [ValueSyntax x, v]
+        )
+      , ( "close-syntax"
+        , Scheme 0 $
+          tFun [tSyntax, tSyntax, Prims.primitiveDatatype "Syntax-Contents" [tSyntax]] tSyntax
+        , ValueClosure $ HO $
+          \(ValueSyntax locStx) ->
+            ValueClosure $ HO $
+            \(ValueSyntax scopesStx) ->
+              ValueClosure $ HO $
+              -- N.B. Assuming correct constructors
+              \(ValueCtor ctor [arg]) ->
+                let close x = Syntax $ Stx (view (unSyntax . stxScopeSet) scopesStx) (stxLoc locStx) x
+                    unList =
+                      \case
+                        (ValueCtor c [])
+                          | view (constructorName . constructorNameText) c == "nil" ->
+                            []
+                        (ValueCtor c [ValueSyntax x, xs])
+                          | view (constructorName . constructorNameText) c == "::" -> x : unList xs
+                in
+                  ValueSyntax $
+                  case (view (constructorName . constructorNameText) ctor, arg) of
+                    ("identifier-contents", ValueString name) ->
+                      close (Id name)
+                    ("string-contents", ValueString str) ->
+                      close (String str)
+                    ("integer-contents", ValueInteger i) ->
+                      close (LitInt i)
+                    ("list-contents", unList -> lst) ->
+                      close (List lst)
+        )
+      ] ++
       [ ( "string=?"
         , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
@@ -446,6 +494,15 @@ initializeKernel = do
       , ("Bool", 0, [("true", []), ("false", [])])
       , ("Problem", 0, [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
       , ("Maybe", 1, [("nothing", []), ("just", [tSchemaVar 0])])
+      , ("List", 1, [("nil", []), ("::", [tSchemaVar 0, Prims.primitiveDatatype "List" [tSchemaVar 0]])])
+      , ("Syntax-Contents"
+        , 1
+        , [ ("list-contents", [Prims.primitiveDatatype "List" [tSchemaVar 0]])
+          , ("integer-contents", [tInteger])
+          , ("string-contents", [tString])
+          , ("identifier-contents", [tString])
+          ]
+        )
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
