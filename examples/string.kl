@@ -7,3 +7,49 @@
 (example ((string=? ((string-append "hello") " world")) "hello world"))
 
 (example ((string=? ((string-append "hello") "world")) "hello world"))
+
+(example (((substring 2) 3) "abcdefghijklmnop"))
+(example (((substring 2) 300) "abcdefghijklmnop"))
+(example (((substring 0) 2) "ab"))
+(example (((substring 0) 3) "ab"))
+
+(example (string-length "abc"))
+(example (string-length ""))
+
+
+(example ((string=? "a") "b"))
+(example ((string=? "a") "a"))
+(example ((string=? "b") "a"))
+(example ((string/=? "a") "b"))
+(example ((string/=? "a") "a"))
+(example ((string/=? "b") "a"))
+(example ((string<? "a") "b"))
+(example ((string<? "a") "a"))
+(example ((string<? "b") "a"))
+(example ((string<=? "a") "b"))
+(example ((string<=? "a") "a"))
+(example ((string<=? "b") "a"))
+(example ((string>? "a") "b"))
+(example ((string>? "a") "a"))
+(example ((string>? "b") "a"))
+(example ((string>=? "a") "b"))
+(example ((string>=? "a") "a"))
+(example ((string>=? "b") "a"))
+
+(example (string-upcase "aBC!"))
+(example (string-upcase "Straße"))
+
+(example (string-downcase "aBC!"))
+(example (string-downcase "Straße"))
+(example (string-downcase "ΚΑΟΣ"))
+(example (string-downcase "Σ"))
+
+(example (string-titlecase "aBC  twO"))
+(example (string-titlecase "y2k"))
+(example (string-titlecase "main straße"))
+(example (string-titlecase "stra ße"))
+
+(example (string-foldcase "aBC!"))
+(example (string-foldcase "Straße"))
+(example (string-foldcase "ΚΑΟΣ"))
+

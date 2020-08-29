@@ -57,6 +57,7 @@ module Expander.Primitives
   , unaryIntPrim
   , binaryIntPrim
   , binaryIntPred
+  , binaryStringPred
   ) where
 
 import Control.Lens hiding (List)
@@ -745,5 +746,16 @@ binaryIntPred f =
     ValueClosure $ HO $
     \(ValueInteger i2) ->
       if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+
+binaryStringPred :: (Text -> Text -> Bool) -> Value
+binaryStringPred f =
+  ValueClosure $ HO $
+  \(ValueString str1) ->
+    ValueClosure $ HO $
+    \(ValueString str2) ->
+      if f str1 str2
         then primitiveCtor "true" []
         else primitiveCtor "false" []

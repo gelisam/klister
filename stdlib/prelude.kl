@@ -14,7 +14,9 @@
         Integer + - * / abs negate > >= < <= = /= integer->string
         Macro
         Type
-        String string-append string=?
+        String string-append substring string-length
+               string=? string/=? string<? string<=? string>? string>=?
+               string-upcase string-downcase string-titlecase string-foldcase
 
         -- primitive datatypes
         ScopeAction flip add remove
