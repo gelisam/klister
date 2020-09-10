@@ -496,7 +496,7 @@ arrowType = (implT, implP)
       (sc2, n2, x2) <- prepareVar ret
       sch <- trivialScheme tType
       modifyState $
-        set (expanderPatternBinders . at (Right dest)) $
+        set (expanderTypePatternBinders . at dest) $
         Just [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
       linkTypePattern dest $ TypePattern (tFun1 (n1, x1) (n2, x2))
 
@@ -515,7 +515,7 @@ unaryType ctor = (implT, implP)
       (sc, n, x) <- prepareVar a
       sch <- trivialScheme tType
       modifyState $
-        set (expanderPatternBinders . at (Right dest)) $
+        set (expanderTypePatternBinders . at dest) $
         Just [(sc, n, x, sch)]
       linkTypePattern dest $ TypePattern $ ctor (n, x)
 
@@ -574,14 +574,14 @@ elsePattern (Left (_exprTy, scrutTy, dest)) stx = do
   Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
   ty <- trivialScheme scrutTy
   (sc, x, v) <- prepareVar var
-  modifyState $ set (expanderPatternBinders . at (Left dest)) $
-    Just [(sc, x, v, ty)]
-  linkPattern dest $ AnyConstructor x v
+  modifyState $ set (expanderPatternBinders . at dest) $
+    Just $ Right (sc, x, v, ty)
+  linkPattern dest $ PatternVar x v
 elsePattern (Right (_exprTy, dest)) stx = do
   Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
-  modifyState $ set (expanderPatternBinders . at (Right dest)) $
+  modifyState $ set (expanderTypePatternBinders . at dest) $
     Just [(sc, x, v, ty)]
   linkTypePattern dest $ AnyType x v
 
@@ -611,7 +611,7 @@ addDatatype name dt arity = do
               patVarInfo <- traverse prepareVar args
               sch <- trivialScheme tType
               modifyState $
-                set (expanderPatternBinders . at (Right dest)) $
+                set (expanderTypePatternBinders . at dest) $
                 Just [ (sc, n, x, sch)
                      | (sc, n, x) <- patVarInfo
                      ]
@@ -679,7 +679,7 @@ scheduleDataPattern exprTy scrutTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _
   forkExpandSyntax (PatternDest exprTy scrutTy dest) patStx
   rhsDest <- liftIO newSplitCorePtr
   saveOrigin rhsDest loc
-  forkExpanderTask $ AwaitingPattern (Left dest) exprTy rhsDest rhsStx
+  forkExpanderTask $ AwaitingPattern dest exprTy rhsDest rhsStx
   return (dest, rhsDest)
 
 scheduleTypePattern ::
@@ -690,7 +690,7 @@ scheduleTypePattern exprTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = d
   forkExpandSyntax (TypePatternDest exprTy dest) patStx
   rhsDest <- liftIO newSplitCorePtr
   saveOrigin rhsDest loc
-  forkExpanderTask $ AwaitingPattern (Right dest) exprTy rhsDest rhsStx
+  forkExpanderTask $ AwaitingTypePattern dest exprTy rhsDest rhsStx
   return (dest, rhsDest)
 
 prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident)
