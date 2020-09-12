@@ -1,0 +1,49 @@
+#lang kernel
+
+(datatype (Nat)
+  (zero)
+  (add1 (Nat)))
+
+(define half
+  (flet (half (n)
+          (case n
+            ((zero) (zero))
+            ((add1 (zero)) (zero))
+            ((add1 (add1 k)) (add1 (half k)))))
+    half))
+
+(example (half (add1 (add1 (add1 (add1 (zero)))))))
+(example (half (add1 (add1 (add1 (add1 (add1 (zero))))))))
+
+(define half*
+  (flet (half* (n)
+          (case n
+            ((add1 (add1 k)) (add1 (half* k)))
+            (_ (zero))))
+    half*))
+
+(example (half* (add1 (add1 (add1 (add1 (zero)))))))
+(example (half* (add1 (add1 (add1 (add1 (add1 (zero))))))))
+
+
+(define four?
+  (lambda (x)
+    (case x
+      ((add1 (add1 (add1 (add1 (zero))))) (true))
+      (_ (false)))))
+
+(example (four? (add1 (add1 (add1 (add1 (zero)))))))
+(example (four? (add1 (add1 (add1 (zero))))))
+(example (four? (add1 (add1 (add1 (add1 (add1 (zero))))))))
+
+
+(datatype (Pair A B)
+  (pair A B))
+
+(define reassoc
+  (lambda (x)
+    (case x
+      ((pair (pair x y) z) (pair x (pair y z))))))
+
+(example (reassoc (pair (pair 0 (zero)) "zero")))
+

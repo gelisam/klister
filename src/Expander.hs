@@ -637,7 +637,7 @@ initializeKernel = do
                   varInfo <- traverse Prims.prepareVar args
                   sch <- trivialScheme tType
                   modifyState $
-                    set (expanderPatternBinders . at (Right dest)) $
+                    set (expanderTypePatternBinders . at dest) $
                     Just [ (sc, n, x, sch)
                          | (sc, n, x) <- varInfo
                          ]
@@ -983,28 +983,58 @@ runTask (tid, localData, task) = withLocal localData $ do
             addConstructor cn dt ctor ts
           linkDeclOutputScopes outScopesDest scs
     AwaitingPattern patPtr ty dest stx -> do
-      ready <-
-        case patPtr of
-          Left pptr -> isJust . view (expanderCompletedPatterns . at pptr) <$> getState
-          Right tptr -> isJust . view (expanderCompletedTypePatterns . at tptr) <$> getState
-      if (not ready)
+      ready <- do
+        let patternComplete ptr =
+              (view (expanderCompletedPatterns . at ptr) <$> getState) >>=
+              \case
+                Nothing ->
+                  pure False
+                Just layer ->
+                  and <$> traverse patternComplete layer
+        patternComplete patPtr
+        -- TODO traverse the tree and get the layers out, collecting the set of pointers to later accumulate the binders
+      if not ready
         then stillStuck tid task
         else do
-            varInfo <- view (expanderPatternBinders . at patPtr) <$> getState
-            case varInfo of
-              Nothing -> throwError $ InternalError "Pattern info not added"
-              Just vars -> do
-                p <- currentPhase
-                let rhs' = foldr (flip (addScope p)) stx
-                             [ sc'
-                             | (sc', _, _, _) <- vars
-                             ]
-                withLocalVarTypes
-                  [ (var, varStx, t)
-                  | (_sc, varStx, var, t) <- vars
-                  ] $
-                  expandOneExpression ty dest rhs'
-
+          let getVarInfo ptr =
+                (view (expanderPatternBinders . at ptr) <$> getState) >>=
+                \case
+                  Nothing ->
+                    throwError $ InternalError "Pattern info not added"
+                  Just (Right found) ->
+                    pure [found]
+                  Just (Left ptrs) ->
+                    concat <$> traverse getVarInfo ptrs
+          vars <- getVarInfo patPtr
+          p <- currentPhase
+          let rhs' = foldr (flip (addScope p)) stx
+                       [ sc'
+                       | (sc', _, _, _) <- vars
+                       ]
+          withLocalVarTypes
+            [ (var, varStx, t)
+            | (_sc, varStx, var, t) <- vars
+            ] $
+            expandOneExpression ty dest rhs'
+    AwaitingTypePattern patPtr ty dest stx -> do
+      ready <- isJust . view (expanderCompletedTypePatterns . at patPtr) <$> getState
+      if not ready
+        then stillStuck tid task
+        else do
+          varInfo <- view (expanderTypePatternBinders . at patPtr) <$> getState
+          case varInfo of
+            Nothing -> throwError $ InternalError "Type pattern info not added"
+            Just vars -> do
+              p <- currentPhase
+              let rhs' = foldr (flip (addScope p)) stx
+                           [ sc'
+                           | (sc', _, _, _) <- vars
+                           ]
+              withLocalVarTypes
+                [ (var, varStx, t)
+                | (_sc, varStx, var, t) <- vars
+                ] $
+                expandOneExpression ty dest rhs'
 
   where
     laterMacro tid' b v x dest deps mdest stx = do
@@ -1035,6 +1065,12 @@ runTask (tid, localData, task) = withLocal localData $ do
 
 
 expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+-- This case means that identifier-only macro invocations aren't valid in pattern contexts
+expandOnePattern _exprTy scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
+  ty <- trivialScheme scrutTy
+  (sc, x, v) <- Prims.prepareVar var
+  modifyState $ set (expanderPatternBinders . at dest) $ Just $ Right (sc, x, v, ty)
+  linkPattern dest $ PatternVar x v
 expandOnePattern exprTy scrutTy dest stx =
   expandOneForm (PatternDest exprTy scrutTy dest) stx
 
@@ -1042,12 +1078,13 @@ expandOneTypePattern :: Ty -> TypePatternPtr -> Syntax -> Expand ()
 expandOneTypePattern exprTy dest stx =
   expandOneForm (TypePatternDest exprTy dest) stx
 
-
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
 
 expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
+
+
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
@@ -1115,26 +1152,23 @@ expandOneForm prob stx
                   else for (zip args' foundArgs) (uncurry schedule)
               linkExpr dest (CoreCtor ctor argDests)
               saveExprType dest t
-            PatternDest _exprTy patTy dest -> do
-              Stx _ loc (_cname, patVars) <- mustBeCons stx
+            PatternDest exprTy patTy dest -> do
+              Stx _ loc (_cname, subPats) <- mustBeCons stx
               tyArgs <- makeTypeMetas arity
-              argTypes <- for args \ a -> do
-                            t <- inst (Scheme arity a) tyArgs
-                            trivialScheme t
+              argTypes <- for args \ a ->
+                            inst (Scheme arity a) tyArgs
               unify loc (tDatatype dt tyArgs) patTy
-              if length patVars /= length argTypes
-                then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
+              if length subPats /= length argTypes
+                then throwError $ WrongArgCount stx ctor (length argTypes) (length subPats)
                 else do
-                  varInfo <- traverse Prims.prepareVar patVars
-                  modifyState $
-                    set (expanderPatternBinders . at (Left dest)) $
-                    Just [ (sc, name, x, t)
-                         | ((sc, name, x), t) <- zip varInfo argTypes
-                         ]
+                  subPtrs <- for (zip subPats argTypes) \(sp, t) -> do
+                    ptr <- liftIO newPatternPtr
+                    let subPatDest = PatternDest exprTy t ptr
+                    forkExpandSyntax subPatDest sp
+                    pure ptr
+                  modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
                   linkPattern dest $
-                    ConstructorPattern ctor [ (varStx, var)
-                                            | (_, varStx, var) <- varInfo
-                                            ]
+                    CtorPattern ctor subPtrs
             other ->
               throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
         EPrimModuleMacro _ ->

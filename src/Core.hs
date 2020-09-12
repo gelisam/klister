@@ -63,14 +63,22 @@ data TypePattern
   | AnyType Ident Var
   deriving (Data, Eq, Show)
 
-data ConstructorPattern
-  = ConstructorPattern !Constructor [(Ident, Var)]
-  | AnyConstructor Ident Var
+data ConstructorPatternF pat
+  = CtorPattern !Constructor [pat]
+  | PatternVar Ident Var
+  deriving (Data, Eq, Foldable, Functor, Show, Traversable)
+makePrisms ''ConstructorPatternF
+
+newtype ConstructorPattern =
+  ConstructorPattern { _constructorPattern :: ConstructorPatternF ConstructorPattern }
   deriving (Data, Eq, Show)
-makePrisms ''ConstructorPattern
+makeLenses ''ConstructorPattern
+
+instance Phased a => Phased (ConstructorPatternF a) where
+  shift i = fmap (shift i)
 
 instance Phased ConstructorPattern where
-  shift _ = id
+  shift i = over constructorPattern (shift i)
 
 instance Phased TypePattern where
   shift _ = id
@@ -361,12 +369,16 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
 
 
 instance AlphaEq ConstructorPattern where
-  alphaCheck (ConstructorPattern c1 vars1)
-             (ConstructorPattern c2 vars2) = do
+  alphaCheck p1 p2 =
+    alphaCheck (view constructorPattern p1) (view constructorPattern p2)
+
+instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
+  alphaCheck (CtorPattern c1 vars1)
+             (CtorPattern c2 vars2) = do
     alphaCheck c1 c2
     for_ (zip vars1 vars2) (uncurry alphaCheck)
-  alphaCheck (AnyConstructor _ x1)
-             (AnyConstructor _ x2) = do
+  alphaCheck (PatternVar _ x1)
+             (PatternVar _ x2) = do
     alphaCheck x1 x2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -566,12 +578,15 @@ instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
 instance ShortShow ConstructorPattern where
-  shortShow (ConstructorPattern ctor vars) =
+  shortShow = shortShow . view constructorPattern
+
+instance ShortShow a => ShortShow (ConstructorPatternF a) where
+  shortShow (CtorPattern ctor vars) =
     "(" ++ shortShow ctor ++
     " " ++ intercalate " " (map shortShow vars) ++
     ")"
-  shortShow (AnyConstructor ident _var) =
-    "(AnyConstructor " ++ shortShow ident ++ " )"
+  shortShow (PatternVar ident _var) =
+    "(PatternVar " ++ shortShow ident ++ " )"
 
 instance ShortShow TypePattern where
   shortShow (TypePattern t) =
