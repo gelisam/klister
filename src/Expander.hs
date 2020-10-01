@@ -935,7 +935,6 @@ runTask (tid, localData, task) = withLocal localData $ do
                 Just layer ->
                   and <$> traverse patternComplete layer
         patternComplete patPtr
-        -- TODO traverse the tree and get the layers out, collecting the set of pointers to later accumulate the binders
       if not ready
         then stillStuck tid task
         else do
