@@ -64,7 +64,7 @@ newTypePatternPtr = TypePatternPtr <$> newUnique
 data SplitCore = SplitCore
   { _splitCoreRoot         :: SplitCorePtr
   , _splitCoreDescendants  :: Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr)
-  , _splitCorePatterns     :: Map PatternPtr ConstructorPattern
+  , _splitCorePatterns     :: Map PatternPtr (ConstructorPatternF PatternPtr)
   , _splitCoreTypePatterns :: Map TypePatternPtr TypePattern
   }
 makeLenses ''SplitCore
@@ -74,12 +74,14 @@ unsplit (SplitCore {..}) = PartialCore $ go _splitCoreRoot
   where
     go ::
       SplitCorePtr ->
-      Maybe (CoreF (Maybe TypePattern) (Maybe ConstructorPattern) PartialCore)
+      Maybe (CoreF (Maybe TypePattern) PartialPattern PartialCore)
     go ptr = do
       this <- Map.lookup ptr _splitCoreDescendants
       return (mapCoreF tpat pat (PartialCore . go) this)
-    pat :: PatternPtr -> Maybe ConstructorPattern
-    pat ptr = Map.lookup ptr _splitCorePatterns
+    pat :: PatternPtr -> PartialPattern
+    pat ptr = PartialPattern $ do
+      this <- Map.lookup ptr _splitCorePatterns
+      return $ fmap pat this
     tpat :: TypePatternPtr -> Maybe TypePattern
     tpat ptr = Map.lookup ptr _splitCoreTypePatterns
 
@@ -92,9 +94,9 @@ split partialCore = do
   where
     go ::
       SplitCorePtr ->
-      Maybe (CoreF (Maybe TypePattern) (Maybe ConstructorPattern) PartialCore) ->
+      Maybe (CoreF (Maybe TypePattern) PartialPattern PartialCore) ->
       WriterT (Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr),
-               Map PatternPtr ConstructorPattern,
+               Map PatternPtr (ConstructorPatternF PatternPtr),
                Map TypePatternPtr TypePattern)
         IO
         ()
@@ -109,24 +111,25 @@ split partialCore = do
       pure here
 
     pat ::
-      Maybe ConstructorPattern ->
+      PartialPattern ->
       WriterT
         (Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr),
-         Map PatternPtr ConstructorPattern,
+         Map PatternPtr (ConstructorPatternF PatternPtr),
          Map TypePatternPtr TypePattern)
         IO
         PatternPtr
-    pat Nothing = liftIO newPatternPtr
-    pat (Just it) = do
+    pat (PartialPattern Nothing) = liftIO newPatternPtr
+    pat (PartialPattern (Just it)) = do
       here <- liftIO newPatternPtr
-      tell (mempty, Map.singleton here it, mempty)
+      layer <- traverse pat it
+      tell (mempty, Map.singleton here layer, mempty)
       return here
 
     tpat ::
       Maybe TypePattern ->
       WriterT
         (Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr),
-         Map PatternPtr ConstructorPattern,
+         Map PatternPtr (ConstructorPatternF PatternPtr),
          Map TypePatternPtr TypePattern)
         IO
         TypePatternPtr
