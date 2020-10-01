@@ -20,7 +20,7 @@ nonPartial :: Core -> PartialCore
 nonPartial =
   PartialCore . Just . mapCoreF Just nonPartialPattern nonPartial . unCore
   where
-    nonPartialPattern pat = PartialPattern $ Just $ nonPartialPattern <$> view constructorPattern pat
+    nonPartialPattern pat = PartialPattern $ Just $ nonPartialPattern <$> unConstructorPattern pat
 
 runPartialCore :: PartialCore -> Maybe Core
 runPartialCore (PartialCore Nothing) = Nothing

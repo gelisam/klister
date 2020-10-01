@@ -279,7 +279,7 @@ withScopeOf scope expr = do
 doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
 doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
 doDataCase loc v0 ((pat, rhs) : ps) =
-  match (doDataCase loc v0 ps) (eval rhs) [(view constructorPattern pat, v0)]
+  match (doDataCase loc v0 ps) (eval rhs) [(unConstructorPattern pat, v0)]
   where
     match _fk sk [] = sk
     match fk sk ((CtorPattern ctor subPats, tgt) : more) =
@@ -288,7 +288,7 @@ doDataCase loc v0 ((pat, rhs) : ps) =
           | c == ctor ->
             if length subPats /= length args
               then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
-              else match fk sk (zip (map (view constructorPattern) subPats) args ++ more)
+              else match fk sk (zip (map unConstructorPattern subPats) args ++ more)
           | otherwise -> fk
         _otherValue -> fk
     match fk sk ((PatternVar n x, tgt) : more) =

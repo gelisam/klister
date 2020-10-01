@@ -70,15 +70,15 @@ data ConstructorPatternF pat
 makePrisms ''ConstructorPatternF
 
 newtype ConstructorPattern =
-  ConstructorPattern { _constructorPattern :: ConstructorPatternF ConstructorPattern }
+  ConstructorPattern { unConstructorPattern :: ConstructorPatternF ConstructorPattern }
   deriving (Data, Eq, Show)
-makeLenses ''ConstructorPattern
+makePrisms ''ConstructorPattern
 
 instance Phased a => Phased (ConstructorPatternF a) where
   shift i = fmap (shift i)
 
 instance Phased ConstructorPattern where
-  shift i = over constructorPattern (shift i)
+  shift i = over _ConstructorPattern (shift i)
 
 instance Phased TypePattern where
   shift _ = id
@@ -370,7 +370,7 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
 
 instance AlphaEq ConstructorPattern where
   alphaCheck p1 p2 =
-    alphaCheck (view constructorPattern p1) (view constructorPattern p2)
+    alphaCheck (unConstructorPattern p1) (unConstructorPattern p2)
 
 instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
   alphaCheck (CtorPattern c1 vars1)
@@ -578,7 +578,7 @@ instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
 instance ShortShow ConstructorPattern where
-  shortShow = shortShow . view constructorPattern
+  shortShow = shortShow . unConstructorPattern
 
 instance ShortShow a => ShortShow (ConstructorPatternF a) where
   shortShow (CtorPattern ctor vars) =

@@ -210,7 +210,7 @@ instance PrettyBinder VarInfo TypePattern where
     ppBind env (BinderPair (ident, x))
 
 instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env pat = ppBind env (view constructorPattern pat)
+  ppBind env pat = ppBind env (unConstructorPattern pat)
 
 instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) where
   ppBind env (CtorPattern ctor subPats) =
