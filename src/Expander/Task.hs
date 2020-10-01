@@ -25,8 +25,8 @@ data MacroDest
   | TypeDest SplitTypePtr
   | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
-  | PatternDest Ty Ty PatternPtr
-    -- ^ expression type, scrutinee type, destination pointer
+  | PatternDest Ty PatternPtr
+    -- ^ scrutinee type, destination pointer
   | TypePatternDest Ty TypePatternPtr
     -- ^ expression type, destination pointer
   deriving Show
