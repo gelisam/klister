@@ -959,7 +959,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             ] $
             expandOneExpression ty dest rhs'
     AwaitingTypePattern patPtr ty dest stx -> do
-      ready <- isJust . view (expanderCompletedTypePatterns . at patPtr) <$> getState
+      ready <- has (expanderCompletedTypePatterns . ix patPtr) <$> getState
       if not ready
         then stillStuck tid task
         else do
