@@ -27,8 +27,8 @@ data MacroDest
     -- ^ produced declaration tree, scopes introduced
   | PatternDest Ty PatternPtr
     -- ^ scrutinee type, destination pointer
-  | TypePatternDest Ty TypePatternPtr
-    -- ^ expression type, destination pointer
+  | TypePatternDest TypePatternPtr
+    -- ^ destination pointer
   deriving Show
 
 

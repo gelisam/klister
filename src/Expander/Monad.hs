@@ -218,7 +218,7 @@ data EValue
     -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
-  | EPrimPatternMacro (Either (Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())
+  | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)

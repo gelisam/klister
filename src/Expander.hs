@@ -534,7 +534,7 @@ initializeKernel = do
       , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Either (Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())]
+    patternPrims :: [(Text, Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())]
     patternPrims = [("else", Prims.elsePattern)]
 
     addToKernel name p b =
@@ -617,7 +617,7 @@ initializeKernel = do
 
 
     addPatternPrimitive ::
-      Text -> (Either (Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
       b <- freshBinding
@@ -786,8 +786,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOneType d stx
         PatternDest scrutT d ->
           expandOnePattern scrutT d stx
-        TypePatternDest exprT d ->
-          expandOneTypePattern exprT d stx
+        TypePatternDest d ->
+          expandOneTypePattern d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -1017,9 +1017,9 @@ expandOnePattern scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
 expandOnePattern scrutTy dest stx =
   expandOneForm (PatternDest scrutTy dest) stx
 
-expandOneTypePattern :: Ty -> TypePatternPtr -> Syntax -> Expand ()
-expandOneTypePattern exprTy dest stx =
-  expandOneForm (TypePatternDest exprTy dest) stx
+expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
+expandOneTypePattern dest stx =
+  expandOneForm (TypePatternDest dest) stx
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
@@ -1059,11 +1059,11 @@ requireTypeCtx _ (TypeDest dest) = return dest
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) (Ty, TypePatternPtr))
+requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
 requirePatternCtx _ (PatternDest scrutTy dest) =
   return $ Left (scrutTy, dest)
-requirePatternCtx _ (TypePatternDest exprTy dest) =
-  return $ Right (exprTy, dest)
+requirePatternCtx _ (TypePatternDest dest) =
+  return $ Right dest
 requirePatternCtx stx other =
   throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
 
@@ -1123,7 +1123,7 @@ expandOneForm prob stx
           case prob of
             TypeDest dest ->
               implT dest stx
-            TypePatternDest _exprTy dest ->
+            TypePatternDest dest ->
               implP dest stx
             otherDest ->
               throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)

@@ -567,7 +567,7 @@ makeLocalType dest stx = do
 -- Patterns --
 --------------
 
-type PatternPrim = Either (Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()
+type PatternPrim = Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()
 
 elsePattern :: PatternPrim
 elsePattern (Left (scrutTy, dest)) stx = do
@@ -577,7 +577,7 @@ elsePattern (Left (scrutTy, dest)) stx = do
   modifyState $ set (expanderPatternBinders . at dest) $
     Just $ Right (sc, x, v, ty)
   linkPattern dest $ PatternVar x v
-elsePattern (Right (_exprTy, dest)) stx = do
+elsePattern (Right dest) stx = do
   Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
@@ -687,7 +687,7 @@ scheduleTypePattern ::
   Expand (TypePatternPtr, SplitCorePtr)
 scheduleTypePattern exprTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = do
   dest <- liftIO newTypePatternPtr
-  forkExpandSyntax (TypePatternDest exprTy dest) patStx
+  forkExpandSyntax (TypePatternDest dest) patStx
   rhsDest <- liftIO newSplitCorePtr
   saveOrigin rhsDest loc
   forkExpanderTask $ AwaitingTypePattern dest exprTy rhsDest rhsStx
