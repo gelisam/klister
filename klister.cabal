@@ -94,7 +94,7 @@ executable klister
       repl
   ghc-options: -Wall
   build-depends:
-    optparse-applicative ^>= 0.14,
+    optparse-applicative >= 0.14 && < 0.17,
     klister
   default-language: Haskell2010
 
