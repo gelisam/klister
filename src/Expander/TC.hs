@@ -85,8 +85,7 @@ pruneLevel l = traverse_ reduce
   where
     reduce ptr =
       modifyState $
-      over (expanderTypeStore . at ptr) $
-      fmap (over varLevel (min l))
+      over (expanderTypeStore . ix ptr . varLevel) (min l)
 
 linkToType :: UnificationErrorBlame blame => blame -> MetaPtr -> Ty -> Expand ()
 linkToType blame var ty = do

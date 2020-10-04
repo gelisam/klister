@@ -2,6 +2,7 @@
 {-# LANGUAGE ViewPatterns #-}
 module Parser (readExpr, readModule) where
 
+import Control.Monad
 import Data.Char
 import Data.Functor
 import Data.Text (Text)
@@ -110,7 +111,7 @@ unquoted =
             ]
 
 
--- | The identifier rules from R6RS Scheme, minus hex escapes
+-- | Mostly like the identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text
 identName =
   normalIdent <|> specialIdent <|> magicIdent
@@ -124,8 +125,10 @@ identName =
 
     specialIdent :: Parser Text
     specialIdent =
+      try $
       do str <- chunk "+" <|> chunk "-" <|> chunk "..."
          more <- many subseq
+         guard (null more || not (all isDigit more))
          return (str <> T.pack more)
 
     magicIdent = (literal "#%app" $> "#%app")       <|>
@@ -158,8 +161,9 @@ identName =
 
 
 integerNum :: Parser Integer
-integerNum =
-  read . T.unpack <$> takeWhile1P (Just "integer (digits)") isDigit
+integerNum = do
+  sign <- optional (chunk "+" $> id <|> chunk "-" $> negate)
+  maybe id id sign . read . T.unpack <$> takeWhile1P (Just "integer (digits)") isDigit
 
 lexeme :: Parser a -> Parser (Located a)
 lexeme p = located p <* eatWhitespace
