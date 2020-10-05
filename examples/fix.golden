@@ -1,4 +1,5 @@
 (in (cons "hello" (in (cons "world" (in (nil)))))) : (Fix (ListF String))
+(in (cons "hello" (in (cons "world" (in (nil)))))) : (Fix (ListF String))
 (in (succ (in (succ (in (zero)))))) : (Fix NatF)
 #<closure> : ∀(α : *) (β : *). ((α → β) → ((Fix (ListF α)) → (Fix (ListF β))))
 (in (cons (in (succ (in (succ (in (zero))))))

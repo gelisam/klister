@@ -28,6 +28,11 @@
 
 (example l1)
 
+(define l1-no-annotation (in (cons "hello" (in (cons "world" (in (nil)))))))
+
+(example l1-no-annotation)
+
+
 (example (length l1))
 
 (define map
