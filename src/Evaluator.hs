@@ -274,22 +274,25 @@ withScopeOf scope expr = do
 
 doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
 doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
-doDataCase loc v0 ((pat, rhs) : ps) = match (doDataCase loc v0 ps) pat
+doDataCase loc v0 ((pat, rhs) : ps) =
+  match (doDataCase loc v0 ps) (eval rhs) [(unConstructorPattern pat, v0)]
   where
-    match next (ConstructorPattern ctor vars) =
-      case v0 of
+    match ::
+      Eval Value {- ^ Failure continuation -} ->
+      Eval Value {- ^ Success continuation, to be used in an extended environment -} ->
+      [(ConstructorPatternF ConstructorPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
+      Eval Value
+    match _fk sk [] = sk
+    match fk sk ((CtorPattern ctor subPats, tgt) : more) =
+      case tgt of
         ValueCtor c args
           | c == ctor ->
-            if length vars /= length args
+            if length subPats /= length args
               then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
-              else withManyExtendedEnv [ (n, x, v) | (n, x) <- vars
-                                       | v <- args
-                                       ] $
-                   eval rhs
-          | otherwise -> next
-        _otherValue -> next
-    match _next (AnyConstructor n x) =
-      withExtendedEnv n x v0 $ eval rhs
+              else match fk sk (zip (map unConstructorPattern subPats) args ++ more)
+        _otherValue -> fk
+    match fk sk ((PatternVar n x, tgt) : more) =
+      match fk (withExtendedEnv n x tgt $ sk) more
 
 doTypeCase :: SrcLoc -> Ty -> [(TypePattern, Core)] -> Eval Value
 doTypeCase blameLoc v0 [] = throwError (EvalErrorCase blameLoc (ValueType v0))

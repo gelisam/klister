@@ -131,6 +131,7 @@ module Expander.Monad
   , expanderModuleTop
   , expanderOriginLocations
   , expanderPatternBinders
+  , expanderTypePatternBinders
   , expanderVarTypes
   , expanderTasks
   , expanderWorld
@@ -217,7 +218,7 @@ data EValue
     -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
-  | EPrimPatternMacro (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())
+  | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
@@ -267,9 +268,10 @@ data ExpanderState = ExpanderState
   , _expanderTasks :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations :: !(Map.Map SplitCorePtr SrcLoc)
   , _expanderCompletedCore :: !(Map.Map SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr))
-  , _expanderCompletedPatterns :: !(Map.Map PatternPtr ConstructorPattern)
+  , _expanderCompletedPatterns :: !(Map.Map PatternPtr (ConstructorPatternF PatternPtr))
   , _expanderCompletedTypePatterns :: !(Map.Map TypePatternPtr TypePattern)
-  , _expanderPatternBinders :: !(Map.Map (Either PatternPtr TypePatternPtr) [(Scope, Ident, Var, SchemePtr)])
+  , _expanderPatternBinders :: !(Map.Map PatternPtr (Either [PatternPtr] (Scope, Ident, Var, SchemePtr)))
+  , _expanderTypePatternBinders :: !(Map.Map TypePatternPtr [(Scope, Ident, Var, SchemePtr)])
   , _expanderCompletedTypes :: !(Map.Map SplitTypePtr (TyF SplitTypePtr))
   , _expanderCompletedDeclTrees :: !(Map.Map DeclTreePtr (DeclTreeF DeclPtr DeclTreePtr))
   , _expanderCompletedDecls :: !(Map.Map DeclPtr (Decl SplitTypePtr SchemePtr DeclTreePtr SplitCorePtr))
@@ -307,6 +309,7 @@ initExpanderState = ExpanderState
   , _expanderCompletedPatterns = Map.empty
   , _expanderCompletedTypePatterns = Map.empty
   , _expanderPatternBinders = Map.empty
+  , _expanderTypePatternBinders = Map.empty
   , _expanderCompletedTypes = Map.empty
   , _expanderCompletedDeclTrees = Map.empty
   , _expanderCompletedDecls = Map.empty
@@ -412,7 +415,7 @@ linkExpr :: SplitCorePtr -> CoreF TypePatternPtr PatternPtr SplitCorePtr -> Expa
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> Map.singleton dest layer)
 
-linkPattern :: PatternPtr -> ConstructorPattern -> Expand ()
+linkPattern :: PatternPtr -> ConstructorPatternF PatternPtr -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 

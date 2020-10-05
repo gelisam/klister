@@ -25,10 +25,10 @@ data MacroDest
   | TypeDest SplitTypePtr
   | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
-  | PatternDest Ty Ty PatternPtr
-    -- ^ expression type, scrutinee type, destination pointer
-  | TypePatternDest Ty TypePatternPtr
-    -- ^ expression type, destination pointer
+  | PatternDest Ty PatternPtr
+    -- ^ scrutinee type, destination pointer
+  | TypePatternDest TypePatternPtr
+    -- ^ destination pointer
   deriving Show
 
 
@@ -52,7 +52,8 @@ data ExpanderTask
   | ExpandVar Ty SplitCorePtr Syntax Var
     -- ^ Expected type, destination, origin syntax, and variable to use if it's acceptable
   | EstablishConstructors ScopeSet DeclOutputScopesPtr Datatype [(Ident, Constructor, [SplitTypePtr])]
-  | AwaitingPattern (Either PatternPtr TypePatternPtr) Ty SplitCorePtr Syntax
+  | AwaitingPattern PatternPtr Ty SplitCorePtr Syntax
+  | AwaitingTypePattern TypePatternPtr Ty SplitCorePtr Syntax
   deriving (Show)
 
 data AfterTypeTask
@@ -102,6 +103,7 @@ instance ShortShow ExpanderTask where
   shortShow (ExpandVar t d x v) = "(ExpandVar " ++ show t ++ " " ++ show d ++ " " ++ show x ++ " " ++ show v ++ ")"
   shortShow (EstablishConstructors _ _ dt _) = "(EstablishConstructors " ++ show dt ++ ")"
   shortShow (AwaitingPattern _ _ _ _) = "(AwaitingPattern _ _ _ _)"
+  shortShow (AwaitingTypePattern _ _ _ _) = "(AwaitingTypePattern _ _ _ _)"
 
 instance Pretty VarInfo ExpanderTask where
   pp _ task = string (shortShow task)

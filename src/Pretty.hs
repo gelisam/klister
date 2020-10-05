@@ -210,19 +210,18 @@ instance PrettyBinder VarInfo TypePattern where
     ppBind env (BinderPair (ident, x))
 
 instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env (ConstructorPattern ctor vars) =
-    case vars of
+  ppBind env pat = ppBind env (unConstructorPattern pat)
+
+instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) where
+  ppBind env (CtorPattern ctor subPats) =
+    case subPats of
       [] -> (pp env ctor, Env.empty)
-      more ->
-        let env' = foldr (\(x, v) e -> Env.insert x v () e)
-                   Env.empty
-                   [ (v, x) | (x, v) <- more ]
-        in (pp env ctor <+>
-             hsep [ annotate (BindingSite v) (text x)
-                  | (Stx _ _ x, v) <- more
-                  ],
+      _nonEmpty ->
+        let subDocs = map (ppBind env) subPats
+            env' = foldr (<>) Env.empty (map snd subDocs)
+        in (pp env ctor <+> hsep (map fst subDocs),
             env')
-  ppBind _env (AnyConstructor ident@(Stx _ _ n) x) =
+  ppBind _env (PatternVar ident@(Stx _ _ n) x) =
     (annotate (BindingSite x) (text n), Env.singleton x ident ())
 
 instance PrettyBinder VarInfo SyntaxPattern where
