@@ -1102,7 +1102,7 @@ expandOneForm prob stx
             PatternDest patTy dest -> do
               Stx _ loc (_cname, subPats) <- mustBeCons stx
               tyArgs <- traverse makeTypeMeta argKinds
-              argTypes <- for args \ a -> do
+              argTypes <- for args \ a ->
                             inst loc (Scheme argKinds a) tyArgs
               unify loc (tDatatype dt tyArgs) patTy
               if length subPats /= length argTypes
