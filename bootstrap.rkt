@@ -70,7 +70,7 @@
 ;   (lambda (raw-stx)
 ;     (let [failure-cc
 ;           (lambda ()
-;             (raw-syntax-case raw-stx))]
+;             (syntax-error '"my-macro call has invalid syntax" raw-stx))]
 ;       (let [failure-cc
 ;             (lambda ()
 ;               (raw-syntax-case raw-stx
@@ -145,7 +145,12 @@
        #`(intermediate-define-syntax1 macro-name (intermediate-literal-id racket-...)
            (lambda (raw-stx)
              (let [failure-cc
-                   (lambda () (raw-syntax-case raw-stx))]
+                   (lambda ()
+                     (syntax-error
+                       '#,(string-append
+                            (symbol->string (syntax->datum #'macro-name))
+                            " call has invalid syntax")
+                       raw-stx))]
                #,(intermediate-expand-cases #'(cases racket-...))))))]))
 
 

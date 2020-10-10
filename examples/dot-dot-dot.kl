@@ -19,7 +19,9 @@
    (lambda (raw-stx)
      (let (failure-cc
            (lambda ()
-             (raw-syntax-case raw-stx)))
+             (syntax-error
+              '"my-macro call has invalid syntax"
+              raw-stx)))
        (let (failure-cc
              (lambda ()
                (let (anything raw-stx)
