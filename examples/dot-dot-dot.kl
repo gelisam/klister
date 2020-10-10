@@ -5,51 +5,11 @@
                 (define-macros
                  raw-define-macros)))
 
-(import (rename "prelude.kl"
-                (syntax-case
-                 raw-syntax-case)))
+(import "list-syntax.kl")
 
 (import (rename (shift "prelude.kl" 1)
                 (syntax-case
                  raw-syntax-case)))
-
-(example
- (cons-list-syntax
-  '1
-  '(2 3 4)
-  'raw-stx))
-
-(defun
- pair-list-syntax
- (head tail raw-stx)
- (cons-list-syntax
-  head
-  (cons-list-syntax tail '() raw-stx)
-  raw-stx))
-
-(example
- (pair-list-syntax '1 '2 'raw-stx))
-
-(defun
- append-list-syntax
- (list tail raw-stx)
- (raw-syntax-case
-  list
-  (() tail)
-  ((cons car cdr)
-   (cons-list-syntax
-    car
-    (append-list-syntax
-     cdr
-     tail
-     raw-stx)
-    raw-stx))))
-
-(example
- (append-list-syntax
-  '(1 2 3)
-  '(4 5 6)
-  'raw-stx))
 
 (example
  (let (raw-stx 'raw-stx)

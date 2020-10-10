@@ -1,5 +1,7 @@
-#[list-syntax.kl:70.17-70.18]<1> : Syntax
-#[list-syntax.kl:71.16-71.23]<(2 3)> : Syntax
-#[list-syntax.kl:72.20-72.39]<(x y z)> : Syntax
-#[list-syntax.kl:77.18-78.17]<((f x) (f y) (f z))> : Syntax
-#[list-syntax.kl:81.18-82.17]<(z y x)> : Syntax
+#[list-syntax.kl:86.35-86.38]<(1 2)> : Syntax
+#[list-syntax.kl:90.13-90.16]<(1 2 3 4 5 6)> : Syntax
+#[list-syntax.kl:91.17-91.18]<1> : Syntax
+#[list-syntax.kl:92.16-92.23]<(2 3)> : Syntax
+#[list-syntax.kl:93.20-93.39]<(x y z)> : Syntax
+#[list-syntax.kl:98.18-99.17]<((f x) (f y) (f z))> : Syntax
+#[list-syntax.kl:102.18-103.17]<(z y x)> : Syntax
