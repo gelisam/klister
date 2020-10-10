@@ -184,19 +184,28 @@
                                [syntax-case raw-syntax-case]))
       
               (intermediate-define-syntax2 my-macro (keyword)
-                [(anything intermediate-...)
-                 (pure ''nil)])
-                ;[(_ ((a b) (c d)))
-                ; (pure (cons-list-syntax a
-                ;         (cons-list-syntax b
-                ;           (cons-list-syntax c
-                ;             (cons-list-syntax d
-                ;               '()
-                ;               raw-stx)
-                ;             raw-stx)
-                ;           raw-stx)
-                ;         raw-stx))]
-                ;[(_ (foo tail intermediate-...))
-                ; (pure (cons-list-syntax 'quote tail raw-stx))])
+                [(_ ((a b) (c d)))
+                 (let [stx (cons-list-syntax a
+                             (cons-list-syntax b
+                               (cons-list-syntax c
+                                 (cons-list-syntax d
+                                   '()
+                                   raw-stx)
+                                 raw-stx)
+                               raw-stx)
+                             raw-stx)]
+                   (pure (cons-list-syntax 'quote
+                           (cons-list-syntax stx
+                             '()
+                             raw-stx)
+                           raw-stx)))]
+                [(_ (foo tail intermediate-...))
+                 (let [stx tail]
+                   (pure (cons-list-syntax 'quote
+                           (cons-list-syntax stx
+                             '()
+                             raw-stx)
+                           raw-stx)))])
       
-              '(example (my-macro)))))))))
+              '(example (my-macro ((1 2) (3 4))))
+              '(example (my-macro (keyword foo bar))))))))))
