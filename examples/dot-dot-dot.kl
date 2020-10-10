@@ -5,9 +5,67 @@
                 (define-macros
                  raw-define-macros)))
 
+(import (rename "prelude.kl"
+                (syntax-case
+                 raw-syntax-case)))
+
 (import (rename (shift "prelude.kl" 1)
                 (syntax-case
                  raw-syntax-case)))
+
+(example
+ (cons-list-syntax
+  '1
+  '(2 3 4)
+  'raw-stx))
+
+(defun
+ pair-list-syntax
+ (head tail raw-stx)
+ (cons-list-syntax
+  head
+  (cons-list-syntax tail '() raw-stx)
+  raw-stx))
+
+(example
+ (pair-list-syntax '1 '2 'raw-stx))
+
+(defun
+ append-list-syntax
+ (list tail raw-stx)
+ (raw-syntax-case
+  list
+  (() tail)
+  ((cons car cdr)
+   (cons-list-syntax
+    car
+    (append-list-syntax
+     cdr
+     tail
+     raw-stx)
+    raw-stx))))
+
+(example
+ (append-list-syntax
+  '(1 2 3)
+  '(4 5 6)
+  'raw-stx))
+
+(example
+ (let (raw-stx 'raw-stx)
+   (pair-list-syntax
+    'quote
+    (cons-list-syntax
+     '1
+     (cons-list-syntax
+      '(2 3)
+      (append-list-syntax
+       '(4 5)
+       (cons-list-syntax '6 '() raw-stx)
+       raw-stx)
+      raw-stx)
+     raw-stx)
+    raw-stx)))
 
 (raw-define-macros
  ((keyword
@@ -27,25 +85,25 @@
                (raw-syntax-case
                 raw-stx
                 ((cons
-                  head-145
-                  tail-146)
-                 (let (_ head-145)
+                  head-155
+                  tail-156)
+                 (let (_ head-155)
                    (raw-syntax-case
-                    tail-146
+                    tail-156
                     ((cons
-                      head-147
-                      tail-148)
+                      head-157
+                      tail-158)
                      (raw-syntax-case
-                      head-147
+                      head-157
                       ((cons
-                        head-149
-                        tail-150)
+                        head-159
+                        tail-160)
                        (let (foo
-                             head-149)
+                             head-159)
                          (let (tail
-                               tail-150)
+                               tail-160)
                            (raw-syntax-case
-                            tail-148
+                            tail-158
                             (()
                              (let (stx
                                    tail)
@@ -67,63 +125,63 @@
                  (raw-syntax-case
                   raw-stx
                   ((cons
-                    head-151
-                    tail-152)
-                   (let (_ head-151)
+                    head-161
+                    tail-162)
+                   (let (_ head-161)
                      (raw-syntax-case
-                      tail-152
+                      tail-162
                       ((cons
-                        head-153
-                        tail-154)
+                        head-163
+                        tail-164)
                        (raw-syntax-case
-                        head-153
+                        head-163
                         ((cons
-                          head-155
-                          tail-156)
+                          head-165
+                          tail-166)
                          (raw-syntax-case
-                          head-155
+                          head-165
                           ((cons
-                            head-163
-                            tail-164)
+                            head-173
+                            tail-174)
                            (let (a
-                                 head-163)
+                                 head-173)
                              (raw-syntax-case
-                              tail-164
+                              tail-174
                               ((cons
-                                head-165
-                                tail-166)
+                                head-175
+                                tail-176)
                                (let (b
-                                     head-165)
+                                     head-175)
                                  (raw-syntax-case
-                                  tail-166
+                                  tail-176
                                   (()
                                    (raw-syntax-case
-                                    tail-156
+                                    tail-166
                                     ((cons
-                                      head-157
-                                      tail-158)
+                                      head-167
+                                      tail-168)
                                      (raw-syntax-case
-                                      head-157
+                                      head-167
                                       ((cons
-                                        head-159
-                                        tail-160)
+                                        head-169
+                                        tail-170)
                                        (let (c
-                                             head-159)
+                                             head-169)
                                          (raw-syntax-case
-                                          tail-160
+                                          tail-170
                                           ((cons
-                                            head-161
-                                            tail-162)
+                                            head-171
+                                            tail-172)
                                            (let (d
-                                                 head-161)
+                                                 head-171)
                                              (raw-syntax-case
-                                              tail-162
+                                              tail-172
                                               (()
                                                (raw-syntax-case
-                                                tail-158
+                                                tail-168
                                                 (()
                                                  (raw-syntax-case
-                                                  tail-154
+                                                  tail-164
                                                   (()
                                                    (let (stx
                                                          (cons-list-syntax

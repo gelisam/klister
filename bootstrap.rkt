@@ -16,28 +16,32 @@
 ;
 ; But it's also a bit mind-bending because there are many different versions of
 ; syntax-case defined in terms of each other:
+;
 ; * In the generated Klister code, fancy-syntax-case is defined using
 ;   raw-syntax-case and expands to code which uses raw-syntax-case.
-; * In this file, we generate that Klister code using
-;   intermediate-define-syntax2, because it's a lot more convenient to use than
-;   raw-syntax-case.
+; * In this file, we generate that Klister code using intermediate-define-syntax2.
 ; * intermediate-define-syntax{1,2} are defined using racket-syntax-case, and
 ;   expand to Klister code which uses raw-syntax-case.
+;
+; * In the generated Klister code, fancy-quasiquote is defined using
+;   raw-syntax-case and {append,cons,pair}-list-syntax.
+; * In this file, we generate that Klister code using intermediate-quasiquote2.
+; * intermediate-quasiquote{1,2} are defined using racket-syntax-case.
 
 ; (intermediate-define-syntax1 my-macro (foo bar)
 ;   (lambda (raw-stx)
 ;     (pure raw-stx)))
 ; =>
-; (raw-define-macros
-;   ([foo
-;     (lambda (raw-stx)
-;       (syntax-error '"foo used out of context" raw-stx))]
-;    [bar
-;     (lambda (raw-stx)
-;       (syntax-error '"bar used out of context" raw-stx))]
-;    [my-macro
-;     (lambda (raw-stx)
-;       (pure raw-stx))]))
+; '(raw-define-macros
+;    ([foo
+;      (lambda (raw-stx)
+;        (syntax-error '"foo used out of context" raw-stx))]
+;     [bar
+;      (lambda (raw-stx)
+;        (syntax-error '"bar used out of context" raw-stx))]
+;     [my-macro
+;      (lambda (raw-stx)
+;        (pure raw-stx))]))
 (racket-define-syntax (intermediate-define-syntax1 intermediate-stx)
   (racket-syntax-case intermediate-stx ()
     [(_ macro-name (literal-id racket-...) impl)
@@ -153,6 +157,63 @@
                        raw-stx))]
                #,(intermediate-expand-cases #'(cases racket-...))))))]))
 
+; `(1 ,(list 2 3) ,@(list 4 5) 6)
+; =>
+; '(1 (2 3) 4 5 6)
+;
+; (intermediate-quasiquote1
+;   (1
+;    (intermediate-unquote '(2 3))
+;    '(4 5) intermediate-...
+;    6))
+; =>
+; '(cons-list-syntax 1
+;    (cons-list-syntax '(2 3)
+;      (append-list-syntax '(4 5)
+;        (cons-list-syntax 6
+;          '()
+;          raw-stx)
+;        raw-stx)
+;      raw-stx)
+;    raw-stx)
+; =>
+; (1 (2 3) 4 5 6)
+(define-syntax (intermediate-quasiquote1 intermediate-stx)
+  (racket-syntax-case intermediate-stx (intermediate-unquote intermediate-...)
+    [(_ ((intermediate-unquote head) tail racket-...))
+     #'`(cons-list-syntax
+          head
+          ,(intermediate-quasiquote1 (tail racket-...))
+          raw-stx)]
+    [(_ (head intermediate-... tail racket-...))
+     #'`(append-list-syntax
+          head
+          ,(intermediate-quasiquote1 (tail racket-...))
+          raw-stx)]
+    [(_ (head tail racket-...))
+     #'`(cons-list-syntax
+          ,(intermediate-quasiquote1 head)
+          ,(intermediate-quasiquote1 (tail racket-...))
+          raw-stx)]
+    [(_ x)
+     #'''x]))
+
+; (intermediate-quasiquote2
+;   (1
+;    (intermediate-unquote '(2 3))
+;    '(4 5) intermediate-...
+;    6))
+; =>
+; ...
+; =>
+; '(1 (2 3) 4 5 6)
+(define-syntax (intermediate-quasiquote2 intermediate-stx)
+  (racket-syntax-case intermediate-stx ()
+    [(_ e)
+     #'`(pair-list-syntax 'quote
+          ,(intermediate-quasiquote1 e)
+          raw-stx)]))
+
 
 (void
   (call-with-output-file
@@ -180,9 +241,43 @@
             (list
               '(import (rename "prelude.kl"
                                [define-macros raw-define-macros]))
+              '(import (rename "prelude.kl"
+                               [syntax-case raw-syntax-case]))
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
-      
+
+              '(example (cons-list-syntax '1 '(2 3 4) 'raw-stx))
+
+              '(defun pair-list-syntax (head tail raw-stx)
+                 (cons-list-syntax head
+                   (cons-list-syntax tail
+                     '()
+                     raw-stx)
+                   raw-stx))
+              '(example (pair-list-syntax '1 '2 'raw-stx))
+
+              '(defun append-list-syntax (list tail raw-stx)
+                 (raw-syntax-case list
+                   [()
+                    tail]
+                   [(cons car cdr)
+                    (cons-list-syntax car
+                      (append-list-syntax cdr tail raw-stx)
+                      raw-stx)]))
+
+              '(example (append-list-syntax
+                          '(1 2 3)
+                          '(4 5 6)
+                          'raw-stx))
+
+              `(example
+                 (let [raw-stx 'raw-stx]
+                   ,(intermediate-quasiquote2
+                      (1
+                       (intermediate-unquote '(2 3))
+                       '(4 5) intermediate-...
+                       6))))
+
               (intermediate-define-syntax2 my-macro (keyword)
                 [(_ ((a b) (c d)))
                  (let [stx (cons-list-syntax a
@@ -206,6 +301,5 @@
                              '()
                              raw-stx)
                            raw-stx)))])
-      
               '(example (my-macro ((1 2) (3 4))))
               '(example (my-macro (keyword foo bar))))))))))
