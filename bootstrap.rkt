@@ -58,7 +58,7 @@
              (syntax->datum #'(literal-id racket-...))]
             [undefined-macros
              (map undefined-macro symbols)])
-       #`'(raw-define-macros
+       #``(raw-define-macros
             (#,@undefined-macros
              [macro-name impl])))]))
 
@@ -241,40 +241,14 @@
             (list
               '(import (rename "prelude.kl"
                                [define-macros raw-define-macros]))
-              '(import "list-syntax.kl")
+              '(import (shift "list-syntax.kl" 1))
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
 
-              `(example
-                 (let [raw-stx 'raw-stx]
-                   ,(intermediate-quasiquote2
-                      (1
-                       (intermediate-unquote '(2 3))
-                       '(4 5) intermediate-...
-                       6))))
-
               (intermediate-define-syntax2 my-macro (keyword)
                 [(_ ((a b) (c d)))
-                 (let [stx (cons-list-syntax a
-                             (cons-list-syntax b
-                               (cons-list-syntax c
-                                 (cons-list-syntax d
-                                   '()
-                                   raw-stx)
-                                 raw-stx)
-                               raw-stx)
-                             raw-stx)]
-                   (pure (cons-list-syntax 'quote
-                           (cons-list-syntax stx
-                             '()
-                             raw-stx)
-                           raw-stx)))]
+                 (pure ,(intermediate-quasiquote2 (a b c d)))]
                 [(_ (foo tail intermediate-...))
-                 (let [stx tail]
-                   (pure (cons-list-syntax 'quote
-                           (cons-list-syntax stx
-                             '()
-                             raw-stx)
-                           raw-stx)))])
+                 (pure (pair-list-syntax 'quote tail raw-stx))])
               '(example (my-macro ((1 2) (3 4))))
               '(example (my-macro (keyword foo bar))))))))))

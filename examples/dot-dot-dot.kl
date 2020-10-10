@@ -5,27 +5,11 @@
                 (define-macros
                  raw-define-macros)))
 
-(import "list-syntax.kl")
+(import (shift "list-syntax.kl" 1))
 
 (import (rename (shift "prelude.kl" 1)
                 (syntax-case
                  raw-syntax-case)))
-
-(example
- (let (raw-stx 'raw-stx)
-   (pair-list-syntax
-    'quote
-    (cons-list-syntax
-     '1
-     (cons-list-syntax
-      '(2 3)
-      (append-list-syntax
-       '(4 5)
-       (cons-list-syntax '6 '() raw-stx)
-       raw-stx)
-      raw-stx)
-     raw-stx)
-    raw-stx)))
 
 (raw-define-macros
  ((keyword
@@ -65,16 +49,11 @@
                            (raw-syntax-case
                             tail-158
                             (()
-                             (let (stx
-                                   tail)
-                               (pure
-                                (cons-list-syntax
-                                 'quote
-                                 (cons-list-syntax
-                                  stx
-                                  '()
-                                  raw-stx)
-                                 raw-stx))))
+                             (pure
+                              (pair-list-syntax
+                               'quote
+                               tail
+                               raw-stx)))
                             (_
                              (failure-cc))))))
                       (_ (failure-cc))))
@@ -143,28 +122,23 @@
                                                  (raw-syntax-case
                                                   tail-164
                                                   (()
-                                                   (let (stx
-                                                         (cons-list-syntax
-                                                          a
-                                                          (cons-list-syntax
-                                                           b
-                                                           (cons-list-syntax
-                                                            c
-                                                            (cons-list-syntax
-                                                             d
-                                                             '()
-                                                             raw-stx)
-                                                            raw-stx)
-                                                           raw-stx)
-                                                          raw-stx))
-                                                     (pure
+                                                   (pure
+                                                    (pair-list-syntax
+                                                     'quote
+                                                     (cons-list-syntax
+                                                      'a
                                                       (cons-list-syntax
-                                                       'quote
+                                                       'b
                                                        (cons-list-syntax
-                                                        stx
-                                                        '()
+                                                        'c
+                                                        (cons-list-syntax
+                                                         'd
+                                                         '()
+                                                         raw-stx)
                                                         raw-stx)
-                                                       raw-stx))))
+                                                       raw-stx)
+                                                      raw-stx)
+                                                     raw-stx)))
                                                   (_
                                                    (failure-cc))))
                                                 (_
