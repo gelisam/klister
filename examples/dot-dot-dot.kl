@@ -24,42 +24,41 @@
       (let (failure-cc
             (lambda ()
               (syntax-error
-               '"macro-name call has invalid syntax"
+               '"my-macro call has invalid syntax"
                raw-stx)))
         (let (failure-cc
               (lambda ()
                 (raw-syntax-case
                  raw-stx
                  ((cons
-                   head-163
-                   tail-164)
-                  (let (_ head-163)
+                   head-120
+                   tail-121)
+                  (let (_ head-120)
                     (raw-syntax-case
-                     tail-164
+                     tail-121
                      ((cons
-                       head-165
-                       tail-166)
-                      (raw-syntax-case
-                       head-165
-                       ((cons
-                         head-167
-                         tail-168)
-                        (let (foo
-                              head-167)
-                          (let (tail
-                                tail-168)
-                            (raw-syntax-case
-                             tail-166
-                             (()
-                              (pure
-                               (pair-list-syntax
-                                'quote
-                                tail
-                                raw-stx)))
-                             (_
-                              (failure-cc))))))
-                       (_
-                        (failure-cc))))
+                       head-122
+                       tail-123)
+                      (let (e head-122)
+                        (raw-syntax-case
+                         tail-123
+                         (()
+                          (pure
+                           (pair-list-syntax
+                            'quote
+                            (cons-list-syntax
+                             'ordinary-list
+                             (append-list-syntax
+                              e
+                              (cons-list-syntax
+                               'end-of-list
+                               '()
+                               raw-stx)
+                              raw-stx)
+                             raw-stx)
+                            raw-stx)))
+                         (_
+                          (failure-cc)))))
                      (_ (failure-cc)))))
                  (_ (failure-cc)))))
           (let (failure-cc
@@ -67,106 +66,159 @@
                   (raw-syntax-case
                    raw-stx
                    ((cons
-                     head-169
-                     tail-170)
-                    (let (_ head-169)
+                     head-124
+                     tail-125)
+                    (let (_ head-124)
                       (raw-syntax-case
-                       tail-170
+                       tail-125
                        ((cons
-                         head-171
-                         tail-172)
+                         head-126
+                         tail-127)
                         (raw-syntax-case
-                         head-171
+                         head-126
                          ((cons
-                           head-173
-                           tail-174)
-                          (raw-syntax-case
-                           head-173
-                           ((cons
-                             head-181
-                             tail-182)
-                            (let (a
-                                  head-181)
-                              (raw-syntax-case
-                               tail-182
-                               ((cons
-                                 head-183
-                                 tail-184)
-                                (let (b
-                                      head-183)
-                                  (raw-syntax-case
-                                   tail-184
-                                   (()
-                                    (raw-syntax-case
-                                     tail-174
-                                     ((cons
-                                       head-175
-                                       tail-176)
-                                      (raw-syntax-case
-                                       head-175
-                                       ((cons
-                                         head-177
-                                         tail-178)
-                                        (let (c
-                                              head-177)
-                                          (raw-syntax-case
-                                           tail-178
-                                           ((cons
-                                             head-179
-                                             tail-180)
-                                            (let (d
-                                                  head-179)
-                                              (raw-syntax-case
-                                               tail-180
-                                               (()
-                                                (raw-syntax-case
-                                                 tail-176
-                                                 (()
-                                                  (raw-syntax-case
-                                                   tail-172
-                                                   (()
-                                                    (pure
-                                                     (pair-list-syntax
-                                                      'quote
-                                                      (cons-list-syntax
-                                                       'a
-                                                       (cons-list-syntax
-                                                        'b
-                                                        (cons-list-syntax
-                                                         'c
-                                                         (cons-list-syntax
-                                                          'd
-                                                          '()
-                                                          raw-stx)
-                                                         raw-stx)
-                                                        raw-stx)
-                                                       raw-stx)
-                                                      raw-stx)))
-                                                   (_
-                                                    (failure-cc))))
-                                                 (_
-                                                  (failure-cc))))
-                                               (_
-                                                (failure-cc)))))
-                                           (_
-                                            (failure-cc)))))
-                                       (_
-                                        (failure-cc))))
-                                     (_
-                                      (failure-cc))))
-                                   (_
-                                    (failure-cc)))))
-                               (_
-                                (failure-cc)))))
-                           (_
-                            (failure-cc))))
+                           head-128
+                           tail-129)
+                          (>>=
+                           (free-identifier=?
+                            head-128
+                            'keyword)
+                           (lambda (same-identifier)
+                             (if same-identifier
+                               (let (tail
+                                     tail-129)
+                                 (raw-syntax-case
+                                  tail-127
+                                  (()
+                                   (pure
+                                    (pair-list-syntax
+                                     'quote
+                                     (cons-list-syntax
+                                      'keyword-prefixed
+                                      (append-list-syntax
+                                       tail
+                                       (cons-list-syntax
+                                        'end-of-list
+                                        '()
+                                        raw-stx)
+                                       raw-stx)
+                                      raw-stx)
+                                     raw-stx)))
+                                  (_
+                                   (failure-cc))))
+                               (failure-cc)))))
                          (_
                           (failure-cc))))
                        (_
                         (failure-cc)))))
                    (_ (failure-cc)))))
-            (failure-cc)))))))))
+            (let (failure-cc
+                  (lambda ()
+                    (raw-syntax-case
+                     raw-stx
+                     ((cons
+                       head-130
+                       tail-131)
+                      (let (_ head-130)
+                        (raw-syntax-case
+                         tail-131
+                         ((cons
+                           head-132
+                           tail-133)
+                          (raw-syntax-case
+                           head-132
+                           ((cons
+                             head-134
+                             tail-135)
+                            (raw-syntax-case
+                             head-134
+                             ((cons
+                               head-142
+                               tail-143)
+                              (let (a
+                                    head-142)
+                                (raw-syntax-case
+                                 tail-143
+                                 ((cons
+                                   head-144
+                                   tail-145)
+                                  (let (b
+                                        head-144)
+                                    (raw-syntax-case
+                                     tail-145
+                                     (()
+                                      (raw-syntax-case
+                                       tail-135
+                                       ((cons
+                                         head-136
+                                         tail-137)
+                                        (raw-syntax-case
+                                         head-136
+                                         ((cons
+                                           head-138
+                                           tail-139)
+                                          (let (c
+                                                head-138)
+                                            (raw-syntax-case
+                                             tail-139
+                                             ((cons
+                                               head-140
+                                               tail-141)
+                                              (let (d
+                                                    head-140)
+                                                (raw-syntax-case
+                                                 tail-141
+                                                 (()
+                                                  (raw-syntax-case
+                                                   tail-137
+                                                   (()
+                                                    (raw-syntax-case
+                                                     tail-133
+                                                     (()
+                                                      (pure
+                                                       (pair-list-syntax
+                                                        'quote
+                                                        (cons-list-syntax
+                                                         a
+                                                         (cons-list-syntax
+                                                          b
+                                                          (cons-list-syntax
+                                                           c
+                                                           (cons-list-syntax
+                                                            d
+                                                            '()
+                                                            raw-stx)
+                                                           raw-stx)
+                                                          raw-stx)
+                                                         raw-stx)
+                                                        raw-stx)))
+                                                     (_
+                                                      (failure-cc))))
+                                                   (_
+                                                    (failure-cc))))
+                                                 (_
+                                                  (failure-cc)))))
+                                             (_
+                                              (failure-cc)))))
+                                         (_
+                                          (failure-cc))))
+                                       (_
+                                        (failure-cc))))
+                                     (_
+                                      (failure-cc)))))
+                                 (_
+                                  (failure-cc)))))
+                             (_
+                              (failure-cc))))
+                           (_
+                            (failure-cc))))
+                         (_
+                          (failure-cc)))))
+                     (_ (failure-cc)))))
+              (failure-cc))))))))))
 
 (example (my-macro ((1 2) (3 4))))
 
-(example (my-macro (keyword foo bar)))
+(example (my-macro (keyword bar baz)))
+
+(example (my-macro (foo bar baz)))

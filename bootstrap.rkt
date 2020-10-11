@@ -1,8 +1,5 @@
 #lang racket
 
-(require (rename-in racket [define-syntax racket-define-syntax]
-                           [syntax-case racket-syntax-case]
-                           [... racket-...]))
 (require racket/pretty)
 
 ; Problem: bootstrapping can be difficult. When we don't yet have convenient
@@ -12,23 +9,10 @@
 ; Solution: instead of manually defining Klister's fancy-syntax-case using
 ; Klister's more primitive raw-syntax-case, we write some Racket code which
 ; expands to the code we would have written manually. This is easier, because
-; Racket does have convenient macro-defining macros like racket-syntax-case.
-;
-; But it's also a bit mind-bending because there are many different versions of
-; syntax-case defined in terms of each other:
-;
-; * In the generated Klister code, fancy-syntax-case is defined using
-;   raw-syntax-case and expands to code which uses raw-syntax-case.
-; * In this file, we generate that Klister code using intermediate-syntax-case.
-; * intermediate-syntax-case is defined using racket-syntax-case, and expands
-;   to Klister code which uses raw-syntax-case.
-;
-; * In the generated Klister code, fancy-quasiquote is defined using
-;   raw-syntax-case and {append,cons,pair}-list-syntax.
-; * In this file, we generate that Klister code using intermediate-quasiquote.
-; * intermediate-quasiquote is defined using racket-syntax-case.
+; Racket does have convenient syntax-manipulating macros like match and
+; quasiquote.
 
-; (intermediate-define-keywords (foo bar))
+; (generate-define-keywords (list 'foo 'bar))
 ; =>
 ; '(raw-define-macros
 ;    ([foo
@@ -37,32 +21,29 @@
 ;     [bar
 ;      (lambda (raw-stx)
 ;        (syntax-error '"bar used out of context" raw-stx))]))
-(racket-define-syntax (intermediate-define-keywords racket-stx)
-  (racket-syntax-case racket-stx ()
-    [(_ (keyword racket-...))
-     (let* ([error-message
-             (lambda (symbol)
-               (string-append (symbol->string symbol)
-                              " used out of context"))]
-            [undefined-macro
-             (lambda (symbol)
-               #`[#,symbol
-                  (lambda (raw-stx)
-                    (syntax-error '#,(error-message symbol) raw-stx))])]
-            [symbols
-             (syntax->datum #'(keyword racket-...))]
-            [undefined-macros
-             (map undefined-macro symbols)])
-       #``(raw-define-macros
-            (#,@undefined-macros)))]))
+(define (generate-define-keywords keywords)
+  (let* ([error-message
+          (lambda (symbol)
+            (string-append (symbol->string symbol)
+                           " used out of context"))]
+         [undefined-macro
+          (lambda (keyword)
+            `[,keyword
+              (lambda (raw-stx)
+                (syntax-error ',(error-message keyword) raw-stx))])]
+         [undefined-macros
+          (map undefined-macro keywords)])
+    `(raw-define-macros
+       ,undefined-macros)))
 
-; (intermediate-syntax-case raw-stx (keyword)
-;   [()
-;    'rhs1]
-;   [((a b) (c d))
-;    'rhs2]
-;   [(keyword tail intermediate-...)
-;    'rhs3])
+; (generate-syntax-case 'my-macro 'raw-stx (list 'keyword)
+;   (list
+;     (cons '()
+;           'rhs1)
+;     (cons '((a b) (c d))
+;           'rhs2)
+;     (cons '(keyword tail ...)
+;           'rhs3)))
 ; =>
 ; '(let [failure-cc
 ;        (lambda ()
@@ -83,7 +64,7 @@
 ;                [(cons ab cd-nil)
 ;                 (raw-syntax-case ab
 ;                   [(cons a b-nil)
-;                    (... rhs2)]
+;                    (...etc... rhs2)]
 ;                   [_ (failure-cc)])]
 ;                [_ (failure-cc)]))]
 ;        (let [failure-cc
@@ -92,133 +73,114 @@
 ;                  [() rhs1]
 ;                  [_ (failure-cc)]))]
 ;          (failure-cc)))))
-(racket-define-syntax (intermediate-syntax-case racket-stx)
-  (racket-syntax-case racket-stx ()
-    [(_ intermediate-stx (keyword racket-...)
-        cases racket-...)
-     (letrec ([symbols
-               (syntax->datum #'(keyword racket-...))]
-              [intermediate-expand-case
-               (lambda (scrutinee-name intermediate-case-stx)
-                 (racket-syntax-case intermediate-case-stx (intermediate-...)
-                   [[() rhs]
-                    #``(raw-syntax-case #,scrutinee-name
-                         [() ,rhs]
-                         [_ (failure-cc)])]
-                   [[x rhs]
-                    (and (identifier? #'x)
-                         (member (syntax->datum #'x) symbols))
-                    #``(>>= (free-identifier=? #,scrutinee-name 'x)
-                         (lambda (same-identifier)
-                          (if same-identifier
-                             ,rhs
-                             (failure-cc))))]
-                   [[x rhs]
-                    (identifier? #'x)
-                    #``(let [x #,scrutinee-name]
-                         ,rhs)]
-                   [[(x intermediate-...) rhs]
-                    #``(let [x #,scrutinee-name]
-                         ,rhs)]
-                   [[(intermediate-head intermediate-tail racket-...) rhs]
+(define (generate-syntax-case macro-name stx-name keywords cases)
+  (letrec ([generate-case
+            (lambda (scrutinee-name case)
+              (match case
+                [(cons pat rhs)
+                 (match pat
+                   [`()
+                    `(raw-syntax-case ,scrutinee-name
+                       [() ,rhs]
+                       [_ (failure-cc)])]
+                   [x
+                    #:when (and (symbol? x)
+                                (member x keywords))
+                    `(>>= (free-identifier=? ,scrutinee-name ',x)
+                       (lambda (same-identifier)
+                         (if same-identifier
+                           ,rhs
+                           (failure-cc))))]
+                   [x
+                    #:when (symbol? x)
+                    `(let [,x ,scrutinee-name]
+                       ,rhs)]
+                   [`(,x ,'...)
+                    `(let [,x ,scrutinee-name]
+                       ,rhs)]
+                   [`(,pat-head ,@pat-tail)
                     (let ([head-name (gensym 'head-)]
                           [tail-name (gensym 'tail-)])
-                      #``(raw-syntax-case #,scrutinee-name
-                           [(cons #,head-name #,tail-name)
-                            ,#,(intermediate-expand-case head-name
-                                #`[intermediate-head
-                                   #,(intermediate-expand-case tail-name
-                                       #`[(intermediate-tail racket-...) rhs])])]
-                           [_ (failure-cc)]))]))]
-              [intermediate-expand-cases
-               (lambda (intermediate-cases-stx)
-                 (racket-syntax-case intermediate-cases-stx (intermediate-...)
-                   [()
-                    #``(failure-cc)]
-                   [(cases racket-... case)
-                    #``(let [failure-cc
-                             (lambda ()
-                               ,#,(intermediate-expand-case #'intermediate-stx #'case))]
-                         ,#,(intermediate-expand-cases #'(cases racket-...)))]))])
-       #``(let [failure-cc
-                (lambda ()
-                  (syntax-error
-                    '#,(string-append
-                         (symbol->string (syntax->datum #'macro-name))
-                         " call has invalid syntax")
-                    intermediate-stx))]
-            ,#,(intermediate-expand-cases #'(cases racket-...))))]))
+                      `(raw-syntax-case ,scrutinee-name
+                         [(cons ,head-name ,tail-name)
+                          ,(generate-case head-name
+                             (cons pat-head
+                                   (generate-case tail-name
+                                     (cons pat-tail rhs))))]
+                         [_ (failure-cc)]))])]))]
+           [generate-cases
+            (lambda (cases)
+              (match cases
+                ['()
+                 `(failure-cc)]
+                [`(,@(list cases ...) ,case)
+                 `(let [failure-cc
+                        (lambda ()
+                          ,(generate-case stx-name case))]
+                    ,(generate-cases cases))]))])
+    `(let [failure-cc
+           (lambda ()
+             (syntax-error
+               ',(string-append
+                   (symbol->string macro-name)
+                   " call has invalid syntax")
+               ,stx-name))]
+       ,(generate-cases cases))))
 
-(define-syntax (intermediate-define-syntax2 intermediate-stx)
-  (syntax-case intermediate-stx ()
-    [(_ (macro-name intermediate-stx) (keyword racket-...)
-        case racket-...)
-     #'`(group
-          ,(intermediate-define-keywords (keyword racket-...))
-          (define-macros
-            ([macro-name
-              (lambda (intermediate-stx)
-                ,(intermediate-syntax-case intermediate-stx (keyword racket-...)
-                  case racket-...))])))]))
+(define (generate-define-syntax macro-name stx-name keywords cases)
+  `(group
+     ,(generate-define-keywords keywords)
+     (define-macros
+       ([,macro-name
+         (lambda (,stx-name)
+           ,(generate-syntax-case macro-name stx-name keywords
+             cases))]))))
 
 ; `(1 ,(list 2 3) ,@(list 4 5) 6)
 ; =>
 ; '(1 (2 3) 4 5 6)
 ;
-; (intermediate-quasiquote1
-;   (1
-;    (intermediate-unquote '(2 3))
-;    '(4 5) intermediate-...
-;    6)
-;   raw-stx)
+; (generate-quasiquote
+;   '(1
+;     ,'(2 3)
+;     ,'(4 5) ...
+;     6)
+;   'raw-stx)
 ; =>
-; '(cons-list-syntax 1
-;    (cons-list-syntax '(2 3)
-;      (append-list-syntax '(4 5)
-;        (cons-list-syntax 6
-;          '()
+; '(pair-list-syntax 'quote
+;    (cons-list-syntax 1
+;      (cons-list-syntax '(2 3)
+;        (append-list-syntax '(4 5)
+;          (cons-list-syntax 6
+;            '()
+;            raw-stx)
 ;          raw-stx)
 ;        raw-stx)
 ;      raw-stx)
 ;    raw-stx)
 ; =>
-; (1 (2 3) 4 5 6)
-(define-syntax (intermediate-quasiquote1 racket-stx)
-  (racket-syntax-case racket-stx (intermediate-unquote intermediate-...)
-    [(_ ((intermediate-unquote head) tail racket-...) intermediate-stx)
-     #'`(cons-list-syntax
-          head
-          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
-          intermediate-stx)]
-    [(_ (head intermediate-... tail racket-...) intermediate-stx)
-     #'`(append-list-syntax
-          head
-          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
-          intermediate-stx)]
-    [(_ (head tail racket-...) intermediate-stx)
-     #'`(cons-list-syntax
-          ,(intermediate-quasiquote1 head intermediate-stx)
-          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
-          intermediate-stx)]
-    [(_ x intermediate-stx)
-     #'''x]))
-
-; (intermediate-quasiquote2
-;   (1
-;    (intermediate-unquote '(2 3))
-;    '(4 5) intermediate-...
-;    6)
-;   raw-stx)
-; =>
-; ...
-; =>
 ; '(1 (2 3) 4 5 6)
-(define-syntax (intermediate-quasiquote2 racket-stx)
-  (racket-syntax-case racket-stx ()
-    [(_ e intermediate-stx)
-     #'`(pair-list-syntax 'quote
-          ,(intermediate-quasiquote1 e intermediate-stx)
-          intermediate-stx)]))
+(define (generate-quasiquote pat stx-name)
+  (letrec ([go
+            (lambda (pat)
+              (match pat
+                [`(,'unquote ,head)
+                 head]
+                [`((,'unquote ,head) ,'... ,@tail)
+                 `(append-list-syntax
+                    ,head
+                    ,(go tail)
+                    ,stx-name)]
+                [`(,head ,@tail)
+                 `(cons-list-syntax
+                    ,(go head)
+                    ,(go tail)
+                    ,stx-name)]
+                [x
+                 `(quote ,x)]))])
+  `(pair-list-syntax 'quote
+     ,(go pat)
+     ,stx-name)))
 
 
 (void
@@ -251,10 +213,20 @@
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
 
-              (intermediate-define-syntax2 (my-macro raw-stx) (keyword)
-                [(_ ((a b) (c d)))
-                 `(pure ,(intermediate-quasiquote2 (a b c d) raw-stx))]
-                [(_ (foo tail intermediate-...))
-                 `(pure (pair-list-syntax 'quote tail raw-stx))])
+              (generate-define-syntax 'my-macro 'raw-stx (list 'keyword)
+                (list
+                  (cons '(_ ((a b) (c d)))
+                        `(pure ,(generate-quasiquote
+                                  '(,a ,b ,c ,d)
+                                  'raw-stx)))
+                  (cons '(_ (keyword tail ...))
+                        `(pure ,(generate-quasiquote
+                                  '(keyword-prefixed ,tail ... end-of-list)
+                                  'raw-stx)))
+                  (cons '(_ (e ...))
+                        `(pure ,(generate-quasiquote
+                                  '(ordinary-list ,e ... end-of-list)
+                                  'raw-stx)))))
               '(example (my-macro ((1 2) (3 4))))
-              '(example (my-macro (keyword foo bar))))))))))
+              '(example (my-macro (keyword bar baz)))
+              '(example (my-macro (foo bar baz))))))))))
