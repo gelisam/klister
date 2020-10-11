@@ -40,9 +40,9 @@
 ;   (list
 ;     (cons '()
 ;           'rhs1)
-;     (cons '((a b) (c d))
+;     (cons '((,a ,b) (,c ,d))
 ;           'rhs2)
-;     (cons '(keyword tail ...)
+;     (cons '(keyword ,tail ...)
 ;           'rhs3)))
 ; =>
 ; '(let [failure-cc
@@ -83,6 +83,8 @@
                     `(raw-syntax-case ,scrutinee-name
                        [() ,rhs]
                        [_ (failure-cc)])]
+                   [`_
+                    rhs]
                    [x
                     #:when (and (symbol? x)
                                 (member x keywords))
@@ -91,13 +93,32 @@
                          (if same-identifier
                            ,rhs
                            (failure-cc))))]
-                   [x
+                   [`(,'unquote ,x)
                     #:when (symbol? x)
                     `(let [,x ,scrutinee-name]
                        ,rhs)]
-                   [`(,x ,'...)
+                   [x
+                    #:when (symbol? x)
+                    (raise-arguments-error
+                      'generate-syntax-case
+                      (string-append
+                        "naked symbol "
+                        (symbol->string x)
+                        ": did you mean ,"
+                        (symbol->string x)
+                        " or to add "
+                        (symbol->string x)
+                        " to the list of keywords?")
+                      "symbol" x
+                      "keywords" keywords)]
+                   [`((,'unquote ,x) ,'...)
                     `(let [,x ,scrutinee-name]
                        ,rhs)]
+                   [`(,e ,'...)
+                    (raise-arguments-error
+                      'generate-syntax-case
+                      "the syntax for ellipsis is '(,x ...)"
+                      "got" `(,e ...))]
                    [`(,pat-head ,@pat-tail)
                     (let ([head-name (gensym 'head-)]
                           [tail-name (gensym 'tail-)])
@@ -215,15 +236,15 @@
 
               (generate-define-syntax 'my-macro 'raw-stx (list 'keyword)
                 (list
-                  (cons '(_ ((a b) (c d)))
+                  (cons '(_ ((,a ,b) (,c ,d)))
                         `(pure ,(generate-quasiquote
                                   '(,a ,b ,c ,d)
                                   'raw-stx)))
-                  (cons '(_ (keyword tail ...))
+                  (cons '(_ (keyword ,tail ...))
                         `(pure ,(generate-quasiquote
                                   '(keyword-prefixed ,tail ... end-of-list)
                                   'raw-stx)))
-                  (cons '(_ (e ...))
+                  (cons '(_ (,e ...))
                         `(pure ,(generate-quasiquote
                                   '(ordinary-list ,e ... end-of-list)
                                   'raw-stx)))))
