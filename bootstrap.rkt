@@ -58,40 +58,40 @@
 
 ; (intermediate-syntax-case raw-stx (keyword)
 ;   [()
-;    rhs1]
+;    'rhs1]
 ;   [((a b) (c d))
-;    rhs2]
+;    'rhs2]
 ;   [(keyword tail intermediate-...)
-;    rhs3])
+;    'rhs3])
 ; =>
-; (let [failure-cc
-;       (lambda ()
-;         (syntax-error '"my-macro call has invalid syntax" raw-stx))]
-;   (let [failure-cc
-;         (lambda ()
-;           (raw-syntax-case raw-stx
-;             [(cons head tail)
-;              (>>= (free-identifier=? head 'keyword)
-;                (lambda (same-identifier)
-;                  (if same-identifier
-;                    rhs3
-;                    (failure-cc))))]
-;             [_ (failure-cc)]))]
-;     (let [failure-cc
-;           (lambda ()
-;             (raw-syntax-case raw-stx
-;               [(cons ab cd-nil)
-;                (raw-syntax-case ab
-;                  [(cons a b-nil)
-;                   (... rhs2)]
-;                  [_ (failure-cc)])]
-;               [_ (failure-cc)]))]
-;       (let [failure-cc
-;             (lambda ()
-;               (raw-syntax-case raw-stx
-;                 [() rhs1]
-;                 [_ (failure-cc)]))]
-;         (failure-cc)))))
+; '(let [failure-cc
+;        (lambda ()
+;          (syntax-error '"my-macro call has invalid syntax" raw-stx))]
+;    (let [failure-cc
+;          (lambda ()
+;            (raw-syntax-case raw-stx
+;              [(cons head tail)
+;               (>>= (free-identifier=? head 'keyword)
+;                 (lambda (same-identifier)
+;                   (if same-identifier
+;                     rhs3
+;                     (failure-cc))))]
+;              [_ (failure-cc)]))]
+;      (let [failure-cc
+;            (lambda ()
+;              (raw-syntax-case raw-stx
+;                [(cons ab cd-nil)
+;                 (raw-syntax-case ab
+;                   [(cons a b-nil)
+;                    (... rhs2)]
+;                   [_ (failure-cc)])]
+;                [_ (failure-cc)]))]
+;        (let [failure-cc
+;              (lambda ()
+;                (raw-syntax-case raw-stx
+;                  [() rhs1]
+;                  [_ (failure-cc)]))]
+;          (failure-cc)))))
 (racket-define-syntax (intermediate-syntax-case racket-stx)
   (racket-syntax-case racket-stx ()
     [(_ intermediate-stx (keyword racket-...)
@@ -102,42 +102,44 @@
                (lambda (scrutinee-name intermediate-case-stx)
                  (racket-syntax-case intermediate-case-stx (intermediate-...)
                    [[() rhs]
-                    #`(raw-syntax-case #,scrutinee-name
-                        [() rhs]
-                        [_ (failure-cc)])]
+                    #``(raw-syntax-case #,scrutinee-name
+                         [() ,rhs]
+                         [_ (failure-cc)])]
                    [[x rhs]
                     (and (identifier? #'x)
                          (member (syntax->datum #'x) symbols))
-                    #`(>>= (free-identifier=? #,scrutinee-name 'x)
-                        (lambda (same-identifier)
-                          (if same-identifier rhs (failure-cc))))]
+                    #``(>>= (free-identifier=? #,scrutinee-name 'x)
+                         (lambda (same-identifier)
+                          (if same-identifier
+                             ,rhs
+                             (failure-cc))))]
                    [[x rhs]
                     (identifier? #'x)
-                    #`(let [x #,scrutinee-name]
-                        rhs)]
+                    #``(let [x #,scrutinee-name]
+                         ,rhs)]
                    [[(x intermediate-...) rhs]
-                    #`(let [x #,scrutinee-name]
-                        rhs)]
+                    #``(let [x #,scrutinee-name]
+                         ,rhs)]
                    [[(intermediate-head intermediate-tail racket-...) rhs]
                     (let ([head-name (gensym 'head-)]
                           [tail-name (gensym 'tail-)])
-                      #`(raw-syntax-case #,scrutinee-name
-                          [(cons #,head-name #,tail-name)
-                           #,(intermediate-expand-case head-name
-                               #`[intermediate-head
-                                  #,(intermediate-expand-case tail-name
-                                      #`[(intermediate-tail racket-...) rhs])])]
-                          [_ (failure-cc)]))]))]
+                      #``(raw-syntax-case #,scrutinee-name
+                           [(cons #,head-name #,tail-name)
+                            ,#,(intermediate-expand-case head-name
+                                #`[intermediate-head
+                                   #,(intermediate-expand-case tail-name
+                                       #`[(intermediate-tail racket-...) rhs])])]
+                           [_ (failure-cc)]))]))]
               [intermediate-expand-cases
                (lambda (intermediate-cases-stx)
                  (racket-syntax-case intermediate-cases-stx (intermediate-...)
                    [()
-                    #`(failure-cc)]
+                    #``(failure-cc)]
                    [(cases racket-... case)
-                    #`(let [failure-cc
-                            (lambda ()
-                              #,(intermediate-expand-case #'intermediate-stx #'case))]
-                        #,(intermediate-expand-cases #'(cases racket-...)))]))])
+                    #``(let [failure-cc
+                             (lambda ()
+                               ,#,(intermediate-expand-case #'intermediate-stx #'case))]
+                         ,#,(intermediate-expand-cases #'(cases racket-...)))]))])
        #``(let [failure-cc
                 (lambda ()
                   (syntax-error
@@ -145,7 +147,7 @@
                          (symbol->string (syntax->datum #'macro-name))
                          " call has invalid syntax")
                     intermediate-stx))]
-            #,(intermediate-expand-cases #'(cases racket-...))))]))
+            ,#,(intermediate-expand-cases #'(cases racket-...))))]))
 
 (define-syntax (intermediate-define-syntax2 intermediate-stx)
   (syntax-case intermediate-stx ()
@@ -251,8 +253,8 @@
 
               (intermediate-define-syntax2 (my-macro raw-stx) (keyword)
                 [(_ ((a b) (c d)))
-                 (pure ,(intermediate-quasiquote2 (a b c d) raw-stx))]
+                 `(pure ,(intermediate-quasiquote2 (a b c d) raw-stx))]
                 [(_ (foo tail intermediate-...))
-                 (pure (pair-list-syntax 'quote tail raw-stx))])
+                 `(pure (pair-list-syntax 'quote tail raw-stx))])
               '(example (my-macro ((1 2) (3 4))))
               '(example (my-macro (keyword foo bar))))))))))
