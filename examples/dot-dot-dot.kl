@@ -31,25 +31,25 @@
                 (raw-syntax-case
                  raw-stx
                  ((cons
-                   head-157
-                   tail-158)
-                  (let (_ head-157)
+                   head-163
+                   tail-164)
+                  (let (_ head-163)
                     (raw-syntax-case
-                     tail-158
+                     tail-164
                      ((cons
-                       head-159
-                       tail-160)
+                       head-165
+                       tail-166)
                       (raw-syntax-case
-                       head-159
+                       head-165
                        ((cons
-                         head-161
-                         tail-162)
+                         head-167
+                         tail-168)
                         (let (foo
-                              head-161)
+                              head-167)
                           (let (tail
-                                tail-162)
+                                tail-168)
                             (raw-syntax-case
-                             tail-160
+                             tail-166
                              (()
                               (pure
                                (pair-list-syntax
@@ -67,63 +67,63 @@
                   (raw-syntax-case
                    raw-stx
                    ((cons
-                     head-163
-                     tail-164)
-                    (let (_ head-163)
+                     head-169
+                     tail-170)
+                    (let (_ head-169)
                       (raw-syntax-case
-                       tail-164
+                       tail-170
                        ((cons
-                         head-165
-                         tail-166)
+                         head-171
+                         tail-172)
                         (raw-syntax-case
-                         head-165
+                         head-171
                          ((cons
-                           head-167
-                           tail-168)
+                           head-173
+                           tail-174)
                           (raw-syntax-case
-                           head-167
+                           head-173
                            ((cons
-                             head-175
-                             tail-176)
+                             head-181
+                             tail-182)
                             (let (a
-                                  head-175)
+                                  head-181)
                               (raw-syntax-case
-                               tail-176
+                               tail-182
                                ((cons
-                                 head-177
-                                 tail-178)
+                                 head-183
+                                 tail-184)
                                 (let (b
-                                      head-177)
+                                      head-183)
                                   (raw-syntax-case
-                                   tail-178
+                                   tail-184
                                    (()
                                     (raw-syntax-case
-                                     tail-168
+                                     tail-174
                                      ((cons
-                                       head-169
-                                       tail-170)
+                                       head-175
+                                       tail-176)
                                       (raw-syntax-case
-                                       head-169
+                                       head-175
                                        ((cons
-                                         head-171
-                                         tail-172)
+                                         head-177
+                                         tail-178)
                                         (let (c
-                                              head-171)
+                                              head-177)
                                           (raw-syntax-case
-                                           tail-172
+                                           tail-178
                                            ((cons
-                                             head-173
-                                             tail-174)
+                                             head-179
+                                             tail-180)
                                             (let (d
-                                                  head-173)
+                                                  head-179)
                                               (raw-syntax-case
-                                               tail-174
+                                               tail-180
                                                (()
                                                 (raw-syntax-case
-                                                 tail-170
+                                                 tail-176
                                                  (()
                                                   (raw-syntax-case
-                                                   tail-166
+                                                   tail-172
                                                    (()
                                                     (pure
                                                      (pair-list-syntax

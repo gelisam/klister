@@ -149,14 +149,14 @@
 
 (define-syntax (intermediate-define-syntax2 intermediate-stx)
   (syntax-case intermediate-stx ()
-    [(_ macro-name (keyword racket-...)
+    [(_ (macro-name intermediate-stx) (keyword racket-...)
         case racket-...)
      #'`(group
           ,(intermediate-define-keywords (keyword racket-...))
           (define-macros
             ([macro-name
-              (lambda (raw-stx)
-                ,(intermediate-syntax-case raw-stx (keyword racket-...)
+              (lambda (intermediate-stx)
+                ,(intermediate-syntax-case intermediate-stx (keyword racket-...)
                   case racket-...))])))]))
 
 ; `(1 ,(list 2 3) ,@(list 4 5) 6)
@@ -167,7 +167,8 @@
 ;   (1
 ;    (intermediate-unquote '(2 3))
 ;    '(4 5) intermediate-...
-;    6))
+;    6)
+;   raw-stx)
 ; =>
 ; '(cons-list-syntax 1
 ;    (cons-list-syntax '(2 3)
@@ -182,39 +183,40 @@
 ; (1 (2 3) 4 5 6)
 (define-syntax (intermediate-quasiquote1 racket-stx)
   (racket-syntax-case racket-stx (intermediate-unquote intermediate-...)
-    [(_ ((intermediate-unquote head) tail racket-...))
+    [(_ ((intermediate-unquote head) tail racket-...) intermediate-stx)
      #'`(cons-list-syntax
           head
-          ,(intermediate-quasiquote1 (tail racket-...))
-          raw-stx)]
-    [(_ (head intermediate-... tail racket-...))
+          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
+          intermediate-stx)]
+    [(_ (head intermediate-... tail racket-...) intermediate-stx)
      #'`(append-list-syntax
           head
-          ,(intermediate-quasiquote1 (tail racket-...))
-          raw-stx)]
-    [(_ (head tail racket-...))
+          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
+          intermediate-stx)]
+    [(_ (head tail racket-...) intermediate-stx)
      #'`(cons-list-syntax
-          ,(intermediate-quasiquote1 head)
-          ,(intermediate-quasiquote1 (tail racket-...))
-          raw-stx)]
-    [(_ x)
+          ,(intermediate-quasiquote1 head intermediate-stx)
+          ,(intermediate-quasiquote1 (tail racket-...) intermediate-stx)
+          intermediate-stx)]
+    [(_ x intermediate-stx)
      #'''x]))
 
 ; (intermediate-quasiquote2
 ;   (1
 ;    (intermediate-unquote '(2 3))
 ;    '(4 5) intermediate-...
-;    6))
+;    6)
+;   raw-stx)
 ; =>
 ; ...
 ; =>
 ; '(1 (2 3) 4 5 6)
 (define-syntax (intermediate-quasiquote2 racket-stx)
   (racket-syntax-case racket-stx ()
-    [(_ e)
+    [(_ e intermediate-stx)
      #'`(pair-list-syntax 'quote
-          ,(intermediate-quasiquote1 e)
-          raw-stx)]))
+          ,(intermediate-quasiquote1 e intermediate-stx)
+          intermediate-stx)]))
 
 
 (void
@@ -247,9 +249,9 @@
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
 
-              (intermediate-define-syntax2 my-macro (keyword)
+              (intermediate-define-syntax2 (my-macro raw-stx) (keyword)
                 [(_ ((a b) (c d)))
-                 (pure ,(intermediate-quasiquote2 (a b c d)))]
+                 (pure ,(intermediate-quasiquote2 (a b c d) raw-stx))]
                 [(_ (foo tail intermediate-...))
                  (pure (pair-list-syntax 'quote tail raw-stx))])
               '(example (my-macro ((1 2) (3 4))))
