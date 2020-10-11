@@ -1,2 +1,2 @@
-#[dot-dot-dot.kl:167.10-167.34]<(a b c d)> : Syntax
-#[dot-dot-dot.kl:169.20-169.37]<(foo bar)> : Syntax
+#[dot-dot-dot.kl:170.10-170.34]<(a b c d)> : Syntax
+#[dot-dot-dot.kl:172.20-172.37]<(foo bar)> : Syntax
