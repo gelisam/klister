@@ -37,8 +37,8 @@
 ;     [bar
 ;      (lambda (raw-stx)
 ;        (syntax-error '"bar used out of context" raw-stx))]))
-(racket-define-syntax (intermediate-define-keywords intermediate-stx)
-  (racket-syntax-case intermediate-stx ()
+(racket-define-syntax (intermediate-define-keywords racket-stx)
+  (racket-syntax-case racket-stx ()
     [(_ (keyword racket-...))
      (let* ([error-message
              (lambda (symbol)
@@ -92,9 +92,9 @@
 ;                 [() rhs1]
 ;                 [_ (failure-cc)]))]
 ;         (failure-cc)))))
-(racket-define-syntax (intermediate-syntax-case intermediate-stx)
-  (racket-syntax-case intermediate-stx ()
-    [(_ raw-stx (keyword racket-...)
+(racket-define-syntax (intermediate-syntax-case racket-stx)
+  (racket-syntax-case racket-stx ()
+    [(_ intermediate-stx (keyword racket-...)
         cases racket-...)
      (letrec ([symbols
                (syntax->datum #'(keyword racket-...))]
@@ -136,7 +136,7 @@
                    [(cases racket-... case)
                     #`(let [failure-cc
                             (lambda ()
-                              #,(intermediate-expand-case 'raw-stx #'case))]
+                              #,(intermediate-expand-case #'intermediate-stx #'case))]
                         #,(intermediate-expand-cases #'(cases racket-...)))]))])
        #``(let [failure-cc
                 (lambda ()
@@ -144,7 +144,7 @@
                     '#,(string-append
                          (symbol->string (syntax->datum #'macro-name))
                          " call has invalid syntax")
-                    raw-stx))]
+                    intermediate-stx))]
             #,(intermediate-expand-cases #'(cases racket-...))))]))
 
 (define-syntax (intermediate-define-syntax2 intermediate-stx)
@@ -180,8 +180,8 @@
 ;    raw-stx)
 ; =>
 ; (1 (2 3) 4 5 6)
-(define-syntax (intermediate-quasiquote1 intermediate-stx)
-  (racket-syntax-case intermediate-stx (intermediate-unquote intermediate-...)
+(define-syntax (intermediate-quasiquote1 racket-stx)
+  (racket-syntax-case racket-stx (intermediate-unquote intermediate-...)
     [(_ ((intermediate-unquote head) tail racket-...))
      #'`(cons-list-syntax
           head
@@ -209,8 +209,8 @@
 ; ...
 ; =>
 ; '(1 (2 3) 4 5 6)
-(define-syntax (intermediate-quasiquote2 intermediate-stx)
-  (racket-syntax-case intermediate-stx ()
+(define-syntax (intermediate-quasiquote2 racket-stx)
+  (racket-syntax-case racket-stx ()
     [(_ e)
      #'`(pair-list-syntax 'quote
           ,(intermediate-quasiquote1 e)
