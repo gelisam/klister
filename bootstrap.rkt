@@ -256,7 +256,9 @@
               (generate-define-syntax 'fancy-quasiquote 'stx '()
                 (list
                   (cons '(_ ,pat)
-                        `(let [stx-name ''here]
+                        `(let [stx-name ,(generate-quasiquote
+                                           ',(replace-loc pat 'here)
+                                           ''here)]
                            (flet (go (pat)
                                      ,(generate-syntax-case 'fancy-quasiquote 'pat (list 'fancy-unquote 'fancy-...)
                                         (list

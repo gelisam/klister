@@ -48,7 +48,12 @@
                        tail-143
                        (()
                         (let (stx-name
-                              ''here)
+                              (pair-list-syntax
+                               'quote
+                               (replace-loc
+                                pat
+                                'here)
+                               'here))
                           (flet
                            (go
                             (pat)
