@@ -77,34 +77,39 @@
                        ((cons
                          head-131
                          tail-132)
-                        (>>=
-                         (free-identifier=?
-                          head-131
-                          'keyword)
-                         (lambda (same-identifier)
-                           (if same-identifier
-                             (let (tail
-                                   tail-132)
-                               (raw-syntax-case
-                                tail-130
-                                (()
-                                 (pure
-                                  (pair-list-syntax
-                                   'quote
-                                   (cons-list-syntax
-                                    'keyword-prefixed
-                                    (append-list-syntax
-                                     tail
+                        (raw-syntax-case
+                         head-131
+                         ((ident x)
+                          (>>=
+                           (free-identifier=?
+                            x
+                            'keyword)
+                           (lambda (same-identifier)
+                             (if same-identifier
+                               (let (tail
+                                     tail-132)
+                                 (raw-syntax-case
+                                  tail-130
+                                  (()
+                                   (pure
+                                    (pair-list-syntax
+                                     'quote
                                      (cons-list-syntax
-                                      'end-of-list
-                                      '()
+                                      'keyword-prefixed
+                                      (append-list-syntax
+                                       tail
+                                       (cons-list-syntax
+                                        'end-of-list
+                                        '()
+                                        raw-stx)
+                                       raw-stx)
                                       raw-stx)
-                                     raw-stx)
-                                    raw-stx)
-                                   raw-stx)))
-                                (_
-                                 (failure-cc))))
-                             (failure-cc)))))
+                                     raw-stx)))
+                                  (_
+                                   (failure-cc))))
+                               (failure-cc)))))
+                         (_
+                          (failure-cc))))
                        (_
                         (failure-cc))))
                      (_ (failure-cc))))

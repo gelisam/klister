@@ -52,11 +52,14 @@
 ;          (lambda ()
 ;            (raw-syntax-case raw-stx
 ;              [(cons head tail)
-;               (>>= (free-identifier=? head 'keyword)
-;                 (lambda (same-identifier)
-;                   (if same-identifier
-;                     rhs3
-;                     (failure-cc))))]
+;               (raw-syntax-case head
+;                 [(idenx x)
+;                  (>>= (free-identifier=? head 'keyword)
+;                    (lambda (same-identifier)
+;                      (if same-identifier
+;                        rhs3
+;                        (failure-cc))))]
+;                 [_ (failure-cc)])]
 ;              [_ (failure-cc)]))]
 ;      (let [failure-cc
 ;            (lambda ()
@@ -85,14 +88,17 @@
                        [_ (failure-cc)])]
                    [`_
                     rhs]
-                   [x
-                    #:when (and (symbol? x)
-                                (member x keywords))
-                    `(>>= (free-identifier=? ,scrutinee-name ',x)
-                       (lambda (same-identifier)
-                         (if same-identifier
-                           ,rhs
-                           (failure-cc))))]
+                   [keyword
+                    #:when (and (symbol? keyword)
+                                (member keyword keywords))
+                    `(raw-syntax-case ,scrutinee-name
+                       [(ident x)
+                        (>>= (free-identifier=? x ',keyword)
+                          (lambda (same-identifier)
+                            (if same-identifier
+                              ,rhs
+                              (failure-cc))))]
+                       [_ (failure-cc)])]
                    [`(,'unquote ,x)
                     #:when (symbol? x)
                     `(let [,x ,scrutinee-name]
