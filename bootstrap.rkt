@@ -167,6 +167,41 @@
 ; =>
 ; '(1 (2 3) 4 5 6)
 ;
+; (generate-quasiquote-inside
+;   '(1
+;     ,'(2 3)
+;     ,'(4 5) ...
+;     6)
+;   'raw-stx)
+; =>
+; '(cons-list-syntax 1
+;    (cons-list-syntax '(2 3)
+;      (append-list-syntax '(4 5)
+;        (cons-list-syntax 6
+;          '()
+;          raw-stx)
+;        raw-stx)
+;      raw-stx)
+;    raw-stx)
+; =>
+; (1 (2 3) 4 5 6)
+(define (generate-quasiquote-inside pat stx-name)
+  (match pat
+    [`(,'unquote ,head)
+     head]
+    [`((,'unquote ,head) ,'... ,@tail)
+     `(append-list-syntax
+        ,head
+        ,(generate-quasiquote-inside tail stx-name)
+        ,stx-name)]
+    [`(,head ,@tail)
+     `(cons-list-syntax
+        ,(generate-quasiquote-inside head stx-name)
+        ,(generate-quasiquote-inside tail stx-name)
+        ,stx-name)]
+    [x
+     `(quote ,x)]))
+
 ; (generate-quasiquote
 ;   '(1
 ;     ,'(2 3)
@@ -176,38 +211,15 @@
 ; =>
 ; '(pair-list-syntax 'quote
 ;    (cons-list-syntax 1
-;      (cons-list-syntax '(2 3)
-;        (append-list-syntax '(4 5)
-;          (cons-list-syntax 6
-;            '()
-;            raw-stx)
-;          raw-stx)
-;        raw-stx)
+;      ...etc...
 ;      raw-stx)
 ;    raw-stx)
 ; =>
 ; '(1 (2 3) 4 5 6)
 (define (generate-quasiquote pat stx-name)
-  (letrec ([go
-            (lambda (pat)
-              (match pat
-                [`(,'unquote ,head)
-                 head]
-                [`((,'unquote ,head) ,'... ,@tail)
-                 `(append-list-syntax
-                    ,head
-                    ,(go tail)
-                    ,stx-name)]
-                [`(,head ,@tail)
-                 `(cons-list-syntax
-                    ,(go head)
-                    ,(go tail)
-                    ,stx-name)]
-                [x
-                 `(quote ,x)]))])
   `(pair-list-syntax 'quote
-     ,(go pat)
-     ,stx-name)))
+     ,(generate-quasiquote-inside pat stx-name)
+     ,stx-name))
 
 
 (void
