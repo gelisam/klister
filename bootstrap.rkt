@@ -91,14 +91,15 @@
                    [keyword
                     #:when (and (symbol? keyword)
                                 (member keyword keywords))
-                    `(raw-syntax-case ,scrutinee-name
-                       [(ident x)
-                        (>>= (free-identifier=? x ',keyword)
-                          (lambda (same-identifier)
-                            (if same-identifier
-                              ,rhs
-                              (failure-cc))))]
-                       [_ (failure-cc)])]
+                    (let ([ident-name (gensym 'ident)])
+                      `(raw-syntax-case ,scrutinee-name
+                         [(ident ,ident-name)
+                          (>>= (free-identifier=? ,ident-name ',keyword)
+                            (lambda (same-identifier)
+                              (if same-identifier
+                                ,rhs
+                                (failure-cc))))]
+                         [_ (failure-cc)]))]
                    [`(,'unquote ,x)
                     #:when (symbol? x)
                     `(let [,x ,scrutinee-name]
@@ -246,24 +247,58 @@
               (newline)
               (writeln form))
             (list
+              '(import "list-syntax.kl")
               '(import (shift "list-syntax.kl" 1))
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
 
-              (generate-define-syntax 'my-macro 'stx (list 'keyword)
+              (generate-define-keywords (list 'fancy-unquote 'fancy-...))
+              (generate-define-syntax 'fancy-quasiquote 'stx '()
                 (list
-                  (cons '(_ ((,a ,b) (,c ,d)))
-                        `(pure ,(generate-quasiquote
-                                  '(,a ,b ,c ,d)
-                                  'stx)))
-                  (cons '(_ (keyword ,tail ...))
-                        `(pure ,(generate-quasiquote
-                                  '(keyword-prefixed ,tail ... end-of-list)
-                                  'stx)))
-                  (cons '(_ (,e ...))
-                        `(pure ,(generate-quasiquote
-                                  '(ordinary-list ,e ... end-of-list)
-                                  'stx)))))
-              '(example (my-macro ((1 2) (3 4))))
-              '(example (my-macro (keyword bar baz)))
-              '(example (my-macro (foo bar baz))))))))))
+                  (cons '(_ ,pat)
+                        `(let [stx-name ''here]
+                           (flet (go (pat)
+                                     ,(generate-syntax-case 'fancy-quasiquote 'pat (list 'fancy-unquote 'fancy-...)
+                                        (list
+                                          (cons '(fancy-unquote ,x)
+                                                '(pure x))
+                                          (cons '((fancy-unquote ,head) fancy-... ,tail ...)
+                                                `(>>= (go tail)
+                                                   (lambda (inside-tail)
+                                                     (pure ,(generate-quasiquote-inside
+                                                              '(append-list-syntax
+                                                                 ,head
+                                                                 ,inside-tail
+                                                                 ,stx-name)
+                                                              'stx)))))
+                                          (cons '(,head ,tail ...)
+                                                `(>>= (go head)
+                                                   (lambda (inside-head)
+                                                     (>>= (go tail)
+                                                       (lambda (inside-tail)
+                                                         (pure ,(generate-quasiquote-inside
+                                                                  '(cons-list-syntax
+                                                                     ,inside-head
+                                                                     ,inside-tail
+                                                                     ,stx-name)
+                                                                  'stx)))))))
+                                          (cons ',x
+                                                `(pure (pair-list-syntax
+                                                          'quote
+                                                          x
+                                                          stx))))))
+                             (>>= (go pat)
+                               (lambda (inside)
+                                 (pure inside))))))))
+              '(example
+                 (fancy-quasiquote
+                   (1
+                    (fancy-unquote '(2 3))
+                    (fancy-unquote '(4 5)) fancy-...
+                    6)))
+              '(export (rename ([fancy-quasiquote quasiquote]
+                                [fancy-unquote unquote]
+                                [fancy-... ...])
+                               fancy-quasiquote
+                               fancy-unquote
+                               fancy-...)))))))))
