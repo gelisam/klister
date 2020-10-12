@@ -1,7 +1,7 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 
 (define not
   (lambda (b)
@@ -23,8 +23,7 @@
                (()
                 (pure '(true)))
                ((cons x xs)
-                (pure `(binary-and ,x
-                                   ,(cons-list-syntax 'and xs stx)))))))))
+                (pure `(binary-and ,x (and ,xs ...)))))))))
    (or (lambda (stx)
          (syntax-case stx
            ((cons _ args)
@@ -32,8 +31,7 @@
               (()
                (pure '(false)))
               ((cons x xs)
-               (pure `(binary-or ,x
-                                 ,(cons-list-syntax 'or xs stx)))))))))))
+               (pure `(binary-or ,x (or ,xs ...)))))))))))
 
 (example (binary-and (false) (false)))
 (example (binary-and (false) (true)))

@@ -1,7 +1,7 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 (import (shift "let.kl" 1))
 
 (define-macros
@@ -14,27 +14,29 @@
   --            (>>= (bar x) (lambda (_)
   --                           (>>= (baz x) (lambda (y)
   --                                          (quux x y)))))))
-  ((<-
+  ([<-
     (lambda (stx)
-      (syntax-error (quote "<- used out of context") stx)))
-   (do (lambda (stx)
+      (syntax-error (quote "<- used out of context") stx))]
+   [do (lambda (stx)
          (syntax-case stx
-          ((cons _ all-actions)
+          [(cons _ all-actions)
            (syntax-case all-actions
-             ((list (last-action))
-              (pure last-action))
-             ((cons first-action actions)
-              (let ((otherwise (pure `(>>= ,first-action (lambda (_)
-                                                           ,(cons-list-syntax 'do actions stx))))))
+             [(list (last-action))
+              (pure last-action)]
+             [(cons first-action actions)
+              (let ([otherwise (pure `(>>= ,first-action
+                                        (lambda (_)
+                                          (do ,actions ...))))])
                 (syntax-case first-action
-                  ((list (var <-? action))
+                  [(list (var <-? action))
                    (>>= (free-identifier=? '<- <-?)
                         (lambda (isArrow)
                                 (if isArrow
-                                    (pure `(>>= ,action (lambda (,var)
-                                                          ,(cons-list-syntax 'do actions stx))))
-                                    otherwise))))
-                  (_
-                   otherwise)))))))))))
+                                    (pure `(>>= ,action
+                                             (lambda (,var)
+                                               (do ,actions ...))))
+                                    otherwise)))]
+                  [_
+                   otherwise]))])]))]))
 
 (export <- do)
