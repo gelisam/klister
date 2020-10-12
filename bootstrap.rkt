@@ -14,13 +14,13 @@
 
 ; (generate-define-keywords (list 'foo 'bar))
 ; =>
-; '(raw-define-macros
+; '(define-macros
 ;    ([foo
-;      (lambda (raw-stx)
-;        (syntax-error '"foo used out of context" raw-stx))]
+;      (lambda (stx)
+;        (syntax-error '"foo used out of context" stx))]
 ;     [bar
-;      (lambda (raw-stx)
-;        (syntax-error '"bar used out of context" raw-stx))]))
+;      (lambda (stx)
+;        (syntax-error '"bar used out of context" stx))]))
 (define (generate-define-keywords keywords)
   (let* ([error-message
           (lambda (symbol)
@@ -29,14 +29,14 @@
          [undefined-macro
           (lambda (keyword)
             `[,keyword
-              (lambda (raw-stx)
-                (syntax-error ',(error-message keyword) raw-stx))])]
+              (lambda (stx)
+                (syntax-error ',(error-message keyword) stx))])]
          [undefined-macros
           (map undefined-macro keywords)])
-    `(raw-define-macros
+    `(define-macros
        ,undefined-macros)))
 
-; (generate-syntax-case 'my-macro 'raw-stx (list 'keyword)
+; (generate-syntax-case 'my-macro 'stx (list 'keyword)
 ;   (list
 ;     (cons '()
 ;           'rhs1)
@@ -47,10 +47,10 @@
 ; =>
 ; '(let [failure-cc
 ;        (lambda ()
-;          (syntax-error '"my-macro call has invalid syntax" raw-stx))]
+;          (syntax-error '"my-macro call has invalid syntax" stx))]
 ;    (let [failure-cc
 ;          (lambda ()
-;            (raw-syntax-case raw-stx
+;            (raw-syntax-case stx
 ;              [(cons head tail)
 ;               (raw-syntax-case head
 ;                 [(idenx x)
@@ -63,7 +63,7 @@
 ;              [_ (failure-cc)]))]
 ;      (let [failure-cc
 ;            (lambda ()
-;              (raw-syntax-case raw-stx
+;              (raw-syntax-case stx
 ;                [(cons ab cd-nil)
 ;                 (raw-syntax-case ab
 ;                   [(cons a b-nil)
@@ -72,7 +72,7 @@
 ;                [_ (failure-cc)]))]
 ;        (let [failure-cc
 ;              (lambda ()
-;                (raw-syntax-case raw-stx
+;                (raw-syntax-case stx
 ;                  [() rhs1]
 ;                  [_ (failure-cc)]))]
 ;          (failure-cc)))))
@@ -172,17 +172,17 @@
 ;     ,'(2 3)
 ;     ,'(4 5) ...
 ;     6)
-;   'raw-stx)
+;   'stx)
 ; =>
 ; '(cons-list-syntax 1
 ;    (cons-list-syntax '(2 3)
 ;      (append-list-syntax '(4 5)
 ;        (cons-list-syntax 6
 ;          '()
-;          raw-stx)
-;        raw-stx)
-;      raw-stx)
-;    raw-stx)
+;          stx)
+;        stx)
+;      stx)
+;    stx)
 ; =>
 ; (1 (2 3) 4 5 6)
 (define (generate-quasiquote-inside pat stx-name)
@@ -207,13 +207,13 @@
 ;     ,'(2 3)
 ;     ,'(4 5) ...
 ;     6)
-;   'raw-stx)
+;   'stx)
 ; =>
 ; '(pair-list-syntax 'quote
 ;    (cons-list-syntax 1
 ;      ...etc...
-;      raw-stx)
-;    raw-stx)
+;      stx)
+;    stx)
 ; =>
 ; '(1 (2 3) 4 5 6)
 (define (generate-quasiquote pat stx-name)
@@ -246,26 +246,24 @@
               (newline)
               (writeln form))
             (list
-              '(import (rename "prelude.kl"
-                               [define-macros raw-define-macros]))
               '(import (shift "list-syntax.kl" 1))
               '(import (rename (shift "prelude.kl" 1)
                                [syntax-case raw-syntax-case]))
 
-              (generate-define-syntax 'my-macro 'raw-stx (list 'keyword)
+              (generate-define-syntax 'my-macro 'stx (list 'keyword)
                 (list
                   (cons '(_ ((,a ,b) (,c ,d)))
                         `(pure ,(generate-quasiquote
                                   '(,a ,b ,c ,d)
-                                  'raw-stx)))
+                                  'stx)))
                   (cons '(_ (keyword ,tail ...))
                         `(pure ,(generate-quasiquote
                                   '(keyword-prefixed ,tail ... end-of-list)
-                                  'raw-stx)))
+                                  'stx)))
                   (cons '(_ (,e ...))
                         `(pure ,(generate-quasiquote
                                   '(ordinary-list ,e ... end-of-list)
-                                  'raw-stx)))))
+                                  'stx)))))
               '(example (my-macro ((1 2) (3 4))))
               '(example (my-macro (keyword bar baz)))
               '(example (my-macro (foo bar baz))))))))))
