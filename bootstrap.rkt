@@ -259,13 +259,13 @@
                         `(let [stx-name ,(generate-quasiquote
                                            ',(replace-loc pat 'here)
                                            ''here)]
-                           (flet (go (pat)
+                           (flet (fancy-inside (pat)
                                      ,(generate-syntax-case 'fancy-quasiquote 'pat (list 'fancy-unquote 'fancy-...)
                                         (list
                                           (cons '(fancy-unquote ,x)
                                                 '(pure x))
                                           (cons '((fancy-unquote ,head) fancy-... ,tail ...)
-                                                `(>>= (go tail)
+                                                `(>>= (fancy-inside tail)
                                                    (lambda (inside-tail)
                                                      (pure ,(generate-quasiquote-inside
                                                               '(append-list-syntax
@@ -274,9 +274,9 @@
                                                                  ,stx-name)
                                                               'stx)))))
                                           (cons '(,head ,tail ...)
-                                                `(>>= (go head)
+                                                `(>>= (fancy-inside head)
                                                    (lambda (inside-head)
-                                                     (>>= (go tail)
+                                                     (>>= (fancy-inside tail)
                                                        (lambda (inside-tail)
                                                          (pure ,(generate-quasiquote-inside
                                                                   '(cons-list-syntax
@@ -289,9 +289,7 @@
                                                           'quote
                                                           x
                                                           stx))))))
-                             (>>= (go pat)
-                               (lambda (inside)
-                                 (pure inside))))))))
+                             (fancy-inside pat))))))
               '(example
                  (fancy-quasiquote
                    (1

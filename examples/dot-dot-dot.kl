@@ -55,7 +55,7 @@
                                 'here)
                                'here))
                           (flet
-                           (go
+                           (fancy-inside
                             (pat)
                             (let (failure-cc
                                   (lambda ()
@@ -83,11 +83,11 @@
                                             (let (tail
                                                   tail-124)
                                               (>>=
-                                               (go
+                                               (fancy-inside
                                                 head)
                                                (lambda (inside-head)
                                                  (>>=
-                                                  (go
+                                                  (fancy-inside
                                                    tail)
                                                   (lambda (inside-tail)
                                                     (pure
@@ -156,7 +156,7 @@
                                                                     (let (tail
                                                                           tail-128)
                                                                       (>>=
-                                                                       (go
+                                                                       (fancy-inside
                                                                         tail)
                                                                        (lambda (inside-tail)
                                                                          (pure
@@ -228,11 +228,8 @@
                                              (_
                                               (failure-cc)))))
                                       (failure-cc)))))))
-                           (>>=
-                            (go pat)
-                            (lambda (inside)
-                              (pure
-                               inside))))))
+                           (fancy-inside
+                            pat))))
                        (_
                         (failure-cc)))))
                    (_ (failure-cc))))
