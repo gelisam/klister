@@ -138,15 +138,16 @@
                                      (cons pat-tail rhs))))]
                          [_ (,failure-cc-name)]))])]))]
            [generate-cases
-            (lambda (cases)
+            (lambda (cases inner)
               (match cases
                 ['()
-                 `(,failure-cc-name)]
-                [`(,@(list cases ...) ,case)
-                 `(let [,failure-cc-name
-                        (lambda ()
-                          ,(generate-case stx-name case))]
-                    ,(generate-cases cases))]))])
+                 inner]
+                [`(,case ,@cases)
+                 (generate-cases cases
+                   `(let [,failure-cc-name
+                          (lambda ()
+                            ,(generate-case stx-name case))]
+                      ,inner))]))])
     `(let [,failure-cc-name
            (lambda ()
              (syntax-error
@@ -154,7 +155,7 @@
                    (symbol->string macro-name)
                    " call has invalid syntax")
                ,stx-name))]
-       ,(generate-cases cases))))
+       ,(generate-cases cases `(,failure-cc-name)))))
 
 (define (generate-define-syntax macro-name stx-name keywords cases)
   `(group
