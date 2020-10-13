@@ -77,7 +77,8 @@
 ;                  [_ (failure-cc)]))]
 ;          (failure-cc)))))
 (define (generate-syntax-case macro-name stx-name keywords cases)
-  (letrec ([generate-case
+  (letrec ([failure-cc-name (gensym 'failure-cc-)]
+           [generate-case
             (lambda (scrutinee-name case)
               (match case
                 [(cons pat rhs)
@@ -85,7 +86,7 @@
                    [`()
                     `(raw-syntax-case ,scrutinee-name
                        [() ,rhs]
-                       [_ (failure-cc)])]
+                       [_ (,failure-cc-name)])]
                    [`_
                     rhs]
                    [keyword
@@ -98,8 +99,8 @@
                             (lambda (same-identifier)
                               (if same-identifier
                                 ,rhs
-                                (failure-cc))))]
-                         [_ (failure-cc)]))]
+                                (,failure-cc-name))))]
+                         [_ (,failure-cc-name)]))]
                    [`(,'unquote ,x)
                     #:when (symbol? x)
                     `(let [,x ,scrutinee-name]
@@ -135,18 +136,18 @@
                              (cons pat-head
                                    (generate-case tail-name
                                      (cons pat-tail rhs))))]
-                         [_ (failure-cc)]))])]))]
+                         [_ (,failure-cc-name)]))])]))]
            [generate-cases
             (lambda (cases)
               (match cases
                 ['()
-                 `(failure-cc)]
+                 `(,failure-cc-name)]
                 [`(,@(list cases ...) ,case)
-                 `(let [failure-cc
+                 `(let [,failure-cc-name
                         (lambda ()
                           ,(generate-case stx-name case))]
                     ,(generate-cases cases))]))])
-    `(let [failure-cc
+    `(let [,failure-cc-name
            (lambda ()
              (syntax-error
                ',(string-append
@@ -188,8 +189,8 @@
 ; (1 (2 3) 4 5 6)
 (define (generate-quasiquote-inside pat stx-name)
   (match pat
-    [`(,'unquote ,head)
-     head]
+    [`(,'unquote ,x)
+     x]
     [`((,'unquote ,head) ,'... ,@tail)
      `(append-list-syntax
         ,head

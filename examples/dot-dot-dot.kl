@@ -26,26 +26,26 @@
  (define-macros
   ((fancy-quasiquote
     (lambda (stx)
-      (let (failure-cc
+      (let (failure-cc-141
             (lambda ()
               (syntax-error
                '"fancy-quasiquote call has invalid syntax"
                stx)))
-        (let (failure-cc
+        (let (failure-cc-141
               (lambda ()
                 (raw-syntax-case
                  stx
                  ((cons
-                   head-140
-                   tail-141)
+                   head-142
+                   tail-143)
                   (raw-syntax-case
-                   tail-141
+                   tail-143
                    ((cons
-                     head-142
-                     tail-143)
-                    (let (pat head-142)
+                     head-144
+                     tail-145)
+                    (let (pat head-144)
                       (raw-syntax-case
-                       tail-143
+                       tail-145
                        (()
                         (let (stx-name
                               (pair-list-syntax
@@ -57,12 +57,12 @@
                           (flet
                            (fancy-inside
                             (pat)
-                            (let (failure-cc
+                            (let (failure-cc-123
                                   (lambda ()
                                     (syntax-error
                                      '"fancy-quasiquote call has invalid syntax"
                                      pat)))
-                              (let (failure-cc
+                              (let (failure-cc-123
                                     (lambda ()
                                       (let (x
                                             pat)
@@ -71,17 +71,17 @@
                                           'quote
                                           x
                                           stx)))))
-                                (let (failure-cc
+                                (let (failure-cc-123
                                       (lambda ()
                                         (raw-syntax-case
                                          pat
                                          ((cons
-                                           head-123
-                                           tail-124)
+                                           head-124
+                                           tail-125)
                                           (let (head
-                                                head-123)
+                                                head-124)
                                             (let (tail
-                                                  tail-124)
+                                                  tail-125)
                                               (>>=
                                                (fancy-inside
                                                 head)
@@ -105,56 +105,56 @@
                                                        stx)
                                                       stx)))))))))
                                          (_
-                                          (failure-cc)))))
-                                  (let (failure-cc
+                                          (failure-cc-123)))))
+                                  (let (failure-cc-123
                                         (lambda ()
                                           (raw-syntax-case
                                            pat
                                            ((cons
-                                             head-125
-                                             tail-126)
+                                             head-126
+                                             tail-127)
                                             (raw-syntax-case
-                                             head-125
+                                             head-126
                                              ((cons
-                                               head-130
-                                               tail-131)
+                                               head-131
+                                               tail-132)
                                               (raw-syntax-case
-                                               head-130
+                                               head-131
                                                ((ident
-                                                 ident134)
+                                                 ident135)
                                                 (>>=
                                                  (free-identifier=?
-                                                  ident134
+                                                  ident135
                                                   'fancy-unquote)
                                                  (lambda (same-identifier)
                                                    (if same-identifier
                                                      (raw-syntax-case
-                                                      tail-131
+                                                      tail-132
                                                       ((cons
-                                                        head-132
-                                                        tail-133)
+                                                        head-133
+                                                        tail-134)
                                                        (let (head
-                                                             head-132)
+                                                             head-133)
                                                          (raw-syntax-case
-                                                          tail-133
+                                                          tail-134
                                                           (()
                                                            (raw-syntax-case
-                                                            tail-126
+                                                            tail-127
                                                             ((cons
-                                                              head-127
-                                                              tail-128)
+                                                              head-128
+                                                              tail-129)
                                                              (raw-syntax-case
-                                                              head-127
+                                                              head-128
                                                               ((ident
-                                                                ident129)
+                                                                ident130)
                                                                (>>=
                                                                 (free-identifier=?
-                                                                 ident129
+                                                                 ident130
                                                                  'fancy-...)
                                                                 (lambda (same-identifier)
                                                                   (if same-identifier
                                                                     (let (tail
-                                                                          tail-128)
+                                                                          tail-129)
                                                                       (>>=
                                                                        (fancy-inside
                                                                         tail)
@@ -173,68 +173,69 @@
                                                                              stx)
                                                                             stx)
                                                                            stx)))))
-                                                                    (failure-cc)))))
+                                                                    (failure-cc-123)))))
                                                               (_
-                                                               (failure-cc))))
+                                                               (failure-cc-123))))
                                                             (_
-                                                             (failure-cc))))
+                                                             (failure-cc-123))))
                                                           (_
-                                                           (failure-cc)))))
+                                                           (failure-cc-123)))))
                                                       (_
-                                                       (failure-cc)))
-                                                     (failure-cc)))))
+                                                       (failure-cc-123)))
+                                                     (failure-cc-123)))))
                                                (_
-                                                (failure-cc))))
+                                                (failure-cc-123))))
                                              (_
-                                              (failure-cc))))
+                                              (failure-cc-123))))
                                            (_
-                                            (failure-cc)))))
-                                    (let (failure-cc
+                                            (failure-cc-123)))))
+                                    (let (failure-cc-123
                                           (lambda ()
                                             (raw-syntax-case
                                              pat
                                              ((cons
-                                               head-135
-                                               tail-136)
+                                               head-136
+                                               tail-137)
                                               (raw-syntax-case
-                                               head-135
+                                               head-136
                                                ((ident
-                                                 ident139)
+                                                 ident140)
                                                 (>>=
                                                  (free-identifier=?
-                                                  ident139
+                                                  ident140
                                                   'fancy-unquote)
                                                  (lambda (same-identifier)
                                                    (if same-identifier
                                                      (raw-syntax-case
-                                                      tail-136
+                                                      tail-137
                                                       ((cons
-                                                        head-137
-                                                        tail-138)
+                                                        head-138
+                                                        tail-139)
                                                        (let (x
-                                                             head-137)
+                                                             head-138)
                                                          (raw-syntax-case
-                                                          tail-138
+                                                          tail-139
                                                           (()
                                                            (pure
                                                             x))
                                                           (_
-                                                           (failure-cc)))))
+                                                           (failure-cc-123)))))
                                                       (_
-                                                       (failure-cc)))
-                                                     (failure-cc)))))
+                                                       (failure-cc-123)))
+                                                     (failure-cc-123)))))
                                                (_
-                                                (failure-cc))))
+                                                (failure-cc-123))))
                                              (_
-                                              (failure-cc)))))
-                                      (failure-cc)))))))
+                                              (failure-cc-123)))))
+                                      (failure-cc-123)))))))
                            (fancy-inside
                             pat))))
                        (_
-                        (failure-cc)))))
-                   (_ (failure-cc))))
-                 (_ (failure-cc)))))
-          (failure-cc))))))))
+                        (failure-cc-141)))))
+                   (_
+                    (failure-cc-141))))
+                 (_ (failure-cc-141)))))
+          (failure-cc-141))))))))
 
 (example
  (fancy-quasiquote
