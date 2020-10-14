@@ -591,7 +591,7 @@ initializeKernel = do
       , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())]
+    patternPrims :: [(Text, Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())]
     patternPrims = [("else", Prims.elsePattern)]
 
     addToKernel name p b =
@@ -674,7 +674,7 @@ initializeKernel = do
 
 
     addPatternPrimitive ::
-      Text -> (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
       b <- freshBinding
@@ -841,10 +841,10 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandDeclForm d outScopesDest stx
         TypeDest d ->
           expandOneType d stx
-        PatternDest exprT scrutT d ->
-          expandOnePattern exprT scrutT d stx
-        TypePatternDest exprT d ->
-          expandOneTypePattern exprT d stx
+        PatternDest scrutT d ->
+          expandOnePattern scrutT d stx
+        TypePatternDest d ->
+          expandOneTypePattern d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -992,7 +992,6 @@ runTask (tid, localData, task) = withLocal localData $ do
                 Just layer ->
                   and <$> traverse patternComplete layer
         patternComplete patPtr
-        -- TODO traverse the tree and get the layers out, collecting the set of pointers to later accumulate the binders
       if not ready
         then stillStuck tid task
         else do
@@ -1017,7 +1016,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             ] $
             expandOneExpression ty dest rhs'
     AwaitingTypePattern patPtr ty dest stx -> do
-      ready <- isJust . view (expanderCompletedTypePatterns . at patPtr) <$> getState
+      ready <- has (expanderCompletedTypePatterns . ix patPtr) <$> getState
       if not ready
         then stillStuck tid task
         else do
@@ -1064,19 +1063,19 @@ runTask (tid, localData, task) = withLocal localData $ do
       bind b val
 
 
-expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
+expandOnePattern :: Ty -> PatternPtr -> Syntax -> Expand ()
 -- This case means that identifier-only macro invocations aren't valid in pattern contexts
-expandOnePattern _exprTy scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
+expandOnePattern scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
   ty <- trivialScheme scrutTy
   (sc, x, v) <- Prims.prepareVar var
   modifyState $ set (expanderPatternBinders . at dest) $ Just $ Right (sc, x, v, ty)
   linkPattern dest $ PatternVar x v
-expandOnePattern exprTy scrutTy dest stx =
-  expandOneForm (PatternDest exprTy scrutTy dest) stx
+expandOnePattern scrutTy dest stx =
+  expandOneForm (PatternDest scrutTy dest) stx
 
-expandOneTypePattern :: Ty -> TypePatternPtr -> Syntax -> Expand ()
-expandOneTypePattern exprTy dest stx =
-  expandOneForm (TypePatternDest exprTy dest) stx
+expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
+expandOneTypePattern dest stx =
+  expandOneForm (TypePatternDest dest) stx
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
@@ -1116,11 +1115,11 @@ requireTypeCtx _ (TypeDest dest) = return dest
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr))
-requirePatternCtx _ (PatternDest exprTy scrutTy dest) =
-  return $ Left (exprTy, scrutTy, dest)
-requirePatternCtx _ (TypePatternDest exprTy dest) =
-  return $ Right (exprTy, dest)
+requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCtx _ (PatternDest scrutTy dest) =
+  return $ Left (scrutTy, dest)
+requirePatternCtx _ (TypePatternDest dest) =
+  return $ Right dest
 requirePatternCtx stx other =
   throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
 
@@ -1152,7 +1151,7 @@ expandOneForm prob stx
                   else for (zip args' foundArgs) (uncurry schedule)
               linkExpr dest (CoreCtor ctor argDests)
               saveExprType dest t
-            PatternDest exprTy patTy dest -> do
+            PatternDest patTy dest -> do
               Stx _ loc (_cname, subPats) <- mustBeCons stx
               tyArgs <- makeTypeMetas arity
               argTypes <- for args \ a ->
@@ -1163,7 +1162,7 @@ expandOneForm prob stx
                 else do
                   subPtrs <- for (zip subPats argTypes) \(sp, t) -> do
                     ptr <- liftIO newPatternPtr
-                    let subPatDest = PatternDest exprTy t ptr
+                    let subPatDest = PatternDest t ptr
                     forkExpandSyntax subPatDest sp
                     pure ptr
                   modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
@@ -1180,7 +1179,7 @@ expandOneForm prob stx
           case prob of
             TypeDest dest ->
               implT dest stx
-            TypePatternDest _exprTy dest ->
+            TypePatternDest dest ->
               implP dest stx
             otherDest ->
               throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)
