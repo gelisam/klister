@@ -205,25 +205,6 @@
     [x
      `(quote ,x)]))
 
-; (generate-quasiquote
-;   '(1
-;     ,'(2 3)
-;     ,'(4 5) ...
-;     6)
-;   'stx)
-; =>
-; '(pair-list-syntax 'quote
-;    (cons-list-syntax 1
-;      ...etc...
-;      stx)
-;    stx)
-; =>
-; '(1 (2 3) 4 5 6)
-(define (generate-quasiquote pat stx-name)
-  `(pair-list-syntax 'quote
-     ,(generate-quasiquote-inside pat stx-name)
-     ,stx-name))
-
 
 (void
   (call-with-output-file
@@ -258,8 +239,8 @@
               (generate-define-syntax 'fancy-quasiquote 'stx '()
                 (list
                   (cons '(_ ,pat)
-                        `(let [stx-name ,(generate-quasiquote
-                                           ',(replace-loc pat 'here)
+                        `(let [stx-name ,(generate-quasiquote-inside
+                                           '',(replace-loc pat 'here)
                                            ''here)]
                            (flet (fancy-inside (pat)
                                      ,(generate-syntax-case 'fancy-quasiquote 'pat (list 'fancy-unquote 'fancy-...)

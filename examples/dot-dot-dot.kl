@@ -48,10 +48,13 @@
                        tail-143
                        (()
                         (let (stx-name
-                              (pair-list-syntax
+                              (cons-list-syntax
                                'quote
-                               (replace-loc
-                                pat
+                               (cons-list-syntax
+                                (replace-loc
+                                 pat
+                                 'here)
+                                '()
                                 'here)
                                'here))
                           (flet
