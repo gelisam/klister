@@ -1,5 +1,6 @@
 #lang racket
 
+(require (rename-in racket [syntax-case racket-syntax-case]))
 (require racket/pretty)
 
 ; Problem: bootstrapping can be difficult. When we don't yet have convenient
@@ -9,8 +10,8 @@
 ; Solution: instead of manually defining Klister's fancy-syntax-case using
 ; Klister's more primitive raw-syntax-case, we write some Racket code which
 ; expands to the code we would have written manually. This is easier, because
-; Racket does have convenient syntax-manipulating macros like match and
-; quasiquote.
+; Racket does have convenient syntax-manipulating macros like match,
+; quasiquote, and racket-syntax-case.
 
 ; (generate-define-keywords (list 'foo 'bar))
 ; =>
@@ -206,6 +207,50 @@
      `(quote ,x)]))
 
 
+; (auto-splice
+;   (define-macros
+;     ([my-macro
+;       (lambda (stx)
+;         (generate-syntax-case my-macro stx (keyword)
+;           [()
+;            (pure ''nil)]
+;           [((,a ,b) (,c ,d))
+;            (let [quadruple (generate-quasiquote (,a ,b ,c ,d) stx)]
+;              (pure (generate-quasiquote '(four-elements ,quadruple) stx)))]
+;           [(keyword ,tail ...)
+;            (pure (generate-quasiquote '(keyword-prefixed (,tail ...)) stx))]))])))
+; =>
+; `(define-macros
+;    ([my-macro
+;      (lambda (stx)
+;        ,(generate-syntax-case 'my-macro 'stx (list 'keyword)
+;          (list
+;            (cons '()
+;                  `(pure ''nil))
+;            (cons '((,a ,b) (,c ,d))
+;                  `(let [quadruple ,(generate-quasiquote '(,a ,b ,c ,d) 'stx)]
+;                     (pure ,(generate-quasiquote ''(four-elements ,quadruple) 'stx))))
+;            (cons '(keyword ,tail ...)
+;                  `(pure ,(generate-quasiquote ''(keyword-prefixed (,tail ...)) 'stx))))))]))
+(define-syntax (auto-splice stx)
+  (racket-syntax-case stx (generate-quasiquote generate-syntax-case)
+    [(_ ())
+     #''()]
+    [(_ (generate-quasiquote pat stx-name))
+     #'(generate-quasiquote 'pat 'stx-name)]
+    [(_ (generate-syntax-case macro-name stx-name (keyword ...)
+          [lhs rhs] ...))
+     #'(generate-syntax-case 'macro-name 'stx-name (list 'keyword ...)
+         (list
+           (cons 'lhs
+                 (auto-splice rhs))
+           ...))]
+    [(_ (head tail ...))
+     #'(cons (auto-splice head)
+             (auto-splice (tail ...)))]
+    [(_ x)
+     #''x]))
+
 (void
   (call-with-output-file
     "examples/dot-dot-dot.kl"
@@ -236,43 +281,45 @@
                                [syntax-case raw-syntax-case]))
 
               (generate-define-keywords (list 'fancy-unquote 'fancy-...))
-              (generate-define-syntax 'fancy-quasiquote 'stx '()
-                (list
-                  (cons '(_ ,pat)
-                        `(let [stx-name ,(generate-quasiquote
-                                           '',(replace-loc pat 'here)
-                                           ''here)]
+              (auto-splice
+                (define-macros
+                  ([fancy-quasiquote
+                    (lambda (stx)
+                      (generate-syntax-case fancy-quasiquote stx ()
+                        [(_ ,pat)
+                         (let [stx-name (generate-quasiquote
+                                          ',(replace-loc pat 'here)
+                                          'here)]
                            (flet (fancy-inside (pat)
-                                     ,(generate-syntax-case 'fancy-quasiquote 'pat (list 'fancy-unquote 'fancy-...)
-                                        (list
-                                          (cons '(fancy-unquote ,x)
-                                                '(pure x))
-                                          (cons '((fancy-unquote ,head) fancy-... ,tail ...)
-                                                `(>>= (fancy-inside tail)
-                                                   (lambda (inside-tail)
-                                                     (pure ,(generate-quasiquote
-                                                              '(append-list-syntax
-                                                                 ,head
-                                                                 ,inside-tail
-                                                                 ,stx-name)
-                                                              'stx)))))
-                                          (cons '(,head ,tail ...)
-                                                `(>>= (fancy-inside head)
-                                                   (lambda (inside-head)
-                                                     (>>= (fancy-inside tail)
-                                                       (lambda (inside-tail)
-                                                         (pure ,(generate-quasiquote
-                                                                  '(cons-list-syntax
-                                                                     ,inside-head
-                                                                     ,inside-tail
-                                                                     ,stx-name)
-                                                                  'stx)))))))
-                                          (cons ',x
-                                                `(pure (pair-list-syntax
-                                                          'quote
-                                                          x
-                                                          stx))))))
-                             (fancy-inside pat))))))
+                                     (generate-syntax-case fancy-quasiquote pat (fancy-unquote fancy-...)
+                                       [(fancy-unquote ,x)
+                                        (pure x)]
+                                       [((fancy-unquote ,head) fancy-... ,tail ...)
+                                        (>>= (fancy-inside tail)
+                                          (lambda (inside-tail)
+                                            (pure (generate-quasiquote
+                                                    (append-list-syntax
+                                                      ,head
+                                                      ,inside-tail
+                                                      ,stx-name)
+                                                    stx))))]
+                                       [(,head ,tail ...)
+                                        (>>= (fancy-inside head)
+                                          (lambda (inside-head)
+                                            (>>= (fancy-inside tail)
+                                              (lambda (inside-tail)
+                                                (pure (generate-quasiquote
+                                                        (cons-list-syntax
+                                                          ,inside-head
+                                                          ,inside-tail
+                                                          ,stx-name)
+                                                        stx))))))]
+                                       [,x
+                                        (pure (pair-list-syntax
+                                                 'quote
+                                                 x
+                                                 stx))]))
+                             (fancy-inside pat)))]))])))
               '(example
                  (fancy-quasiquote
                    (1
