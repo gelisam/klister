@@ -170,7 +170,7 @@
 ; =>
 ; '(1 (2 3) 4 5 6)
 ;
-; (generate-quasiquote-inside
+; (generate-quasiquote
 ;   '(1
 ;     ,'(2 3)
 ;     ,'(4 5) ...
@@ -187,20 +187,20 @@
 ;      stx)
 ;    stx)
 ; =>
-; (1 (2 3) 4 5 6)
-(define (generate-quasiquote-inside pat stx-name)
+; '(1 (2 3) 4 5 6)
+(define (generate-quasiquote pat stx-name)
   (match pat
     [`(,'unquote ,x)
      x]
     [`((,'unquote ,head) ,'... ,@tail)
      `(append-list-syntax
         ,head
-        ,(generate-quasiquote-inside tail stx-name)
+        ,(generate-quasiquote tail stx-name)
         ,stx-name)]
     [`(,head ,@tail)
      `(cons-list-syntax
-        ,(generate-quasiquote-inside head stx-name)
-        ,(generate-quasiquote-inside tail stx-name)
+        ,(generate-quasiquote head stx-name)
+        ,(generate-quasiquote tail stx-name)
         ,stx-name)]
     [x
      `(quote ,x)]))
@@ -239,7 +239,7 @@
               (generate-define-syntax 'fancy-quasiquote 'stx '()
                 (list
                   (cons '(_ ,pat)
-                        `(let [stx-name ,(generate-quasiquote-inside
+                        `(let [stx-name ,(generate-quasiquote
                                            '',(replace-loc pat 'here)
                                            ''here)]
                            (flet (fancy-inside (pat)
@@ -250,7 +250,7 @@
                                           (cons '((fancy-unquote ,head) fancy-... ,tail ...)
                                                 `(>>= (fancy-inside tail)
                                                    (lambda (inside-tail)
-                                                     (pure ,(generate-quasiquote-inside
+                                                     (pure ,(generate-quasiquote
                                                               '(append-list-syntax
                                                                  ,head
                                                                  ,inside-tail
@@ -261,7 +261,7 @@
                                                    (lambda (inside-head)
                                                      (>>= (fancy-inside tail)
                                                        (lambda (inside-tail)
-                                                         (pure ,(generate-quasiquote-inside
+                                                         (pure ,(generate-quasiquote
                                                                   '(cons-list-syntax
                                                                      ,inside-head
                                                                      ,inside-tail
