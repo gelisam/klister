@@ -1,0 +1,8 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+
+(define-macros
+  ([keyword (lambda (stx) (syntax-error '"keyword used out of context" stx))]))
+
+(export keyword)

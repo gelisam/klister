@@ -1,0 +1,8 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+
+(define-macros
+  ([<- (lambda (stx) (syntax-error (quote "<- used out of context") stx))]))
+
+(export <-)

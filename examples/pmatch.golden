@@ -1,12 +1,12 @@
-#[pmatch.kl:103.32-103.33]<t> : Syntax
-#[pmatch.kl:104.36-104.37]<t> : Syntax
-#[pmatch.kl:105.29-105.30]<t> : Syntax
-#[pmatch.kl:106.48-106.49]<t> : Syntax
+#[pmatch.kl:99.32-99.33]<t> : Syntax
+#[pmatch.kl:100.36-100.37]<t> : Syntax
+#[pmatch.kl:101.29-101.30]<t> : Syntax
+#[pmatch.kl:102.48-102.49]<t> : Syntax
 (zero) : Nat
 (zero) : Nat
 (zero) : Nat
 (zero) : Nat
 (add1 (zero)) : Nat
-(:: (pair #[pmatch.kl:131.34-131.35]<1> 1)
-    (:: (pair #[pmatch.kl:131.50-131.51]<2> 2)
-        (:: (pair #[pmatch.kl:131.66-131.67]<3> 3) (nil)))) : (List (Pair Syntax Integer))
+(:: (pair #[pmatch.kl:127.34-127.35]<1> 1)
+    (:: (pair #[pmatch.kl:127.50-127.51]<2> 2)
+        (:: (pair #[pmatch.kl:127.66-127.67]<3> 3) (nil)))) : (List (Pair Syntax Integer))

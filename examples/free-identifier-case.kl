@@ -2,14 +2,8 @@
 
 (import "let.kl")
 (import (shift "prelude.kl" 1))
+(import (shift "identifier.kl" 1))
 (import (shift "quasiquote.kl" 1))
-
-(meta
-  (define identifier?
-    (lambda (x)
-      (syntax-case x
-        [(ident x) (true)]
-        [_ (false)]))))
 
 (define-macros
   ([free-identifier-case

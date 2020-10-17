@@ -1,0 +1,9 @@
+#lang "prelude.kl"
+
+(define identifier?
+  (lambda (x)
+    (syntax-case x
+      [(ident x) (true)]
+      [_ (false)])))
+
+(export identifier?)

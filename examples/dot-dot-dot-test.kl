@@ -1,0 +1,24 @@
+#lang "prelude.kl"
+
+(import (rename (shift "prelude.kl" 1)
+                [syntax-case raw-syntax-case]
+                [unquote raw-unquote]
+                [... raw-...]))
+(import "dot-dot-dot-test-keywords.kl")
+(import (shift "dot-dot-dot-test-keywords.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
+
+(define-macros
+  ([my-macro
+    (lambda (stx)
+      (syntax-case stx (keyword)
+        [(_ ((,a ,b) (,c ,d)))
+         (pure `'(,a ,b ,c ,d))]
+        [(_ (keyword ,tail ...))
+         (pure `'(keyword-prefixed ,tail ... end-of-list))]
+        [(_ (,e ...))
+         (pure `'(ordinary-list ,e ... end-of-list))]))]))
+
+(example (my-macro ((1 2) (3 4))))
+(example (my-macro (keyword bar baz)))
+(example (my-macro (foo bar baz)))

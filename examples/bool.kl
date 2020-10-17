@@ -16,22 +16,18 @@
     (if x (true) y)))
 
 (define-macros
-  ((and (lambda (stx)
-          (syntax-case stx
-            ((cons _ args)
-             (syntax-case args
-               (()
-                (pure '(true)))
-               ((cons x xs)
-                (pure `(binary-and ,x (and ,xs ...)))))))))
-   (or (lambda (stx)
-         (syntax-case stx
-           ((cons _ args)
-            (syntax-case args
-              (()
-               (pure '(false)))
-              ((cons x xs)
-               (pure `(binary-or ,x (or ,xs ...)))))))))))
+  ([and (lambda (stx)
+          (syntax-case stx ()
+            [(_)
+             (pure '(true))]
+            [(_ ,x ,xs ...)
+             (pure `(binary-and ,x (and ,xs ...)))]))]
+   [or (lambda (stx)
+         (syntax-case stx ()
+           [(_)
+            (pure '(false))]
+           [(_ ,x ,xs ...)
+            (pure `(binary-or ,x (or ,xs ...)))]))]))
 
 (example (binary-and (false) (false)))
 (example (binary-and (false) (true)))
