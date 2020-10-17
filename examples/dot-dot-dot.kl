@@ -41,7 +41,7 @@
        (let (failure-cc-159
              (lambda ()
                (syntax-error
-                '"fancy-syntax-case call has invalid syntax"
+                '"syntax-case call has invalid syntax"
                 stx-158)))
          (let (failure-cc-159
                (lambda ()
@@ -80,7 +80,7 @@
         (let (failure-cc-193
               (lambda ()
                 (syntax-error
-                 '"fancy-syntax-case call has invalid syntax"
+                 '"syntax-case call has invalid syntax"
                  stx-192)))
           (let (failure-cc-193
                 (lambda ()
@@ -121,7 +121,7 @@
                                          (let (failure-cc-163
                                                (lambda ()
                                                  (syntax-error
-                                                  '"fancy-syntax-case call has invalid syntax"
+                                                  '"syntax-case call has invalid syntax"
                                                   stx-162)))
                                            (let (failure-cc-163
                                                  (lambda ()
@@ -171,7 +171,7 @@
                                             (let (failure-cc-183
                                                   (lambda ()
                                                     (syntax-error
-                                                     '"fancy-syntax-case call has invalid syntax"
+                                                     '"syntax-case call has invalid syntax"
                                                      stx-182)))
                                               (let (failure-cc-183
                                                     (lambda ()
@@ -197,7 +197,7 @@
                                                                   (let (failure-cc-167
                                                                         (lambda ()
                                                                           (syntax-error
-                                                                           '"fancy-syntax-case call has invalid syntax"
+                                                                           '"syntax-case call has invalid syntax"
                                                                            stx-166)))
                                                                     (let (failure-cc-167
                                                                           (lambda ()
@@ -348,7 +348,7 @@
                                                                                                                 stx))
                                                                                                               (syntax-error
                                                                                                                (list-syntax
-                                                                                                                ('"fancy-syntax-case: the syntax for binding lists is (,x ...), found"
+                                                                                                                ('"syntax-case: the syntax for binding lists is (,x ...), found"
                                                                                                                  pat
                                                                                                                  '"instead")
                                                                                                                 stx)
@@ -415,7 +415,7 @@
                                                                                                      stx))
                                                                                                    (syntax-error
                                                                                                     (list-syntax
-                                                                                                     ('"fancy-syntax-case: the syntax for binding values is (unquote x), found"
+                                                                                                     ('"syntax-case: the syntax for binding values is (unquote x), found"
                                                                                                       pat
                                                                                                       '"instead")
                                                                                                      stx)
@@ -519,7 +519,7 @@
                                                                                                   stx))
                                                                                                 (syntax-error
                                                                                                  (list-syntax
-                                                                                                  ('"fancy-syntax-case: naked symbol"
+                                                                                                  ('"syntax-case: naked symbol"
                                                                                                    keyword
                                                                                                    '"did you mean (unquote symbol)?"
                                                                                                    '"did you mean to add the symbol to the keyword list?")
@@ -593,7 +593,7 @@
                                              (let (failure-cc-189
                                                    (lambda ()
                                                      (syntax-error
-                                                      '"fancy-syntax-case call has invalid syntax"
+                                                      '"syntax-case call has invalid syntax"
                                                       stx-188)))
                                                (let (failure-cc-189
                                                      (lambda ()
@@ -691,7 +691,7 @@
                                                              (cons-list-syntax
                                                               'quote
                                                               (cons-list-syntax
-                                                               '"fancy-syntax-case: the input"
+                                                               '"syntax-case: the input"
                                                                '()
                                                                stx)
                                                               stx)
@@ -751,7 +751,7 @@
                                                stx))))))))
                                      (syntax-error
                                       (list-syntax
-                                       ('"fancy-syntax-case:"
+                                       ('"syntax-case:"
                                         keywords
                                         '"does not look like a list of keywords."
                                         '"did you forget a () between the input and the cases?")

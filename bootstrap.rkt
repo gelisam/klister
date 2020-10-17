@@ -299,7 +299,7 @@
                 (define-macros
                   ([fancy-syntax-case
                     (flet [list-of-keywords? (xs)
-                           (generate-syntax-case fancy-syntax-case xs ()
+                           (generate-syntax-case syntax-case xs ()
                              [()
                               (pure (true))]
                              [(,x ,xs ...)
@@ -308,14 +308,14 @@
                              [_
                               (pure (false))])]
                       (lambda (stx)
-                        (generate-syntax-case fancy-syntax-case stx ()
+                        (generate-syntax-case syntax-case stx ()
                           [(_ ,stx-expr (,keywords ...) ,cases ...)
                            (let [stx-name 'stx]
                              (>>= (list-of-keywords? keywords)
                                (lambda (keywords-are-keywords)
                                  (if keywords-are-keywords
                                      (flet [is-identifier-in-list? (identifier xs)
-                                            (generate-syntax-case fancy-syntax-case xs ()
+                                            (generate-syntax-case syntax-case xs ()
                                               [()
                                                (pure (false))]
                                               [(,x ,xs ...)
@@ -328,9 +328,9 @@
                                              (lambda (keyword)
                                                (is-identifier-in-list? keyword keywords))]
                                          (flet [fancy-case (scrutinee-name case)
-                                                (generate-syntax-case fancy-syntax-case case ()
+                                                (generate-syntax-case syntax-case case ()
                                                   [(,pat ,rhs)
-                                                   (generate-syntax-case fancy-syntax-case pat (fancy-unquote fancy-... fancy-_)
+                                                   (generate-syntax-case syntax-case pat (fancy-unquote fancy-... fancy-_)
                                                      [()
                                                       (pure (generate-quasiquote
                                                               (raw-syntax-case ,scrutinee-name
@@ -354,7 +354,7 @@
                                                                           (failure-cc))
                                                                       stx))
                                                               (syntax-error (list-syntax
-                                                                              ('"fancy-syntax-case: naked symbol"
+                                                                              ('"syntax-case: naked symbol"
                                                                                keyword
                                                                                '"did you mean (unquote symbol)?"
                                                                                '"did you mean to add the symbol to the keyword list?")
@@ -367,7 +367,7 @@
                                                                     ,rhs)
                                                                   stx))
                                                           (syntax-error (list-syntax
-                                                                          ('"fancy-syntax-case: the syntax for binding values is (unquote x), found"
+                                                                          ('"syntax-case: the syntax for binding values is (unquote x), found"
                                                                            pat
                                                                            '"instead")
                                                                           stx)
@@ -379,7 +379,7 @@
                                                                     ,rhs)
                                                                   stx))
                                                           (syntax-error (list-syntax
-                                                                          ('"fancy-syntax-case: the syntax for binding lists is (,x ...), found"
+                                                                          ('"syntax-case: the syntax for binding lists is (,x ...), found"
                                                                            pat
                                                                            '"instead")
                                                                           stx)
@@ -408,7 +408,7 @@
                                                               (failure-cc)
                                                               stx))])])]
                                            (flet [fancy-cases (cases inner-cases)
-                                                  (generate-syntax-case fancy-syntax-case cases ()
+                                                  (generate-syntax-case syntax-case cases ()
                                                     [()
                                                      (pure inner-cases)]
                                                     [(,case ,cases ...)
@@ -431,7 +431,7 @@
                                                            (let [failure-cc
                                                                  (lambda ()
                                                                    (syntax-error (list-syntax
-                                                                                   ('"fancy-syntax-case: the input"
+                                                                                   ('"syntax-case: the input"
                                                                                     ,stx-name
                                                                                     '"does not match any of the following patterns"
                                                                                     ',(map car cases))
@@ -440,7 +440,7 @@
                                                              ,outer-cases))
                                                          stx))))))))
                                      (syntax-error (list-syntax
-                                                     ('"fancy-syntax-case:"
+                                                     ('"syntax-case:"
                                                       keywords
                                                       '"does not look like a list of keywords."
                                                       '"did you forget a () between the input and the cases?")
