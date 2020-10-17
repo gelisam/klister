@@ -37,672 +37,710 @@
    (flet
     (list-of-keywords?
      (xs)
-     (let (failure-cc-158
-           (lambda ()
-             (syntax-error
-              '"fancy-syntax-case call has invalid syntax"
-              xs)))
-       (let (failure-cc-158
-             (lambda () (pure (false))))
-         (let (failure-cc-158
+     (let (stx-158 xs)
+       (let (failure-cc-159
+             (lambda ()
+               (syntax-error
+                '"fancy-syntax-case call has invalid syntax"
+                stx-158)))
+         (let (failure-cc-159
                (lambda ()
-                 (raw-syntax-case
-                  xs
-                  ((cons
-                    head-159
-                    tail-160)
-                   (let (x head-159)
-                     (let (xs tail-160)
-                       (>>=
-                        (pure
-                         (identifier?
-                          x))
-                        (lambda (guard-approves)
-                          (if guard-approves
-                            (list-of-keywords?
-                             xs)
-                            (failure-cc-158)))))))
-                  (_
-                   (failure-cc-158)))))
-           (let (failure-cc-158
+                 (pure (false))))
+           (let (failure-cc-159
                  (lambda ()
                    (raw-syntax-case
-                    xs
-                    (() (pure (true)))
+                    stx-158
+                    ((cons
+                      head-160
+                      tail-161)
+                     (let (x head-160)
+                       (let (xs
+                             tail-161)
+                         (>>=
+                          (pure
+                           (identifier?
+                            x))
+                          (lambda (guard-approves)
+                            (if guard-approves
+                              (list-of-keywords?
+                               xs)
+                              (failure-cc-159)))))))
                     (_
-                     (failure-cc-158)))))
-             (failure-cc-158))))))
+                     (failure-cc-159)))))
+             (let (failure-cc-159
+                   (lambda ()
+                     (raw-syntax-case
+                      stx-158
+                      (() (pure (true)))
+                      (_
+                       (failure-cc-159)))))
+               (failure-cc-159)))))))
     (lambda (stx)
-      (let (failure-cc-187
-            (lambda ()
-              (syntax-error
-               '"fancy-syntax-case call has invalid syntax"
-               stx)))
-        (let (failure-cc-187
+      (let (stx-192 stx)
+        (let (failure-cc-193
               (lambda ()
-                (raw-syntax-case
-                 stx
-                 ((cons
-                   head-188
-                   tail-189)
+                (syntax-error
+                 '"fancy-syntax-case call has invalid syntax"
+                 stx-192)))
+          (let (failure-cc-193
+                (lambda ()
                   (raw-syntax-case
-                   tail-189
+                   stx-192
                    ((cons
-                     head-190
-                     tail-191)
-                    (let (stx-name
-                          head-190)
-                      (raw-syntax-case
-                       tail-191
-                       ((cons
-                         head-192
-                         tail-193)
-                        (let (keywords
-                              head-192)
-                          (let (cases
-                                tail-193)
-                            (>>=
-                             (list-of-keywords?
-                              keywords)
-                             (lambda (keywords-are-keywords)
-                               (if keywords-are-keywords
-                                 (flet
-                                  (is-identifier-in-list?
-                                   (identifier
-                                    xs)
-                                   (let (failure-cc-161
-                                         (lambda ()
-                                           (syntax-error
-                                            '"fancy-syntax-case call has invalid syntax"
-                                            xs)))
-                                     (let (failure-cc-161
-                                           (lambda ()
-                                             (raw-syntax-case
-                                              xs
-                                              ((cons
-                                                head-162
-                                                tail-163)
-                                               (let (x
-                                                     head-162)
-                                                 (let (xs
-                                                       tail-163)
-                                                   (>>=
-                                                    (free-identifier=?
-                                                     identifier
-                                                     x)
-                                                    (lambda (same-identifier)
-                                                      (if same-identifier
-                                                        (pure
-                                                         (true))
-                                                        (is-identifier-in-list?
-                                                         identifier
-                                                         xs)))))))
-                                              (_
-                                               (failure-cc-161)))))
-                                       (let (failure-cc-161
-                                             (lambda ()
-                                               (raw-syntax-case
-                                                xs
-                                                (()
-                                                 (pure
-                                                  (false)))
-                                                (_
-                                                 (failure-cc-161)))))
-                                         (failure-cc-161)))))
-                                  (let (keyword?
-                                        (lambda (keyword)
-                                          (is-identifier-in-list?
-                                           keyword
-                                           keywords)))
-                                    (flet
-                                     (fancy-case
-                                      (scrutinee-name
-                                       case)
-                                      (let (failure-cc-179
-                                            (lambda ()
-                                              (syntax-error
-                                               '"fancy-syntax-case call has invalid syntax"
-                                               case)))
-                                        (let (failure-cc-179
-                                              (lambda ()
-                                                (raw-syntax-case
-                                                 case
-                                                 ((cons
-                                                   head-180
-                                                   tail-181)
-                                                  (let (pat
-                                                        head-180)
-                                                    (raw-syntax-case
-                                                     tail-181
-                                                     ((cons
-                                                       head-182
-                                                       tail-183)
-                                                      (let (rhs
-                                                            head-182)
-                                                        (raw-syntax-case
-                                                         tail-183
-                                                         (()
-                                                          (let (failure-cc-164
-                                                                (lambda ()
-                                                                  (syntax-error
-                                                                   '"fancy-syntax-case call has invalid syntax"
-                                                                   pat)))
-                                                            (let (failure-cc-164
-                                                                  (lambda ()
-                                                                    (pure
-                                                                     (cons-list-syntax
-                                                                      'failure-cc
-                                                                      '()
-                                                                      stx))))
-                                                              (let (failure-cc-164
-                                                                    (lambda ()
-                                                                      (raw-syntax-case
-                                                                       pat
-                                                                       ((cons
-                                                                         head-177
-                                                                         tail-178)
-                                                                        (let (pat-head
-                                                                              head-177)
-                                                                          (let (pat-tail
-                                                                                tail-178)
-                                                                            (>>=
-                                                                             (make-temporary
-                                                                              'tail)
-                                                                             (lambda (tail-name)
-                                                                               (>>=
-                                                                                (fancy-case
-                                                                                 tail-name
-                                                                                 (pair-list-syntax
-                                                                                  pat-tail
-                                                                                  rhs
-                                                                                  stx))
-                                                                                (lambda (rhs-tail)
-                                                                                  (>>=
-                                                                                   (make-temporary
-                                                                                    'head)
-                                                                                   (lambda (head-name)
-                                                                                     (>>=
-                                                                                      (fancy-case
-                                                                                       head-name
-                                                                                       (pair-list-syntax
-                                                                                        pat-head
-                                                                                        rhs-tail
-                                                                                        stx))
-                                                                                      (lambda (rhs-head)
-                                                                                        (pure
-                                                                                         (cons-list-syntax
-                                                                                          'raw-syntax-case
-                                                                                          (cons-list-syntax
-                                                                                           scrutinee-name
-                                                                                           (cons-list-syntax
-                                                                                            (cons-list-syntax
-                                                                                             (cons-list-syntax
-                                                                                              'cons
-                                                                                              (cons-list-syntax
-                                                                                               head-name
-                                                                                               (cons-list-syntax
-                                                                                                tail-name
-                                                                                                '()
-                                                                                                stx)
-                                                                                               stx)
-                                                                                              stx)
-                                                                                             (cons-list-syntax
-                                                                                              rhs-head
-                                                                                              '()
-                                                                                              stx)
-                                                                                             stx)
-                                                                                            (cons-list-syntax
-                                                                                             (cons-list-syntax
-                                                                                              '_
-                                                                                              (cons-list-syntax
-                                                                                               (cons-list-syntax
-                                                                                                'failure-cc
-                                                                                                '()
-                                                                                                stx)
-                                                                                               '()
-                                                                                               stx)
-                                                                                              stx)
-                                                                                             '()
-                                                                                             stx)
-                                                                                            stx)
-                                                                                           stx)
-                                                                                          stx)))))))))))))
-                                                                       (_
-                                                                        (failure-cc-164)))))
-                                                                (let (failure-cc-164
-                                                                      (lambda ()
-                                                                        (raw-syntax-case
-                                                                         pat
-                                                                         ((cons
-                                                                           head-169
-                                                                           tail-170)
-                                                                          (raw-syntax-case
-                                                                           head-169
-                                                                           ((cons
-                                                                             head-173
-                                                                             tail-174)
-                                                                            (if (identifier?
-                                                                                 head-173)
-                                                                              (>>=
-                                                                               (free-identifier=?
-                                                                                head-173
-                                                                                'fancy-unquote)
-                                                                               (lambda (same-identifier)
-                                                                                 (if same-identifier
-                                                                                   (raw-syntax-case
-                                                                                    tail-174
-                                                                                    ((cons
-                                                                                      head-175
-                                                                                      tail-176)
-                                                                                     (let (x
-                                                                                           head-175)
-                                                                                       (raw-syntax-case
-                                                                                        tail-176
-                                                                                        (()
-                                                                                         (raw-syntax-case
-                                                                                          tail-170
-                                                                                          ((cons
-                                                                                            head-171
-                                                                                            tail-172)
-                                                                                           (if (identifier?
-                                                                                                head-171)
+                     head-194
+                     tail-195)
+                    (raw-syntax-case
+                     tail-195
+                     ((cons
+                       head-196
+                       tail-197)
+                      (let (stx-expr
+                            head-196)
+                        (raw-syntax-case
+                         tail-197
+                         ((cons
+                           head-198
+                           tail-199)
+                          (let (keywords
+                                head-198)
+                            (let (cases
+                                  tail-199)
+                              (let (stx-name
+                                    'stx)
+                                (>>=
+                                 (list-of-keywords?
+                                  keywords)
+                                 (lambda (keywords-are-keywords)
+                                   (if keywords-are-keywords
+                                     (flet
+                                      (is-identifier-in-list?
+                                       (identifier
+                                        xs)
+                                       (let (stx-162
+                                             xs)
+                                         (let (failure-cc-163
+                                               (lambda ()
+                                                 (syntax-error
+                                                  '"fancy-syntax-case call has invalid syntax"
+                                                  stx-162)))
+                                           (let (failure-cc-163
+                                                 (lambda ()
+                                                   (raw-syntax-case
+                                                    stx-162
+                                                    ((cons
+                                                      head-164
+                                                      tail-165)
+                                                     (let (x
+                                                           head-164)
+                                                       (let (xs
+                                                             tail-165)
+                                                         (>>=
+                                                          (free-identifier=?
+                                                           identifier
+                                                           x)
+                                                          (lambda (same-identifier)
+                                                            (if same-identifier
+                                                              (pure
+                                                               (true))
+                                                              (is-identifier-in-list?
+                                                               identifier
+                                                               xs)))))))
+                                                    (_
+                                                     (failure-cc-163)))))
+                                             (let (failure-cc-163
+                                                   (lambda ()
+                                                     (raw-syntax-case
+                                                      stx-162
+                                                      (()
+                                                       (pure
+                                                        (false)))
+                                                      (_
+                                                       (failure-cc-163)))))
+                                               (failure-cc-163))))))
+                                      (let (keyword?
+                                            (lambda (keyword)
+                                              (is-identifier-in-list?
+                                               keyword
+                                               keywords)))
+                                        (flet
+                                         (fancy-case
+                                          (scrutinee-name
+                                           case)
+                                          (let (stx-182
+                                                case)
+                                            (let (failure-cc-183
+                                                  (lambda ()
+                                                    (syntax-error
+                                                     '"fancy-syntax-case call has invalid syntax"
+                                                     stx-182)))
+                                              (let (failure-cc-183
+                                                    (lambda ()
+                                                      (raw-syntax-case
+                                                       stx-182
+                                                       ((cons
+                                                         head-184
+                                                         tail-185)
+                                                        (let (pat
+                                                              head-184)
+                                                          (raw-syntax-case
+                                                           tail-185
+                                                           ((cons
+                                                             head-186
+                                                             tail-187)
+                                                            (let (rhs
+                                                                  head-186)
+                                                              (raw-syntax-case
+                                                               tail-187
+                                                               (()
+                                                                (let (stx-166
+                                                                      pat)
+                                                                  (let (failure-cc-167
+                                                                        (lambda ()
+                                                                          (syntax-error
+                                                                           '"fancy-syntax-case call has invalid syntax"
+                                                                           stx-166)))
+                                                                    (let (failure-cc-167
+                                                                          (lambda ()
+                                                                            (pure
+                                                                             (cons-list-syntax
+                                                                              'failure-cc
+                                                                              '()
+                                                                              stx))))
+                                                                      (let (failure-cc-167
+                                                                            (lambda ()
+                                                                              (raw-syntax-case
+                                                                               stx-166
+                                                                               ((cons
+                                                                                 head-180
+                                                                                 tail-181)
+                                                                                (let (pat-head
+                                                                                      head-180)
+                                                                                  (let (pat-tail
+                                                                                        tail-181)
+                                                                                    (>>=
+                                                                                     (make-temporary
+                                                                                      'tail)
+                                                                                     (lambda (tail-name)
+                                                                                       (>>=
+                                                                                        (fancy-case
+                                                                                         tail-name
+                                                                                         (pair-list-syntax
+                                                                                          pat-tail
+                                                                                          rhs
+                                                                                          stx))
+                                                                                        (lambda (rhs-tail)
+                                                                                          (>>=
+                                                                                           (make-temporary
+                                                                                            'head)
+                                                                                           (lambda (head-name)
                                                                                              (>>=
-                                                                                              (free-identifier=?
-                                                                                               head-171
-                                                                                               'fancy-...)
-                                                                                              (lambda (same-identifier)
-                                                                                                (if same-identifier
-                                                                                                  (raw-syntax-case
-                                                                                                   tail-172
-                                                                                                   (()
-                                                                                                    (if (identifier?
-                                                                                                         x)
-                                                                                                      (pure
+                                                                                              (fancy-case
+                                                                                               head-name
+                                                                                               (pair-list-syntax
+                                                                                                pat-head
+                                                                                                rhs-tail
+                                                                                                stx))
+                                                                                              (lambda (rhs-head)
+                                                                                                (pure
+                                                                                                 (cons-list-syntax
+                                                                                                  'raw-syntax-case
+                                                                                                  (cons-list-syntax
+                                                                                                   scrutinee-name
+                                                                                                   (cons-list-syntax
+                                                                                                    (cons-list-syntax
+                                                                                                     (cons-list-syntax
+                                                                                                      'cons
+                                                                                                      (cons-list-syntax
+                                                                                                       head-name
                                                                                                        (cons-list-syntax
-                                                                                                        'let
+                                                                                                        tail-name
+                                                                                                        '()
+                                                                                                        stx)
+                                                                                                       stx)
+                                                                                                      stx)
+                                                                                                     (cons-list-syntax
+                                                                                                      rhs-head
+                                                                                                      '()
+                                                                                                      stx)
+                                                                                                     stx)
+                                                                                                    (cons-list-syntax
+                                                                                                     (cons-list-syntax
+                                                                                                      '_
+                                                                                                      (cons-list-syntax
+                                                                                                       (cons-list-syntax
+                                                                                                        'failure-cc
+                                                                                                        '()
+                                                                                                        stx)
+                                                                                                       '()
+                                                                                                       stx)
+                                                                                                      stx)
+                                                                                                     '()
+                                                                                                     stx)
+                                                                                                    stx)
+                                                                                                   stx)
+                                                                                                  stx)))))))))))))
+                                                                               (_
+                                                                                (failure-cc-167)))))
+                                                                        (let (failure-cc-167
+                                                                              (lambda ()
+                                                                                (raw-syntax-case
+                                                                                 stx-166
+                                                                                 ((cons
+                                                                                   head-172
+                                                                                   tail-173)
+                                                                                  (raw-syntax-case
+                                                                                   head-172
+                                                                                   ((cons
+                                                                                     head-176
+                                                                                     tail-177)
+                                                                                    (if (identifier?
+                                                                                         head-176)
+                                                                                      (>>=
+                                                                                       (free-identifier=?
+                                                                                        head-176
+                                                                                        'fancy-unquote)
+                                                                                       (lambda (same-identifier)
+                                                                                         (if same-identifier
+                                                                                           (raw-syntax-case
+                                                                                            tail-177
+                                                                                            ((cons
+                                                                                              head-178
+                                                                                              tail-179)
+                                                                                             (let (x
+                                                                                                   head-178)
+                                                                                               (raw-syntax-case
+                                                                                                tail-179
+                                                                                                (()
+                                                                                                 (raw-syntax-case
+                                                                                                  tail-173
+                                                                                                  ((cons
+                                                                                                    head-174
+                                                                                                    tail-175)
+                                                                                                   (if (identifier?
+                                                                                                        head-174)
+                                                                                                     (>>=
+                                                                                                      (free-identifier=?
+                                                                                                       head-174
+                                                                                                       'fancy-...)
+                                                                                                      (lambda (same-identifier)
+                                                                                                        (if same-identifier
+                                                                                                          (raw-syntax-case
+                                                                                                           tail-175
+                                                                                                           (()
+                                                                                                            (if (identifier?
+                                                                                                                 x)
+                                                                                                              (pure
+                                                                                                               (cons-list-syntax
+                                                                                                                'let
+                                                                                                                (cons-list-syntax
+                                                                                                                 (cons-list-syntax
+                                                                                                                  x
+                                                                                                                  (cons-list-syntax
+                                                                                                                   scrutinee-name
+                                                                                                                   '()
+                                                                                                                   stx)
+                                                                                                                  stx)
+                                                                                                                 (cons-list-syntax
+                                                                                                                  rhs
+                                                                                                                  '()
+                                                                                                                  stx)
+                                                                                                                 stx)
+                                                                                                                stx))
+                                                                                                              (syntax-error
+                                                                                                               (list-syntax
+                                                                                                                ('"fancy-syntax-case: the syntax for binding lists is (,x ...), found"
+                                                                                                                 pat
+                                                                                                                 '"instead")
+                                                                                                                stx)
+                                                                                                               stx)))
+                                                                                                           (_
+                                                                                                            (failure-cc-167)))
+                                                                                                          (failure-cc-167))))
+                                                                                                     (failure-cc-167)))
+                                                                                                  (_
+                                                                                                   (failure-cc-167))))
+                                                                                                (_
+                                                                                                 (failure-cc-167)))))
+                                                                                            (_
+                                                                                             (failure-cc-167)))
+                                                                                           (failure-cc-167))))
+                                                                                      (failure-cc-167)))
+                                                                                   (_
+                                                                                    (failure-cc-167))))
+                                                                                 (_
+                                                                                  (failure-cc-167)))))
+                                                                          (let (failure-cc-167
+                                                                                (lambda ()
+                                                                                  (raw-syntax-case
+                                                                                   stx-166
+                                                                                   ((cons
+                                                                                     head-168
+                                                                                     tail-169)
+                                                                                    (if (identifier?
+                                                                                         head-168)
+                                                                                      (>>=
+                                                                                       (free-identifier=?
+                                                                                        head-168
+                                                                                        'fancy-unquote)
+                                                                                       (lambda (same-identifier)
+                                                                                         (if same-identifier
+                                                                                           (raw-syntax-case
+                                                                                            tail-169
+                                                                                            ((cons
+                                                                                              head-170
+                                                                                              tail-171)
+                                                                                             (let (x
+                                                                                                   head-170)
+                                                                                               (raw-syntax-case
+                                                                                                tail-171
+                                                                                                (()
+                                                                                                 (if (identifier?
+                                                                                                      x)
+                                                                                                   (pure
+                                                                                                    (cons-list-syntax
+                                                                                                     'let
+                                                                                                     (cons-list-syntax
+                                                                                                      (cons-list-syntax
+                                                                                                       x
+                                                                                                       (cons-list-syntax
+                                                                                                        scrutinee-name
+                                                                                                        '()
+                                                                                                        stx)
+                                                                                                       stx)
+                                                                                                      (cons-list-syntax
+                                                                                                       rhs
+                                                                                                       '()
+                                                                                                       stx)
+                                                                                                      stx)
+                                                                                                     stx))
+                                                                                                   (syntax-error
+                                                                                                    (list-syntax
+                                                                                                     ('"fancy-syntax-case: the syntax for binding values is (unquote x), found"
+                                                                                                      pat
+                                                                                                      '"instead")
+                                                                                                     stx)
+                                                                                                    stx)))
+                                                                                                (_
+                                                                                                 (failure-cc-167)))))
+                                                                                            (_
+                                                                                             (failure-cc-167)))
+                                                                                           (failure-cc-167))))
+                                                                                      (failure-cc-167)))
+                                                                                   (_
+                                                                                    (failure-cc-167)))))
+                                                                            (let (failure-cc-167
+                                                                                  (lambda ()
+                                                                                    (let (keyword
+                                                                                          stx-166)
+                                                                                      (>>=
+                                                                                       (pure
+                                                                                        (identifier?
+                                                                                         keyword))
+                                                                                       (lambda (guard-approves)
+                                                                                         (if guard-approves
+                                                                                           (>>=
+                                                                                            (keyword?
+                                                                                             keyword)
+                                                                                            (lambda (is-keyword)
+                                                                                              (if is-keyword
+                                                                                                (pure
+                                                                                                 (cons-list-syntax
+                                                                                                  'if
+                                                                                                  (cons-list-syntax
+                                                                                                   (cons-list-syntax
+                                                                                                    'identifier?
+                                                                                                    (cons-list-syntax
+                                                                                                     scrutinee-name
+                                                                                                     '()
+                                                                                                     stx)
+                                                                                                    stx)
+                                                                                                   (cons-list-syntax
+                                                                                                    (cons-list-syntax
+                                                                                                     '>>=
+                                                                                                     (cons-list-syntax
+                                                                                                      (cons-list-syntax
+                                                                                                       'free-identifier=?
+                                                                                                       (cons-list-syntax
+                                                                                                        scrutinee-name
                                                                                                         (cons-list-syntax
                                                                                                          (cons-list-syntax
-                                                                                                          x
+                                                                                                          'quote
                                                                                                           (cons-list-syntax
-                                                                                                           scrutinee-name
+                                                                                                           keyword
                                                                                                            '()
                                                                                                            stx)
                                                                                                           stx)
+                                                                                                         '()
+                                                                                                         stx)
+                                                                                                        stx)
+                                                                                                       stx)
+                                                                                                      (cons-list-syntax
+                                                                                                       (cons-list-syntax
+                                                                                                        'lambda
+                                                                                                        (cons-list-syntax
                                                                                                          (cons-list-syntax
-                                                                                                          rhs
+                                                                                                          'same-identifier
+                                                                                                          '()
+                                                                                                          stx)
+                                                                                                         (cons-list-syntax
+                                                                                                          (cons-list-syntax
+                                                                                                           'if
+                                                                                                           (cons-list-syntax
+                                                                                                            'same-identifier
+                                                                                                            (cons-list-syntax
+                                                                                                             rhs
+                                                                                                             (cons-list-syntax
+                                                                                                              (cons-list-syntax
+                                                                                                               'failure-cc
+                                                                                                               '()
+                                                                                                               stx)
+                                                                                                              '()
+                                                                                                              stx)
+                                                                                                             stx)
+                                                                                                            stx)
+                                                                                                           stx)
                                                                                                           '()
                                                                                                           stx)
                                                                                                          stx)
-                                                                                                        stx))
-                                                                                                      (syntax-error
-                                                                                                       (list-syntax
-                                                                                                        ('"fancy-syntax-case: the syntax for binding lists is (,x ...), found"
-                                                                                                         pat
-                                                                                                         '"instead")
                                                                                                         stx)
-                                                                                                       stx)))
-                                                                                                   (_
-                                                                                                    (failure-cc-164)))
-                                                                                                  (failure-cc-164))))
-                                                                                             (failure-cc-164)))
-                                                                                          (_
-                                                                                           (failure-cc-164))))
-                                                                                        (_
-                                                                                         (failure-cc-164)))))
-                                                                                    (_
-                                                                                     (failure-cc-164)))
-                                                                                   (failure-cc-164))))
-                                                                              (failure-cc-164)))
-                                                                           (_
-                                                                            (failure-cc-164))))
-                                                                         (_
-                                                                          (failure-cc-164)))))
-                                                                  (let (failure-cc-164
-                                                                        (lambda ()
-                                                                          (raw-syntax-case
-                                                                           pat
-                                                                           ((cons
-                                                                             head-165
-                                                                             tail-166)
-                                                                            (if (identifier?
-                                                                                 head-165)
-                                                                              (>>=
-                                                                               (free-identifier=?
-                                                                                head-165
-                                                                                'fancy-unquote)
-                                                                               (lambda (same-identifier)
-                                                                                 (if same-identifier
-                                                                                   (raw-syntax-case
-                                                                                    tail-166
-                                                                                    ((cons
-                                                                                      head-167
-                                                                                      tail-168)
-                                                                                     (let (x
-                                                                                           head-167)
-                                                                                       (raw-syntax-case
-                                                                                        tail-168
-                                                                                        (()
-                                                                                         (if (identifier?
-                                                                                              x)
-                                                                                           (pure
+                                                                                                       '()
+                                                                                                       stx)
+                                                                                                      stx)
+                                                                                                     stx)
+                                                                                                    (cons-list-syntax
+                                                                                                     (cons-list-syntax
+                                                                                                      'failure-cc
+                                                                                                      '()
+                                                                                                      stx)
+                                                                                                     '()
+                                                                                                     stx)
+                                                                                                    stx)
+                                                                                                   stx)
+                                                                                                  stx))
+                                                                                                (syntax-error
+                                                                                                 (list-syntax
+                                                                                                  ('"fancy-syntax-case: naked symbol"
+                                                                                                   keyword
+                                                                                                   '"did you mean (unquote symbol)?"
+                                                                                                   '"did you mean to add the symbol to the keyword list?")
+                                                                                                  stx)
+                                                                                                 stx))))
+                                                                                           (failure-cc-167)))))))
+                                                                              (let (failure-cc-167
+                                                                                    (lambda ()
+                                                                                      (if (identifier?
+                                                                                           stx-166)
+                                                                                        (>>=
+                                                                                         (free-identifier=?
+                                                                                          stx-166
+                                                                                          'fancy-_)
+                                                                                         (lambda (same-identifier)
+                                                                                           (if same-identifier
+                                                                                             (pure
+                                                                                              rhs)
+                                                                                             (failure-cc-167))))
+                                                                                        (failure-cc-167))))
+                                                                                (let (failure-cc-167
+                                                                                      (lambda ()
+                                                                                        (raw-syntax-case
+                                                                                         stx-166
+                                                                                         (()
+                                                                                          (pure
+                                                                                           (cons-list-syntax
+                                                                                            'raw-syntax-case
                                                                                             (cons-list-syntax
-                                                                                             'let
+                                                                                             scrutinee-name
                                                                                              (cons-list-syntax
                                                                                               (cons-list-syntax
-                                                                                               x
+                                                                                               '()
                                                                                                (cons-list-syntax
-                                                                                                scrutinee-name
+                                                                                                rhs
                                                                                                 '()
                                                                                                 stx)
                                                                                                stx)
                                                                                               (cons-list-syntax
-                                                                                               rhs
-                                                                                               '()
-                                                                                               stx)
-                                                                                              stx)
-                                                                                             stx))
-                                                                                           (syntax-error
-                                                                                            (list-syntax
-                                                                                             ('"fancy-syntax-case: the syntax for binding values is (unquote x), found"
-                                                                                              pat
-                                                                                              '"instead")
-                                                                                             stx)
-                                                                                            stx)))
-                                                                                        (_
-                                                                                         (failure-cc-164)))))
-                                                                                    (_
-                                                                                     (failure-cc-164)))
-                                                                                   (failure-cc-164))))
-                                                                              (failure-cc-164)))
-                                                                           (_
-                                                                            (failure-cc-164)))))
-                                                                    (let (failure-cc-164
-                                                                          (lambda ()
-                                                                            (let (keyword
-                                                                                  pat)
-                                                                              (>>=
-                                                                               (pure
-                                                                                (identifier?
-                                                                                 keyword))
-                                                                               (lambda (guard-approves)
-                                                                                 (if guard-approves
-                                                                                   (>>=
-                                                                                    (keyword?
-                                                                                     keyword)
-                                                                                    (lambda (is-keyword)
-                                                                                      (if is-keyword
-                                                                                        (pure
-                                                                                         (cons-list-syntax
-                                                                                          'if
-                                                                                          (cons-list-syntax
-                                                                                           (cons-list-syntax
-                                                                                            'identifier?
-                                                                                            (cons-list-syntax
-                                                                                             scrutinee-name
-                                                                                             '()
-                                                                                             stx)
-                                                                                            stx)
-                                                                                           (cons-list-syntax
-                                                                                            (cons-list-syntax
-                                                                                             '>>=
-                                                                                             (cons-list-syntax
-                                                                                              (cons-list-syntax
-                                                                                               'free-identifier=?
                                                                                                (cons-list-syntax
-                                                                                                scrutinee-name
+                                                                                                '_
                                                                                                 (cons-list-syntax
                                                                                                  (cons-list-syntax
-                                                                                                  'quote
-                                                                                                  (cons-list-syntax
-                                                                                                   keyword
-                                                                                                   '()
-                                                                                                   stx)
+                                                                                                  'failure-cc
+                                                                                                  '()
                                                                                                   stx)
                                                                                                  '()
                                                                                                  stx)
                                                                                                 stx)
-                                                                                               stx)
-                                                                                              (cons-list-syntax
-                                                                                               (cons-list-syntax
-                                                                                                'lambda
-                                                                                                (cons-list-syntax
-                                                                                                 (cons-list-syntax
-                                                                                                  'same-identifier
-                                                                                                  '()
-                                                                                                  stx)
-                                                                                                 (cons-list-syntax
-                                                                                                  (cons-list-syntax
-                                                                                                   'if
-                                                                                                   (cons-list-syntax
-                                                                                                    'same-identifier
-                                                                                                    (cons-list-syntax
-                                                                                                     rhs
-                                                                                                     (cons-list-syntax
-                                                                                                      (cons-list-syntax
-                                                                                                       'failure-cc
-                                                                                                       '()
-                                                                                                       stx)
-                                                                                                      '()
-                                                                                                      stx)
-                                                                                                     stx)
-                                                                                                    stx)
-                                                                                                   stx)
-                                                                                                  '()
-                                                                                                  stx)
-                                                                                                 stx)
-                                                                                                stx)
                                                                                                '()
                                                                                                stx)
                                                                                               stx)
                                                                                              stx)
-                                                                                            (cons-list-syntax
-                                                                                             (cons-list-syntax
-                                                                                              'failure-cc
-                                                                                              '()
-                                                                                              stx)
-                                                                                             '()
-                                                                                             stx)
-                                                                                            stx)
-                                                                                           stx)
-                                                                                          stx))
-                                                                                        (syntax-error
-                                                                                         (list-syntax
-                                                                                          ('"fancy-syntax-case: naked symbol"
-                                                                                           keyword
-                                                                                           '"did you mean (unquote symbol)?"
-                                                                                           '"did you mean to add the symbol to the keyword list?")
-                                                                                          stx)
-                                                                                         stx))))
-                                                                                   (failure-cc-164)))))))
-                                                                      (let (failure-cc-164
-                                                                            (lambda ()
-                                                                              (if (identifier?
-                                                                                   pat)
-                                                                                (>>=
-                                                                                 (free-identifier=?
-                                                                                  pat
-                                                                                  'fancy-_)
-                                                                                 (lambda (same-identifier)
-                                                                                   (if same-identifier
-                                                                                     (pure
-                                                                                      rhs)
-                                                                                     (failure-cc-164))))
-                                                                                (failure-cc-164))))
-                                                                        (let (failure-cc-164
-                                                                              (lambda ()
-                                                                                (raw-syntax-case
-                                                                                 pat
-                                                                                 (()
-                                                                                  (pure
-                                                                                   (cons-list-syntax
-                                                                                    'raw-syntax-case
-                                                                                    (cons-list-syntax
-                                                                                     scrutinee-name
-                                                                                     (cons-list-syntax
-                                                                                      (cons-list-syntax
-                                                                                       '()
-                                                                                       (cons-list-syntax
-                                                                                        rhs
-                                                                                        '()
-                                                                                        stx)
-                                                                                       stx)
-                                                                                      (cons-list-syntax
-                                                                                       (cons-list-syntax
-                                                                                        '_
-                                                                                        (cons-list-syntax
-                                                                                         (cons-list-syntax
-                                                                                          'failure-cc
-                                                                                          '()
-                                                                                          stx)
-                                                                                         '()
-                                                                                         stx)
-                                                                                        stx)
-                                                                                       '()
-                                                                                       stx)
-                                                                                      stx)
-                                                                                     stx)
-                                                                                    stx)))
-                                                                                 (_
-                                                                                  (failure-cc-164)))))
-                                                                          (failure-cc-164))))))))))
-                                                         (_
-                                                          (failure-cc-179)))))
-                                                     (_
-                                                      (failure-cc-179)))))
-                                                 (_
-                                                  (failure-cc-179)))))
-                                          (failure-cc-179))))
-                                     (flet
-                                      (fancy-cases
-                                       (cases
-                                        inner-cases)
-                                       (let (failure-cc-184
-                                             (lambda ()
-                                               (syntax-error
-                                                '"fancy-syntax-case call has invalid syntax"
-                                                cases)))
-                                         (let (failure-cc-184
-                                               (lambda ()
-                                                 (raw-syntax-case
-                                                  cases
-                                                  ((cons
-                                                    head-185
-                                                    tail-186)
-                                                   (let (case
-                                                         head-185)
-                                                     (let (cases
-                                                           tail-186)
-                                                       (>>=
-                                                        (fancy-case
-                                                         stx-name
-                                                         case)
-                                                        (lambda (inner-case)
-                                                          (fancy-cases
-                                                           cases
+                                                                                            stx)))
+                                                                                         (_
+                                                                                          (failure-cc-167)))))
+                                                                                  (failure-cc-167)))))))))))
+                                                               (_
+                                                                (failure-cc-183)))))
+                                                           (_
+                                                            (failure-cc-183)))))
+                                                       (_
+                                                        (failure-cc-183)))))
+                                                (failure-cc-183)))))
+                                         (flet
+                                          (fancy-cases
+                                           (cases
+                                            inner-cases)
+                                           (let (stx-188
+                                                 cases)
+                                             (let (failure-cc-189
+                                                   (lambda ()
+                                                     (syntax-error
+                                                      '"fancy-syntax-case call has invalid syntax"
+                                                      stx-188)))
+                                               (let (failure-cc-189
+                                                     (lambda ()
+                                                       (raw-syntax-case
+                                                        stx-188
+                                                        ((cons
+                                                          head-190
+                                                          tail-191)
+                                                         (let (case
+                                                               head-190)
+                                                           (let (cases
+                                                                 tail-191)
+                                                             (>>=
+                                                              (fancy-case
+                                                               stx-name
+                                                               case)
+                                                              (lambda (inner-case)
+                                                                (fancy-cases
+                                                                 cases
+                                                                 (cons-list-syntax
+                                                                  'let
+                                                                  (cons-list-syntax
+                                                                   (cons-list-syntax
+                                                                    'failure-cc
+                                                                    (cons-list-syntax
+                                                                     (cons-list-syntax
+                                                                      'lambda
+                                                                      (cons-list-syntax
+                                                                       '()
+                                                                       (cons-list-syntax
+                                                                        inner-case
+                                                                        '()
+                                                                        stx)
+                                                                       stx)
+                                                                      stx)
+                                                                     '()
+                                                                     stx)
+                                                                    stx)
+                                                                   (cons-list-syntax
+                                                                    inner-cases
+                                                                    '()
+                                                                    stx)
+                                                                   stx)
+                                                                  stx)))))))
+                                                        (_
+                                                         (failure-cc-189)))))
+                                                 (let (failure-cc-189
+                                                       (lambda ()
+                                                         (raw-syntax-case
+                                                          stx-188
+                                                          (()
+                                                           (pure
+                                                            inner-cases))
+                                                          (_
+                                                           (failure-cc-189)))))
+                                                   (failure-cc-189))))))
+                                          (>>=
+                                           (fancy-cases
+                                            cases
+                                            (cons-list-syntax
+                                             'failure-cc
+                                             '()
+                                             stx))
+                                           (lambda (outer-cases)
+                                             (pure
+                                              (cons-list-syntax
+                                               'let
+                                               (cons-list-syntax
+                                                (cons-list-syntax
+                                                 stx-name
+                                                 (cons-list-syntax
+                                                  stx-expr
+                                                  '()
+                                                  stx)
+                                                 stx)
+                                                (cons-list-syntax
+                                                 (cons-list-syntax
+                                                  'let
+                                                  (cons-list-syntax
+                                                   (cons-list-syntax
+                                                    'failure-cc
+                                                    (cons-list-syntax
+                                                     (cons-list-syntax
+                                                      'lambda
+                                                      (cons-list-syntax
+                                                       '()
+                                                       (cons-list-syntax
+                                                        (cons-list-syntax
+                                                         'syntax-error
+                                                         (cons-list-syntax
+                                                          (cons-list-syntax
+                                                           'list-syntax
                                                            (cons-list-syntax
-                                                            'let
                                                             (cons-list-syntax
                                                              (cons-list-syntax
-                                                              'failure-cc
+                                                              'quote
                                                               (cons-list-syntax
-                                                               (cons-list-syntax
-                                                                'lambda
-                                                                (cons-list-syntax
-                                                                 '()
-                                                                 (cons-list-syntax
-                                                                  inner-case
-                                                                  '()
-                                                                  stx)
-                                                                 stx)
-                                                                stx)
+                                                               '"fancy-syntax-case: the input"
                                                                '()
                                                                stx)
                                                               stx)
                                                              (cons-list-syntax
-                                                              inner-cases
-                                                              '()
+                                                              stx-name
+                                                              (cons-list-syntax
+                                                               (cons-list-syntax
+                                                                'quote
+                                                                (cons-list-syntax
+                                                                 '"does not match any of the following patterns"
+                                                                 '()
+                                                                 stx)
+                                                                stx)
+                                                               (cons-list-syntax
+                                                                (cons-list-syntax
+                                                                 'quote
+                                                                 (cons-list-syntax
+                                                                  (map
+                                                                   car
+                                                                   cases)
+                                                                  '()
+                                                                  stx)
+                                                                 stx)
+                                                                '()
+                                                                stx)
+                                                               stx)
                                                               stx)
                                                              stx)
-                                                            stx)))))))
-                                                  (_
-                                                   (failure-cc-184)))))
-                                           (let (failure-cc-184
-                                                 (lambda ()
-                                                   (raw-syntax-case
-                                                    cases
-                                                    (()
-                                                     (pure
-                                                      inner-cases))
-                                                    (_
-                                                     (failure-cc-184)))))
-                                             (failure-cc-184)))))
-                                      (>>=
-                                       (fancy-cases
-                                        cases
-                                        (cons-list-syntax
-                                         'failure-cc
-                                         '()
-                                         stx))
-                                       (lambda (outer-cases)
-                                         (pure
-                                          (cons-list-syntax
-                                           'let
-                                           (cons-list-syntax
-                                            (cons-list-syntax
-                                             'failure-cc
-                                             (cons-list-syntax
-                                              (cons-list-syntax
-                                               'lambda
-                                               (cons-list-syntax
-                                                '()
-                                                (cons-list-syntax
-                                                 (cons-list-syntax
-                                                  'syntax-error
-                                                  (cons-list-syntax
-                                                   (cons-list-syntax
-                                                    'list-syntax
-                                                    (cons-list-syntax
-                                                     (cons-list-syntax
-                                                      (cons-list-syntax
-                                                       'quote
-                                                       (cons-list-syntax
-                                                        '"fancy-syntax-case: the input"
-                                                        '()
-                                                        stx)
-                                                       stx)
-                                                      (cons-list-syntax
-                                                       stx-name
-                                                       (cons-list-syntax
-                                                        (cons-list-syntax
-                                                         'quote
-                                                         (cons-list-syntax
-                                                          '"does not match any of the following patterns"
-                                                          '()
-                                                          stx)
-                                                         stx)
-                                                        (cons-list-syntax
-                                                         (cons-list-syntax
-                                                          'quote
+                                                            (cons-list-syntax
+                                                             'stx
+                                                             '()
+                                                             stx)
+                                                            stx)
+                                                           stx)
                                                           (cons-list-syntax
-                                                           (map
-                                                            car
-                                                            cases)
+                                                           'stx
                                                            '()
                                                            stx)
                                                           stx)
-                                                         '()
                                                          stx)
+                                                        '()
                                                         stx)
                                                        stx)
                                                       stx)
-                                                     (cons-list-syntax
-                                                      stx-name
-                                                      '()
-                                                      stx)
+                                                     '()
                                                      stx)
                                                     stx)
                                                    (cons-list-syntax
-                                                    stx-name
+                                                    outer-cases
                                                     '()
                                                     stx)
                                                    stx)
@@ -710,234 +748,231 @@
                                                  '()
                                                  stx)
                                                 stx)
-                                               stx)
-                                              '()
-                                              stx)
-                                             stx)
-                                            (cons-list-syntax
-                                             outer-cases
-                                             '()
-                                             stx)
-                                            stx)
-                                           stx))))))))
-                                 (syntax-error
-                                  (list-syntax
-                                   ('"fancy-syntax-case:"
-                                    keywords
-                                    '"does not look like a list of keywords."
-                                    '"did you forget a () between the input and the cases?")
-                                   stx-name))))))))
-                       (_
-                        (failure-cc-187)))))
+                                               stx))))))))
+                                     (syntax-error
+                                      (list-syntax
+                                       ('"fancy-syntax-case:"
+                                        keywords
+                                        '"does not look like a list of keywords."
+                                        '"did you forget a () between the input and the cases?")
+                                       stx)))))))))
+                         (_
+                          (failure-cc-193)))))
+                     (_
+                      (failure-cc-193))))
                    (_
-                    (failure-cc-187))))
-                 (_ (failure-cc-187)))))
-          (failure-cc-187))))))
+                    (failure-cc-193)))))
+            (failure-cc-193)))))))
   (fancy-quasiquote
    (lambda (stx)
-     (let (failure-cc-209
-           (lambda ()
-             (syntax-error
-              '"fancy-quasiquote call has invalid syntax"
-              stx)))
-       (let (failure-cc-209
+     (let (stx-216 stx)
+       (let (failure-cc-217
              (lambda ()
-               (raw-syntax-case
-                stx
-                ((cons
-                  head-210
-                  tail-211)
+               (syntax-error
+                '"fancy-quasiquote call has invalid syntax"
+                stx-216)))
+         (let (failure-cc-217
+               (lambda ()
                  (raw-syntax-case
-                  tail-211
+                  stx-216
                   ((cons
-                    head-212
-                    tail-213)
-                   (let (pat head-212)
-                     (raw-syntax-case
-                      tail-213
-                      (()
-                       (let (stx-name
-                             (cons-list-syntax
-                              'quote
-                              (cons-list-syntax
-                               (replace-loc
-                                pat
-                                'here)
-                               '()
-                               'here)
-                              'here))
-                         (flet
-                          (fancy-inside
-                           (pat)
-                           (let (failure-cc-194
-                                 (lambda ()
-                                   (syntax-error
-                                    '"fancy-quasiquote call has invalid syntax"
-                                    pat)))
-                             (let (failure-cc-194
-                                   (lambda ()
-                                     (let (x
-                                           pat)
-                                       (pure
-                                        (pair-list-syntax
-                                         'quote
-                                         x
-                                         stx)))))
-                               (let (failure-cc-194
+                    head-218
+                    tail-219)
+                   (raw-syntax-case
+                    tail-219
+                    ((cons
+                      head-220
+                      tail-221)
+                     (let (pat head-220)
+                       (raw-syntax-case
+                        tail-221
+                        (()
+                         (let (stx-name
+                               (cons-list-syntax
+                                'quote
+                                (cons-list-syntax
+                                 (replace-loc
+                                  pat
+                                  'here)
+                                 '()
+                                 'here)
+                                'here))
+                           (flet
+                            (fancy-inside
+                             (pat)
+                             (let (stx-200
+                                   pat)
+                               (let (failure-cc-201
                                      (lambda ()
-                                       (raw-syntax-case
-                                        pat
-                                        ((cons
-                                          head-207
-                                          tail-208)
-                                         (let (head
-                                               head-207)
-                                           (let (tail
-                                                 tail-208)
-                                             (>>=
-                                              (fancy-inside
-                                               head)
-                                              (lambda (inside-head)
-                                                (>>=
-                                                 (fancy-inside
-                                                  tail)
-                                                 (lambda (inside-tail)
-                                                   (pure
-                                                    (cons-list-syntax
-                                                     'cons-list-syntax
-                                                     (cons-list-syntax
-                                                      inside-head
-                                                      (cons-list-syntax
-                                                       inside-tail
-                                                       (cons-list-syntax
-                                                        stx-name
-                                                        '()
-                                                        stx)
-                                                       stx)
-                                                      stx)
-                                                     stx)))))))))
-                                        (_
-                                         (failure-cc-194)))))
-                                 (let (failure-cc-194
+                                       (syntax-error
+                                        '"fancy-quasiquote call has invalid syntax"
+                                        stx-200)))
+                                 (let (failure-cc-201
                                        (lambda ()
-                                         (raw-syntax-case
-                                          pat
-                                          ((cons
-                                            head-199
-                                            tail-200)
-                                           (raw-syntax-case
-                                            head-199
-                                            ((cons
-                                              head-203
-                                              tail-204)
-                                             (if (identifier?
-                                                  head-203)
-                                               (>>=
-                                                (free-identifier=?
-                                                 head-203
-                                                 'fancy-unquote)
-                                                (lambda (same-identifier)
-                                                  (if same-identifier
-                                                    (raw-syntax-case
-                                                     tail-204
-                                                     ((cons
-                                                       head-205
-                                                       tail-206)
-                                                      (let (head
-                                                            head-205)
-                                                        (raw-syntax-case
-                                                         tail-206
-                                                         (()
-                                                          (raw-syntax-case
-                                                           tail-200
-                                                           ((cons
-                                                             head-201
-                                                             tail-202)
-                                                            (if (identifier?
-                                                                 head-201)
-                                                              (>>=
-                                                               (free-identifier=?
-                                                                head-201
-                                                                'fancy-...)
-                                                               (lambda (same-identifier)
-                                                                 (if same-identifier
-                                                                   (let (tail
-                                                                         tail-202)
-                                                                     (>>=
-                                                                      (fancy-inside
-                                                                       tail)
-                                                                      (lambda (inside-tail)
-                                                                        (pure
-                                                                         (cons-list-syntax
-                                                                          'append-list-syntax
-                                                                          (cons-list-syntax
-                                                                           head
-                                                                           (cons-list-syntax
-                                                                            inside-tail
-                                                                            (cons-list-syntax
-                                                                             stx-name
-                                                                             '()
-                                                                             stx)
-                                                                            stx)
-                                                                           stx)
-                                                                          stx)))))
-                                                                   (failure-cc-194))))
-                                                              (failure-cc-194)))
-                                                           (_
-                                                            (failure-cc-194))))
-                                                         (_
-                                                          (failure-cc-194)))))
-                                                     (_
-                                                      (failure-cc-194)))
-                                                    (failure-cc-194))))
-                                               (failure-cc-194)))
-                                            (_
-                                             (failure-cc-194))))
-                                          (_
-                                           (failure-cc-194)))))
-                                   (let (failure-cc-194
+                                         (let (x
+                                               stx-200)
+                                           (pure
+                                            (pair-list-syntax
+                                             'quote
+                                             x
+                                             stx)))))
+                                   (let (failure-cc-201
                                          (lambda ()
                                            (raw-syntax-case
-                                            pat
+                                            stx-200
                                             ((cons
-                                              head-195
-                                              tail-196)
-                                             (if (identifier?
-                                                  head-195)
-                                               (>>=
-                                                (free-identifier=?
-                                                 head-195
-                                                 'fancy-unquote)
-                                                (lambda (same-identifier)
-                                                  (if same-identifier
-                                                    (raw-syntax-case
-                                                     tail-196
-                                                     ((cons
-                                                       head-197
-                                                       tail-198)
-                                                      (let (x
-                                                            head-197)
-                                                        (raw-syntax-case
-                                                         tail-198
-                                                         (()
-                                                          (pure
-                                                           x))
-                                                         (_
-                                                          (failure-cc-194)))))
-                                                     (_
-                                                      (failure-cc-194)))
-                                                    (failure-cc-194))))
-                                               (failure-cc-194)))
+                                              head-214
+                                              tail-215)
+                                             (let (head
+                                                   head-214)
+                                               (let (tail
+                                                     tail-215)
+                                                 (>>=
+                                                  (fancy-inside
+                                                   head)
+                                                  (lambda (inside-head)
+                                                    (>>=
+                                                     (fancy-inside
+                                                      tail)
+                                                     (lambda (inside-tail)
+                                                       (pure
+                                                        (cons-list-syntax
+                                                         'cons-list-syntax
+                                                         (cons-list-syntax
+                                                          inside-head
+                                                          (cons-list-syntax
+                                                           inside-tail
+                                                           (cons-list-syntax
+                                                            stx-name
+                                                            '()
+                                                            stx)
+                                                           stx)
+                                                          stx)
+                                                         stx)))))))))
                                             (_
-                                             (failure-cc-194)))))
-                                     (failure-cc-194)))))))
-                          (fancy-inside
-                           pat))))
-                      (_
-                       (failure-cc-209)))))
-                  (_ (failure-cc-209))))
-                (_ (failure-cc-209)))))
-         (failure-cc-209)))))))
+                                             (failure-cc-201)))))
+                                     (let (failure-cc-201
+                                           (lambda ()
+                                             (raw-syntax-case
+                                              stx-200
+                                              ((cons
+                                                head-206
+                                                tail-207)
+                                               (raw-syntax-case
+                                                head-206
+                                                ((cons
+                                                  head-210
+                                                  tail-211)
+                                                 (if (identifier?
+                                                      head-210)
+                                                   (>>=
+                                                    (free-identifier=?
+                                                     head-210
+                                                     'fancy-unquote)
+                                                    (lambda (same-identifier)
+                                                      (if same-identifier
+                                                        (raw-syntax-case
+                                                         tail-211
+                                                         ((cons
+                                                           head-212
+                                                           tail-213)
+                                                          (let (head
+                                                                head-212)
+                                                            (raw-syntax-case
+                                                             tail-213
+                                                             (()
+                                                              (raw-syntax-case
+                                                               tail-207
+                                                               ((cons
+                                                                 head-208
+                                                                 tail-209)
+                                                                (if (identifier?
+                                                                     head-208)
+                                                                  (>>=
+                                                                   (free-identifier=?
+                                                                    head-208
+                                                                    'fancy-...)
+                                                                   (lambda (same-identifier)
+                                                                     (if same-identifier
+                                                                       (let (tail
+                                                                             tail-209)
+                                                                         (>>=
+                                                                          (fancy-inside
+                                                                           tail)
+                                                                          (lambda (inside-tail)
+                                                                            (pure
+                                                                             (cons-list-syntax
+                                                                              'append-list-syntax
+                                                                              (cons-list-syntax
+                                                                               head
+                                                                               (cons-list-syntax
+                                                                                inside-tail
+                                                                                (cons-list-syntax
+                                                                                 stx-name
+                                                                                 '()
+                                                                                 stx)
+                                                                                stx)
+                                                                               stx)
+                                                                              stx)))))
+                                                                       (failure-cc-201))))
+                                                                  (failure-cc-201)))
+                                                               (_
+                                                                (failure-cc-201))))
+                                                             (_
+                                                              (failure-cc-201)))))
+                                                         (_
+                                                          (failure-cc-201)))
+                                                        (failure-cc-201))))
+                                                   (failure-cc-201)))
+                                                (_
+                                                 (failure-cc-201))))
+                                              (_
+                                               (failure-cc-201)))))
+                                       (let (failure-cc-201
+                                             (lambda ()
+                                               (raw-syntax-case
+                                                stx-200
+                                                ((cons
+                                                  head-202
+                                                  tail-203)
+                                                 (if (identifier?
+                                                      head-202)
+                                                   (>>=
+                                                    (free-identifier=?
+                                                     head-202
+                                                     'fancy-unquote)
+                                                    (lambda (same-identifier)
+                                                      (if same-identifier
+                                                        (raw-syntax-case
+                                                         tail-203
+                                                         ((cons
+                                                           head-204
+                                                           tail-205)
+                                                          (let (x
+                                                                head-204)
+                                                            (raw-syntax-case
+                                                             tail-205
+                                                             (()
+                                                              (pure
+                                                               x))
+                                                             (_
+                                                              (failure-cc-201)))))
+                                                         (_
+                                                          (failure-cc-201)))
+                                                        (failure-cc-201))))
+                                                   (failure-cc-201)))
+                                                (_
+                                                 (failure-cc-201)))))
+                                         (failure-cc-201))))))))
+                            (fancy-inside
+                             pat))))
+                        (_
+                         (failure-cc-217)))))
+                    (_
+                     (failure-cc-217))))
+                  (_
+                   (failure-cc-217)))))
+           (failure-cc-217))))))))
 
 (export (rename ((fancy-syntax-case
                   syntax-case)
