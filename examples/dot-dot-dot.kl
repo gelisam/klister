@@ -19,21 +19,19 @@
  ((fancy-unquote
    (lambda (stx)
      (syntax-error
-      '"fancy-unquote used out of context"
+      '"unquote used out of context"
       stx)))
   (fancy-...
    (lambda (stx)
      (syntax-error
-      '"fancy-... used out of context"
+      '"... used out of context"
       stx)))
   (fancy-_
    (lambda (stx)
      (syntax-error
-      '"fancy-_ used out of context"
-      stx)))))
-
-(define-macros
- ((fancy-syntax-case
+      '"_ used out of context"
+      stx)))
+  (fancy-syntax-case
    (flet
     (list-of-keywords?
      (xs)

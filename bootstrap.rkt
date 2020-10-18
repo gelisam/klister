@@ -13,30 +13,6 @@
 ; Racket does have convenient syntax-manipulating macros like match,
 ; quasiquote, and racket-syntax-case.
 
-; (generate-define-keywords (list 'foo 'bar))
-; =>
-; '(define-macros
-;    ([foo
-;      (lambda (stx)
-;        (syntax-error '"foo used out of context" stx))]
-;     [bar
-;      (lambda (stx)
-;        (syntax-error '"bar used out of context" stx))]))
-(define (generate-define-keywords keywords)
-  (let* ([error-message
-          (lambda (symbol)
-            (string-append (symbol->string symbol)
-                           " used out of context"))]
-         [undefined-macro
-          (lambda (keyword)
-            `[,keyword
-              (lambda (stx)
-                (syntax-error ',(error-message keyword) stx))])]
-         [undefined-macros
-          (map undefined-macro keywords)])
-    `(define-macros
-       ,undefined-macros)))
-
 ; (generate-syntax-case 'my-macro 'stx (list 'keyword)
 ;   (list
 ;     (list '()
@@ -285,10 +261,12 @@
               '(import (shift "list-syntax.kl" 1))
               '(import (shift "temporaries.kl" 1))
 
-              (generate-define-keywords (list 'fancy-unquote 'fancy-... 'fancy-_))
               (auto-splice
                 (define-macros
-                  ([fancy-syntax-case
+                  ([fancy-unquote (lambda (stx) (syntax-error '"unquote used out of context" stx))]
+                   [fancy-...     (lambda (stx) (syntax-error '"... used out of context" stx))]
+                   [fancy-_       (lambda (stx) (syntax-error '"_ used out of context" stx))]
+                   [fancy-syntax-case
                     (flet [list-of-keywords? (xs)
                            (generate-syntax-case syntax-case xs ()
                              [()
