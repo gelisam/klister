@@ -1,3 +1,5 @@
-#[dot-dot-dot-test.kl:16.17-16.31]<(1 2 3 4)> : Syntax
-#[dot-dot-dot-test.kl:18.17-18.58]<(keyword-prefixed bar baz end-of-list)> : Syntax
-#[dot-dot-dot-test.kl:20.17-20.52]<(ordinary-list foo bar baz end-of-list)> : Syntax
+#[dot-dot-dot-test.kl:17.17-17.31]<(1 2 3 4)> : Syntax
+#[dot-dot-dot-test.kl:20.17-20.75]
+ <(keyword-identifier-prefixed bar baz end-of-list)> : Syntax
+#[dot-dot-dot-test.kl:22.17-22.58]<(keyword-prefixed 3 4 end-of-list)> : Syntax
+#[dot-dot-dot-test.kl:24.17-24.52]<(ordinary-list foo bar baz end-of-list)> : Syntax

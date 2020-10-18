@@ -7,6 +7,7 @@
 (import "dot-dot-dot-test-keywords.kl")
 (import (shift "dot-dot-dot-test-keywords.kl" 1))
 (import (shift "dot-dot-dot.kl" 1))
+(import (shift "identifier.kl" 1))
 
 (define-macros
   ([my-macro
@@ -14,6 +15,9 @@
       (syntax-case stx (keyword)
         [(_ ((,a ,b) (,c ,d)))
          (pure `'(,a ,b ,c ,d))]
+        [(_ (keyword ,head ,tail ...))
+         (pure (identifier? head))
+         (pure `'(keyword-identifier-prefixed ,head ,tail ... end-of-list))]
         [(_ (keyword ,tail ...))
          (pure `'(keyword-prefixed ,tail ... end-of-list))]
         [(_ (,e ...))
@@ -21,4 +25,5 @@
 
 (example (my-macro ((1 2) (3 4))))
 (example (my-macro (keyword bar baz)))
+(example (my-macro (keyword 3 4)))
 (example (my-macro (foo bar baz)))

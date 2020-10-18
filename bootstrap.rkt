@@ -327,118 +327,130 @@
                                        (let [keyword?
                                              (lambda (keyword)
                                                (is-identifier-in-list? keyword keywords))]
-                                         (flet [fancy-case (scrutinee-name case)
-                                                (generate-syntax-case syntax-case case ()
-                                                  [(,pat ,rhs)
-                                                   (generate-syntax-case syntax-case pat (fancy-unquote fancy-... fancy-_)
-                                                     [()
-                                                      (pure (generate-quasiquote
-                                                              (raw-syntax-case ,scrutinee-name
-                                                                [() ,rhs]
-                                                                [_ (failure-cc)])
-                                                              stx))]
-                                                     [fancy-_
-                                                      (pure rhs)]
-                                                     [,keyword
-                                                      (pure (identifier? keyword))
-                                                      (>>= (keyword? keyword)
-                                                        (lambda (is-keyword)
-                                                          (if is-keyword
-                                                              (pure (generate-quasiquote
-                                                                      (if (identifier? ,scrutinee-name)
-                                                                          (>>= (free-identifier=? ,scrutinee-name ',keyword)
-                                                                            (lambda (same-identifier)
-                                                                              (if same-identifier
-                                                                                  ,rhs
-                                                                                  (failure-cc))))
-                                                                          (failure-cc))
-                                                                      stx))
-                                                              (syntax-error (list-syntax
-                                                                              ('"syntax-case: naked symbol"
-                                                                               keyword
-                                                                               '"did you mean (unquote symbol)?"
-                                                                               '"did you mean to add the symbol to the keyword list?")
-                                                                              stx)
-                                                                            stx))))]
-                                                     [(fancy-unquote ,x)
-                                                      (if (identifier? x)
-                                                          (pure (generate-quasiquote
-                                                                  (let [,x ,scrutinee-name]
-                                                                    ,rhs)
-                                                                  stx))
-                                                          (syntax-error (list-syntax
-                                                                          ('"syntax-case: the syntax for binding values is (unquote x), found"
-                                                                           pat
-                                                                           '"instead")
-                                                                          stx)
-                                                                        stx))]
-                                                     [((fancy-unquote ,x) fancy-...)
-                                                      (if (identifier? x)
-                                                          (pure (generate-quasiquote
-                                                                  (let [,x ,scrutinee-name]
-                                                                    ,rhs)
-                                                                  stx))
-                                                          (syntax-error (list-syntax
-                                                                          ('"syntax-case: the syntax for binding lists is (,x ...), found"
-                                                                           pat
-                                                                           '"instead")
-                                                                          stx)
-                                                                        stx))]
-                                                     [(,pat-head ,pat-tail ...)
-                                                      (>>= (make-temporary 'tail)
-                                                        (lambda (tail-name)
-                                                          (>>= (fancy-case tail-name
-                                                                 (pair-list-syntax pat-tail rhs
-                                                                   stx))
-                                                            (lambda (rhs-tail)
-                                                              (>>= (make-temporary 'head)
-                                                                (lambda (head-name)
-                                                                  (>>= (fancy-case head-name
-                                                                         (pair-list-syntax pat-head rhs-tail
-                                                                           stx))
-                                                                    (lambda (rhs-head)
-                                                                      (pure (generate-quasiquote
-                                                                              (raw-syntax-case ,scrutinee-name
-                                                                                [(cons ,head-name ,tail-name)
-                                                                                 ,rhs-head]
-                                                                                [_ (failure-cc)])
-                                                                              stx))))))))))]
-                                                     [_
-                                                      (pure (generate-quasiquote
-                                                              (failure-cc)
-                                                              stx))])])]
-                                           (flet [fancy-cases (cases inner-cases)
-                                                  (generate-syntax-case syntax-case cases ()
-                                                    [()
-                                                     (pure inner-cases)]
-                                                    [(,case ,cases ...)
-                                                     (>>= (fancy-case stx-name case)
-                                                       (lambda (inner-case)
-                                                         (fancy-cases cases
-                                                           (generate-quasiquote
+                                         (flet [fancy-guard-rhs (guard-rhs)
+                                                (generate-syntax-case syntax-case guard-rhs ()
+                                                  [(,guard ,rhs)
+                                                   (pure (generate-quasiquote
+                                                           (>>= ,guard
+                                                             (lambda (guard-approves)
+                                                               (if guard-approves ,rhs (failure-cc))))
+                                                           stx))]
+                                                  [(,rhs)
+                                                   (pure rhs)])]
+                                           (flet [fancy-case (scrutinee-name case)
+                                                  (generate-syntax-case syntax-case case ()
+                                                    [(,pat ,guard-rhs ...)
+                                                     (>>= (fancy-guard-rhs guard-rhs)
+                                                       (lambda (rhs)
+                                                         (generate-syntax-case syntax-case pat (fancy-unquote fancy-... fancy-_)
+                                                           [()
+                                                            (pure (generate-quasiquote
+                                                                    (raw-syntax-case ,scrutinee-name
+                                                                      [() ,rhs]
+                                                                      [_ (failure-cc)])
+                                                                    stx))]
+                                                           [fancy-_
+                                                            (pure rhs)]
+                                                           [,keyword
+                                                            (pure (identifier? keyword))
+                                                            (>>= (keyword? keyword)
+                                                              (lambda (is-keyword)
+                                                                (if is-keyword
+                                                                    (pure (generate-quasiquote
+                                                                            (if (identifier? ,scrutinee-name)
+                                                                                (>>= (free-identifier=? ,scrutinee-name ',keyword)
+                                                                                  (lambda (same-identifier)
+                                                                                    (if same-identifier
+                                                                                        ,rhs
+                                                                                        (failure-cc))))
+                                                                                (failure-cc))
+                                                                            stx))
+                                                                    (syntax-error (list-syntax
+                                                                                    ('"syntax-case: naked symbol"
+                                                                                     keyword
+                                                                                     '"did you mean (unquote symbol)?"
+                                                                                     '"did you mean to add the symbol to the keyword list?")
+                                                                                    stx)
+                                                                                  stx))))]
+                                                           [(fancy-unquote ,x)
+                                                            (if (identifier? x)
+                                                                (pure (generate-quasiquote
+                                                                        (let [,x ,scrutinee-name]
+                                                                          ,rhs)
+                                                                        stx))
+                                                                (syntax-error (list-syntax
+                                                                                ('"syntax-case: the syntax for binding values is (unquote x), found"
+                                                                                 pat
+                                                                                 '"instead")
+                                                                                stx)
+                                                                              stx))]
+                                                           [((fancy-unquote ,x) fancy-...)
+                                                            (if (identifier? x)
+                                                                (pure (generate-quasiquote
+                                                                        (let [,x ,scrutinee-name]
+                                                                          ,rhs)
+                                                                        stx))
+                                                                (syntax-error (list-syntax
+                                                                                ('"syntax-case: the syntax for binding lists is (,x ...), found"
+                                                                                 pat
+                                                                                 '"instead")
+                                                                                stx)
+                                                                              stx))]
+                                                           [(,pat-head ,pat-tail ...)
+                                                            (>>= (make-temporary 'tail)
+                                                              (lambda (tail-name)
+                                                                (>>= (fancy-case tail-name
+                                                                       (pair-list-syntax pat-tail rhs
+                                                                         stx))
+                                                                  (lambda (rhs-tail)
+                                                                    (>>= (make-temporary 'head)
+                                                                      (lambda (head-name)
+                                                                        (>>= (fancy-case head-name
+                                                                               (pair-list-syntax pat-head rhs-tail
+                                                                                 stx))
+                                                                          (lambda (rhs-head)
+                                                                            (pure (generate-quasiquote
+                                                                                    (raw-syntax-case ,scrutinee-name
+                                                                                      [(cons ,head-name ,tail-name)
+                                                                                       ,rhs-head]
+                                                                                      [_ (failure-cc)])
+                                                                                    stx))))))))))]
+                                                           [_
+                                                            (pure (generate-quasiquote
+                                                                    (failure-cc)
+                                                                    stx))])))])]
+                                             (flet [fancy-cases (cases inner-cases)
+                                                    (generate-syntax-case syntax-case cases ()
+                                                      [()
+                                                       (pure inner-cases)]
+                                                      [(,case ,cases ...)
+                                                       (>>= (fancy-case stx-name case)
+                                                         (lambda (inner-case)
+                                                           (fancy-cases cases
+                                                             (generate-quasiquote
+                                                               (let [failure-cc
+                                                                     (lambda ()
+                                                                       ,inner-case)]
+                                                                 ,inner-cases)
+                                                               stx))))])]
+                                               (>>= (fancy-cases cases
+                                                      (generate-quasiquote
+                                                        (failure-cc)
+                                                        stx))
+                                                 (lambda (outer-cases)
+                                                   (pure (generate-quasiquote
+                                                           (let [,stx-name ,stx-expr]
                                                              (let [failure-cc
                                                                    (lambda ()
-                                                                     ,inner-case)]
-                                                               ,inner-cases)
-                                                             stx))))])]
-                                             (>>= (fancy-cases cases
-                                                    (generate-quasiquote
-                                                      (failure-cc)
-                                                      stx))
-                                               (lambda (outer-cases)
-                                                 (pure (generate-quasiquote
-                                                         (let [,stx-name ,stx-expr]
-                                                           (let [failure-cc
-                                                                 (lambda ()
-                                                                   (syntax-error (list-syntax
-                                                                                   ('"syntax-case: the input"
-                                                                                    ,stx-name
-                                                                                    '"does not match any of the following patterns"
-                                                                                    ',(map car cases))
-                                                                                   stx)
-                                                                                 stx))]
-                                                             ,outer-cases))
-                                                         stx))))))))
+                                                                     (syntax-error (list-syntax
+                                                                                     ('"syntax-case: the input"
+                                                                                      ,stx-name
+                                                                                      '"does not match any of the following patterns"
+                                                                                      ',(map car cases))
+                                                                                     stx)
+                                                                                   stx))]
+                                                               ,outer-cases))
+                                                           stx)))))))))
                                      (syntax-error (list-syntax
                                                      ('"syntax-case:"
                                                       keywords
