@@ -169,15 +169,6 @@
                  ,stx-name))]
          ,(generate-cases cases `(,failure-cc-name))))))
 
-(define (generate-define-syntax macro-name stx-name keywords cases)
-  `(group
-     ,(generate-define-keywords keywords)
-     (define-macros
-       ([,macro-name
-         (lambda (,stx-name)
-           ,(generate-syntax-case macro-name stx-name keywords
-             cases))]))))
-
 ; `(1 ,(list 2 3) ,@(list 4 5) 6)
 ; =>
 ; '(1 (2 3) 4 5 6)
