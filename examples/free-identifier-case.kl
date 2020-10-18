@@ -3,41 +3,30 @@
 (import "let.kl")
 (import (shift "prelude.kl" 1))
 (import (shift "identifier.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 
 (define-macros
   ([free-identifier-case
     (lambda (stx)
-      (syntax-case stx
-        [(cons _ body)
-         (syntax-case body
-           [(cons scrut cases)
-            (pure
-             (quasiquote/loc stx
-               (let (x ,scrut) (free-identifier-case-aux x ,cases))))])]))]
+      (syntax-case stx ()
+        [(_ ,scrut ,cases ...)
+         (pure (replace-loc stx
+                 `(let (x ,scrut) (free-identifier-case-aux x ,cases ...))))]))]
    [free-identifier-case-aux
     (lambda (stx)
-      (syntax-case stx
-        [(list (_ scrut cases))
-          (syntax-case cases
-            [() (pure '(syntax-error '"Nothing matched"))]
-            [(cons c cs)
-             (syntax-case c
-               [(list (test val))
-                (syntax-case test
-                  [(list (e x))
-                   (>>= (free-identifier=? e 'else)
-                        (lambda (eq)
-                          (if eq
-                              (pure (quasiquote/loc c (let (,x ,scrut) ,val)))
-                              (syntax-error test))))]
-                  [(ident id)
-                   (pure
-                    (quasiquote/loc c
-                     (>>= (free-identifier=? ,scrut ',id)
-                          (lambda (eq)
-                            (if eq
-                                ,val
-                                (free-identifier-case-aux ,scrut ,cs))))))])])])]))]))
+      (syntax-case stx (else)
+        [(_ ,scrut)
+         (pure '(syntax-error '"Nothing matched"))]
+        [(_ ,scrut ((else ,x) ,val))
+         (pure (replace-loc x
+                 `(let [,x ,scrut] ,val)))]
+        [(_ ,scrut (,id ,val) ,cs ...)
+         (pure (identifier? id))
+         (pure (replace-loc val
+                 `(>>= (free-identifier=? ,scrut ',id)
+                       (lambda (eq)
+                         (if eq
+                             ,val
+                             (free-identifier-case-aux ,scrut ,cs ...))))))]))]))
 
 (export free-identifier-case)

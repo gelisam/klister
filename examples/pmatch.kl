@@ -6,7 +6,7 @@
 (import (shift "prelude.kl" 1))
 
 (import (shift "identifier.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 (import (shift "defun.kl" 1))
 (import (shift "lispy-do.kl" 1))
 (import (shift "free-identifier-case.kl" 1))
@@ -21,25 +21,13 @@
 
 (meta
   (defun syntax->list (stx)
-    (syntax-case stx
-      [() (nil)]
-      [(cons x xs) (:: x (syntax->list xs))])))
-
-(meta
-  (define else-case
-     (lambda (stx)
-       (syntax-case stx
-         [(list (e x))
-          (if (identifier? e)
-              (free-identifier-case e
-                [else (pure (just x))]
-                [(else other) (pure (nothing))])
-              (pure (nothing)))]
-         [(ident e)
-          (free-identifier-case e
-            [else (pure (just 'else-x))]
-            [(else other) (pure (nothing))])]
-         [_ (pure (nothing))]))))
+    (syntax-case stx ()
+      [()
+       (pure (nil))]
+      [(,x ,xs ...)
+       (>>= (syntax->list xs)
+         (lambda (list)
+           (pure (:: x list))))])))
 
 (meta
   (defun list->syntax (stx-lst stx)
@@ -50,47 +38,43 @@
 (define-macros
   ([pmatch
     (lambda (stx)
-      (syntax-case stx
-        [(cons _ more)
-         (syntax-case more
-           [(cons scrut pats)
-            (pure `(let (x ,scrut) (pmatch-aux ,scrut x ,pats)))])]))]
+      (syntax-case stx ()
+        [(_ ,scrut ,pats ...)
+         (pure `(let [x ,scrut] (pmatch-aux ,scrut x ,pats ...)))]))]
    [pmatch-aux
     (lambda (stx)
-      (syntax-case stx
-        [(list (_ scrut tgt pats))
-         (syntax-case pats
-           [() (pure `(error ',scrut))]
-           [(cons c cs)
-            (syntax-case c
-              [(list (pat rhs))
-               (>>= (else-case pat)
-                    (lambda (e)
-                      (case e
-                        [(just x) (pure `(let (,x ,tgt) ,rhs))]
-                        [(nothing)
-                         (pure `(let (kf (lambda (_) (pmatch-aux ,scrut ,tgt ,cs)))
-                                  (ppat ,tgt ,pat ,rhs (kf 'hi))))])))])])]))]
+      (syntax-case stx (else)
+        [(_ ,scrut ,tgt)
+         (pure `(error ',scrut))]
+        [(_ ,scrut ,tgt (else ,rhs) ,cs ...)
+         (pure rhs)]
+        [(_ ,scrut ,tgt ((else ,x) ,rhs) ,cs ...)
+         (pure `(let [,x ,tgt]
+                  ,rhs))]
+        [(_ ,scrut ,tgt (,pat ,rhs) ,cs ...)
+         (pure `(let (kf (lambda (_) (pmatch-aux ,scrut ,tgt ,cs ...)))
+                  (ppat ,tgt ,pat ,rhs (kf 'hi))))]))]
    [ppat
     (lambda (stx)
-      (syntax-case stx
-        [(list (_ tgt pat ks kf))
-         (syntax-case pat
-           [(ident x)
-            (pure `(let (,x ,tgt) ,ks))]
-           [(cons what args)
-            (>>= (make-temporaries (syntax->list args))
-                 (lambda (temps)
-                   (let (temp-names (map fst temps))
-                     (flet (combine (stxs)
-                             (case stxs
-                               [(nil) ks]
-                               [(:: id-and-stx rest)
-                                `(ppat ,(fst id-and-stx) ,(snd id-and-stx) ,(combine rest) ,kf)]))
-                        (pure `(case ,tgt
-                                 [,(cons-list-syntax what (list->syntax temp-names pat) pat)
-                                  ,(combine temps)]
-                                 [(else other) ,kf]))))))])]))]))
+      (syntax-case stx ()
+        [(_ ,tgt ,x ,ks ,kf)
+         (pure (identifier? x))
+         (pure `(let [,x ,tgt] ,ks))]
+        [(_ ,tgt (,what ,args ...) ,ks ,kf)
+         (>>= (syntax->list args)
+           (lambda (arg-list)
+             (>>= (make-temporaries arg-list)
+               (lambda (temps)
+                 (let (temp-names (map fst temps))
+                   (flet (combine (stxs)
+                           (case stxs
+                             [(nil) ks]
+                             [(:: id-and-stx rest)
+                              `(ppat ,(fst id-and-stx) ,(snd id-and-stx) ,(combine rest) ,kf)]))
+                      (pure `(case ,tgt
+                               [,(cons-list-syntax what (list->syntax temp-names args) args)
+                                ,(combine temps)]
+                               [(else other) ,kf]))))))))]))]))
 
 
 
