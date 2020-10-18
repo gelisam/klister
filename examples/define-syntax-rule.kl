@@ -1,44 +1,40 @@
 #lang "prelude.kl"
 
+(import (rename (shift "prelude.kl" 1) [syntax-case raw-syntax-case]))
 (import (shift "prelude.kl" 1))
 (import (shift "do.kl" 1))
 (import (shift "list-syntax.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 (import (shift "syntax.kl" 1))
 
 (define-macros
-  ((define-macro
+  ([define-macro
      (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern body))
-          (syntax-case pattern
-           ((cons macro-name args)
-            (pure `(define-macros
-                     ((,macro-name (lambda (stx)
-                                     (syntax-case stx
-                                      ((list ,pattern)
-                                       ,body)))))))))))))))
+       (syntax-case stx ()
+         [(_ (,macro-name ,args ...) ,body)
+          (pure `(define-macros
+                   ([,macro-name
+                     (lambda (stx)
+                       (raw-syntax-case stx
+                         [(list (_ ,args ...))
+                          ,body]))])))]))]))
 
 (define-macros
-  ((define-syntax-rule
+  ([define-syntax-rule
      (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern template))
-          (syntax-case pattern
-           ((cons macro-name args)
-            (do (unquoted-template <- (foldlM (lambda (t arg)
-                                                (replace-identifier
-                                                  arg
-                                                  (list-syntax ('unquote arg) stx)
-                                                  t))
-                                              template
-                                              args))
-                (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
-                (pure `(define-macros
-                         ((,macro-name (lambda (stx)
-                                         (syntax-case stx
-                                          ((list ,pattern)
-                                           (pure ,quasiquoted-template)))))))))))))))))
+       (syntax-case stx ()
+         [(_ (,macro-name ,args ...) ,template)
+          (do (unquoted-template <- (foldlM (lambda (t arg)
+                                              (replace-identifier arg `(,'unquote ,arg) t))
+                                            template
+                                            args))
+              (quasiquoted-template <- (pure `(,'quasiquote ,unquoted-template)))
+              (pure `(define-macros
+                       ([,macro-name
+                        (lambda (stx)
+                          (raw-syntax-case stx
+                            [(list (_ ,args ...))
+                             (pure ,quasiquoted-template)]))]))))]))]))
 
 (define-syntax-rule (lambda2 x y body)
   (lambda (x y) body))

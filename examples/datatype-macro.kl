@@ -3,7 +3,7 @@
 (import (shift "prelude.kl" 1))
 (import (shift "lispy-do.kl" 1))
 (import (shift "let.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 (import (shift (only "list-syntax.kl" map) 1))
 
 
@@ -24,13 +24,12 @@
 (define-macros
   ([list
      (lambda (stx)
-       (syntax-case stx
-         [(cons _ more)
-          (syntax-case more
-           [()
-            (pure (replace-loc more '(nil)))]
-           [(cons x xs)
-            (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
+       (syntax-case stx ()
+         [(_)
+          (pure (replace-loc stx '(nil)))]
+         [(_ ,x ,xs ...)
+          (pure (replace-loc stx
+                  `(:: ,x (list ,xs ...))))]))]))
 
 (example (reverse (:: 1 (:: 2 (:: 3 (nil))))))
 
@@ -42,9 +41,10 @@
 (define-macros
   ([head
     (lambda (stx)
-     (syntax-case stx
-       [(list (_ x))
-        (pure (quasiquote/loc stx (:: ,x xs)))]))]))
+     (syntax-case stx ()
+       [(_ ,x)
+        (pure (replace-loc stx
+                `(:: ,x xs)))]))]))
 
 (example (case (reverse null) [null 'a]))
 

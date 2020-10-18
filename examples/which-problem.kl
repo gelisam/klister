@@ -1,8 +1,8 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "quasiquote.kl" 1))
-(import "quasiquote.kl")
+(import (shift "dot-dot-dot.kl" 1))
+(import "dot-dot-dot.kl")
 (import "define-syntax-rule.kl")
 
 
@@ -37,12 +37,10 @@
 
 (define-macros
   ([llet (lambda (stx)
-          (syntax-case stx
-            [(list (_ binding body))
-             (syntax-case binding
-               [(list (name def))
-                (pure (quasiquote/loc stx
-                        ((lambda (,name) ,body) ,def)))])]))]))
+          (syntax-case stx ()
+            [(_ (,name ,def) ,body)
+             (pure (replace-loc stx
+                     `((lambda (,name) ,body) ,def)))]))]))
 
 (example (llet (x (mega-const unit)) (the (-> Bool Bool Bool Bool Unit) x)))
 
