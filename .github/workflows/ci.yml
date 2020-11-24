@@ -44,6 +44,8 @@ jobs:
 
     - name: Freeze
       run: |
+        cabal update
+        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
         cabal freeze
 
     - uses: actions/cache@v1
@@ -54,8 +56,6 @@ jobs:
 
     - name: Build
       run: |
-        cabal update
-        cabal configure --enable-tests --enable-benchmarks --test-show-details=direct
         cabal build all
 
     - name: Test
