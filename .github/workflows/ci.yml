@@ -12,20 +12,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest]
-        cabal: ["3.2"]
-        ghc:
-          - "8.6.5"
-          - "8.8.4"
-          - "8.10.2"
-        exclude:
-          # it's an NxM matrix, but we only want to run N + M - 1 runs: all the
-          # GHC versions on ubuntu, and the latest GHC version on all the OSes.
-          # exclude everything else ({macOS} x {non-latest-versions})
-          - os: macOS-latest
-            ghc: 8.8.4
-          - os: macOS-latest
-            ghc: 8.6.5
+        include:
+            # latest GHC, default OS
+          - cabal: ["3.2"]
+            ghc: "8.10.2"
+            os: ubuntu-latest
+
+            # non-latest GHC, default OS
+          - cabal: ["3.2"]
+            ghc: "8.8.4"
+            os: ubuntu-latest
+          - cabal: ["3.2"]
+            ghc: "8.6.5"
+            os: ubuntu-latest
+
+            # latest GHC, non-default OS
+          - cabal: ["3.2"]
+            ghc: "8.10.2"
+            os: macOS-latest
 
     steps:
     - uses: actions/checkout@v2
