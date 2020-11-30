@@ -59,10 +59,10 @@ tests goldenTests = testGroup "All tests"
   [ testGroup "Expander tests" [ operationTests, miniTests, moduleTests ]
   , testGroup "Hedgehog tests" [ testProperty
                                    "runPartialCore . nonPartial = id"
-                                   propRunPartialCoreNonPartial
+                                   (withTests 10 propRunPartialCoreNonPartial)
                                , testProperty
                                    "unsplit . split = pure"
-                                   propSplitUnsplit
+                                   (withTests 10 propSplitUnsplit)
                                ]
   , goldenTests
   ]
