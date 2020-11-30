@@ -1,18 +1,25 @@
 #lang kernel
-[import (rename "n-ary-app.kl" (flet nflet))]
-[import [shift kernel 1]]
-[import [shift "n-ary-app.kl" 1]]
+(import (rename "n-ary-app.kl" (flet nflet)))
+(import (shift kernel 1))
+(import (shift "n-ary-app.kl" 1))
 
 (define-macros
   ([defun
-    [lambda (stx)
-      (syntax-case stx
-        [[list [_ f args body]]
-         (pure (list-syntax
-                ('define f
-                 (list-syntax ('nflet (list-syntax (f args body) stx) f) stx))
-                stx))]
-        [_ (syntax-error '"bad syntax" stx)])]]))
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: f (:: args (:: body (nil))))))
+         (pure (close-syntax stx stx
+                (list-contents
+                  (:: 'define
+                    (:: f
+                      (:: (close-syntax stx stx
+                           (list-contents
+                            (:: 'nflet
+                              (:: (close-syntax stx stx
+                                   (list-contents (:: f (:: args (:: body (nil))))))
+                                (:: f (nil))))))
+                         (nil)))))))]
+        [_ (syntax-error '"bad syntax" stx)]))]))
 
-[export defun]
+(export defun)
 
