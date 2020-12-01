@@ -142,8 +142,8 @@ data CoreF typePat pat core
   | CoreDataCase SrcLoc core [(pat, core)]
   | CoreString Text
   | CoreError core
-  | CorePure core                       -- :: a -> Macro a
-  | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
+  | CorePureMacro core                  -- :: a -> Macro a
+  | CoreBindMacro core core             -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
@@ -189,10 +189,10 @@ mapCoreF _f _g _h (CoreString str) =
   CoreString str
 mapCoreF _f _g h (CoreError msg) =
   CoreError (h msg)
-mapCoreF _f _g h (CorePure core) =
-  CorePure (h core)
-mapCoreF _f _g h (CoreBind act k) =
-  CoreBind (h act) (h k)
+mapCoreF _f _g h (CorePureMacro core) =
+  CorePureMacro (h core)
+mapCoreF _f _g h (CoreBindMacro act k) =
+  CoreBindMacro (h act) (h k)
 mapCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError (fmap h err)
 mapCoreF _f _g h (CoreIdentEq how l r) =
@@ -245,10 +245,10 @@ traverseCoreF _f _g _h (CoreString str) =
   pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
   CoreError <$> h msg
-traverseCoreF _f _g h (CorePure core) =
-  CorePure <$> h core
-traverseCoreF _f _g h (CoreBind act k) =
-  CoreBind <$> h act <*> h k
+traverseCoreF _f _g h (CorePureMacro core) =
+  CorePureMacro <$> h core
+traverseCoreF _f _g h (CoreBindMacro act k) =
+  CoreBindMacro <$> h act <*> h k
 traverseCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError <$> traverse h err
 traverseCoreF _f _g h (CoreIdentEq how l r) =
@@ -320,11 +320,11 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
              (CoreApp fun2 arg2) = do
     alphaCheck fun1 fun2
     alphaCheck arg1 arg2
-  alphaCheck (CorePure x1)
-             (CorePure x2) = do
+  alphaCheck (CorePureMacro x1)
+             (CorePureMacro x2) = do
     alphaCheck x1 x2
-  alphaCheck (CoreBind hd1 tl1)
-             (CoreBind hd2 tl2) = do
+  alphaCheck (CoreBindMacro hd1 tl1)
+             (CoreBindMacro hd2 tl2) = do
     alphaCheck hd1 hd2
     alphaCheck tl1 tl2
   alphaCheck (CoreSyntaxError syntaxError1)
@@ -502,12 +502,12 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(Error "
    ++ shortShow what
    ++ ")"
-  shortShow (CorePure x)
-    = "(Pure "
+  shortShow (CorePureMacro x)
+    = "(PureMacro "
    ++ shortShow x
    ++ ")"
-  shortShow (CoreBind hd tl)
-    = "(Bind "
+  shortShow (CoreBindMacro hd tl)
+    = "(BindMacro "
    ++ shortShow hd
    ++ " "
    ++ shortShow tl

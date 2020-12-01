@@ -192,6 +192,7 @@ data Decl ty scheme decl expr
   | DefineMacros [(Ident, MacroVar, expr)]
   | Meta decl
   | Example SrcLoc scheme expr
+  | Run SrcLoc expr
   | Import ImportSpec
   | Export ExportSpec
   | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
@@ -203,6 +204,7 @@ instance Bifunctor (Decl ty scheme) where
   bimap _f g (DefineMacros ms) = DefineMacros [(x, v, g e) | (x, v, e) <- ms]
   bimap f _g (Meta d) = Meta (f d)
   bimap _f g (Example loc t e) = Example loc t (g e)
+  bimap _f g (Run loc e) = Run loc (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
   bimap _f _g (Data x dn arity ctors) = Data x dn arity ctors
