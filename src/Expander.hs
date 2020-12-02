@@ -906,7 +906,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           for_ after $
           \case
             TypeThenUnify dest ty' ->
-              unify dest ty ty'
+              unify dest ty' ty
             TypeThenExpandExpr dest stx ->
               forkExpandSyntax (ExprDest ty dest) stx
     AwaitingTypeCase loc dest ty env cases kont -> do
