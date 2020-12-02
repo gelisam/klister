@@ -1,0 +1,8 @@
+(add1 (add1 (zero))) : Nat
+(add1 (add1 (zero))) : Nat
+(add1 (add1 (zero))) : Nat
+(add1 (add1 (zero))) : Nat
+(true) : Bool
+(false) : Bool
+(false) : Bool
+(pair 0 (pair (zero) "zero")) : (Pair Integer (Pair Nat String))

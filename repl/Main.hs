@@ -90,7 +90,10 @@ mainWithOptions opts =
         Just results ->
           -- Show just the results of evaluation in the module the user
           -- asked to run
-          for_ results prettyPrintLn
+          for_ results $
+            \case
+              res@(ExampleResult {}) -> prettyPrintLn res
+              IOResult io -> io
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn

@@ -52,8 +52,10 @@ import Numeric.Natural
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Traversable
 import System.Directory
+import System.IO (stdout)
 
 import Binding
 import Core
@@ -293,13 +295,16 @@ evalMod (Expanded em _) = execWriterT $ do
         Example loc sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
-          tell $ [EvalResult { resultLoc = loc
-                             , resultEnv = env
-                             , resultExpr = expr
-                             , resultType = sch
-                             , resultValue = value
-                             }]
-
+          tell $ [ExampleResult loc env expr sch value]
+        Run loc expr -> do
+          lift (expandEval (eval expr)) >>=
+            \case
+              (ValueIOAction act) ->
+                tell $ [IOResult $ void $ act]
+              _ -> throwError $ InternalError $
+                   "While running an action at " ++
+                   T.unpack (pretty loc) ++
+                   " an unexpected non-IO value was encountered."
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
@@ -388,11 +393,61 @@ initializeKernel = do
       , ("Integer", Prims.baseType tInteger)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
+      , ("IO", Prims.ioType)
+      , ("Output-Port", Prims.baseType tOutputPort)
       , ("Type", Prims.baseType tType)
       ]
 
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
+      [ ( "open-syntax"
+        , Scheme 0 $ tFun [tSyntax] (Prims.primitiveDatatype "Syntax-Contents" [tSyntax])
+        , ValueClosure $ HO $
+          \(ValueSyntax stx) ->
+            case syntaxE stx of
+              Id name ->
+                primitiveCtor "identifier-contents" [ValueString name]
+              String str ->
+                primitiveCtor "string-contents" [ValueString str]
+              LitInt i ->
+                primitiveCtor "integer-contents" [ValueInteger i]
+              List xs ->
+                primitiveCtor "list-contents" [foldr consVal nilVal xs]
+                where
+                  nilVal = primitiveCtor "nil" []
+                  consVal x v = primitiveCtor "::" [ValueSyntax x, v]
+        )
+      , ( "close-syntax"
+        , Scheme 0 $
+          tFun [tSyntax, tSyntax, Prims.primitiveDatatype "Syntax-Contents" [tSyntax]] tSyntax
+        , ValueClosure $ HO $
+          \(ValueSyntax locStx) ->
+            ValueClosure $ HO $
+            \(ValueSyntax scopesStx) ->
+              ValueClosure $ HO $
+              -- N.B. Assuming correct constructors
+              \(ValueCtor ctor [arg]) ->
+                let close x = Syntax $ Stx (view (unSyntax . stxScopeSet) scopesStx) (stxLoc locStx) x
+                    unList =
+                      \case
+                        (ValueCtor c [])
+                          | view (constructorName . constructorNameText) c == "nil" ->
+                            []
+                        (ValueCtor c [ValueSyntax x, xs])
+                          | view (constructorName . constructorNameText) c == "::" -> x : unList xs
+                in
+                  ValueSyntax $
+                  case (view (constructorName . constructorNameText) ctor, arg) of
+                    ("identifier-contents", ValueString name) ->
+                      close (Id name)
+                    ("string-contents", ValueString str) ->
+                      close (String str)
+                    ("integer-contents", ValueInteger i) ->
+                      close (LitInt i)
+                    ("list-contents", unList -> lst) ->
+                      close (List lst)
+        )
+      ] ++
       [ ( "string=?"
         , Scheme 0 $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
@@ -476,6 +531,51 @@ initializeKernel = do
         , Prims.binaryIntPred fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ("pure-IO"
+        , Scheme 1 $ tFun [tSchemaVar 0] (tIO (tSchemaVar 0))
+        , ValueClosure $ HO $ \v -> ValueIOAction (pure v)
+        )
+      , ("bind-IO"
+        , Scheme 2 $
+          tFun [ tIO (tSchemaVar 0)
+               , tFun [tSchemaVar 0] (tIO (tSchemaVar 1))
+               ]
+               (tIO (tSchemaVar 1))
+        , ValueClosure $ HO $ \(ValueIOAction m) ->
+            ValueClosure $ HO $ \(ValueClosure f) ->
+            ValueIOAction $ do
+            v <- m
+            case f of
+              HO fun -> do
+                let ValueIOAction io = fun v
+                io
+              FO clos -> do
+                let env = view closureEnv clos
+                    var = view closureVar clos
+                    ident = view closureIdent clos
+                    body = view closureBody clos
+                out <- runExceptT $ flip runReaderT env $ runEval $
+                  withExtendedEnv ident var v $
+                  eval body
+                case out of
+                  Left err -> error (T.unpack (pretty err))
+                  Right done -> pure done
+        )
+      , ( "stdout"
+        , Scheme 0 $ tOutputPort
+        , ValueOutputPort stdout
+        )
+      , ( "write"
+        , Scheme 0 $ tFun [tOutputPort, tString] (tIO (Prims.primitiveDatatype "Unit" []))
+        , ValueClosure $ HO $
+          \(ValueOutputPort h) ->
+            ValueClosure $ HO $
+            \(ValueString str) ->
+              ValueIOAction $ do
+                T.hPutStr h str
+                pure (primitiveCtor "unit" [])
+        )
       ]
 
 
@@ -486,6 +586,15 @@ initializeKernel = do
       , ("Bool", 0, [("true", []), ("false", [])])
       , ("Problem", 0, [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
       , ("Maybe", 1, [("nothing", []), ("just", [tSchemaVar 0])])
+      , ("List", 1, [("nil", []), ("::", [tSchemaVar 0, Prims.primitiveDatatype "List" [tSchemaVar 0]])])
+      , ("Syntax-Contents"
+        , 1
+        , [ ("list-contents", [Prims.primitiveDatatype "List" [tSchemaVar 0]])
+          , ("integer-contents", [tInteger])
+          , ("string-contents", [tString])
+          , ("identifier-contents", [tString])
+          ]
+        )
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -497,6 +606,7 @@ initializeKernel = do
       , ("datatype", Prims.datatype)
       , ("define-macros", Prims.defineMacros)
       , ("example", Prims.example)
+      , ("run", Prims.run)
       , ("import", primImportModule)
       , ("export", primExport)
       , ("meta", Prims.meta expandDeclForms)
@@ -534,7 +644,7 @@ initializeKernel = do
       , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ())]
+    patternPrims :: [(Text, Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())]
     patternPrims = [("else", Prims.elsePattern)]
 
     addToKernel name p b =
@@ -580,7 +690,7 @@ initializeKernel = do
                   varInfo <- traverse Prims.prepareVar args
                   sch <- trivialScheme tType
                   modifyState $
-                    set (expanderPatternBinders . at (Right dest)) $
+                    set (expanderTypePatternBinders . at dest) $
                     Just [ (sc, n, x, sch)
                          | (sc, n, x) <- varInfo
                          ]
@@ -617,7 +727,7 @@ initializeKernel = do
 
 
     addPatternPrimitive ::
-      Text -> (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr) -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
       b <- freshBinding
@@ -784,10 +894,10 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandDeclForm d outScopesDest stx
         TypeDest d ->
           expandOneType d stx
-        PatternDest exprT scrutT d ->
-          expandOnePattern exprT scrutT d stx
-        TypePatternDest exprT d ->
-          expandOneTypePattern exprT d stx
+        PatternDest scrutT d ->
+          expandOnePattern scrutT d stx
+        TypePatternDest d ->
+          expandOneTypePattern d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -926,28 +1036,57 @@ runTask (tid, localData, task) = withLocal localData $ do
             addConstructor cn dt ctor ts
           linkDeclOutputScopes outScopesDest scs
     AwaitingPattern patPtr ty dest stx -> do
-      ready <-
-        case patPtr of
-          Left pptr -> isJust . view (expanderCompletedPatterns . at pptr) <$> getState
-          Right tptr -> isJust . view (expanderCompletedTypePatterns . at tptr) <$> getState
-      if (not ready)
+      ready <- do
+        let patternComplete ptr =
+              (view (expanderCompletedPatterns . at ptr) <$> getState) >>=
+              \case
+                Nothing ->
+                  pure False
+                Just layer ->
+                  and <$> traverse patternComplete layer
+        patternComplete patPtr
+      if not ready
         then stillStuck tid task
         else do
-            varInfo <- view (expanderPatternBinders . at patPtr) <$> getState
-            case varInfo of
-              Nothing -> throwError $ InternalError "Pattern info not added"
-              Just vars -> do
-                p <- currentPhase
-                let rhs' = foldr (flip (addScope p)) stx
-                             [ sc'
-                             | (sc', _, _, _) <- vars
-                             ]
-                withLocalVarTypes
-                  [ (var, varStx, t)
-                  | (_sc, varStx, var, t) <- vars
-                  ] $
-                  expandOneExpression ty dest rhs'
-
+          let getVarInfo ptr =
+                (view (expanderPatternBinders . at ptr) <$> getState) >>=
+                \case
+                  Nothing ->
+                    throwError $ InternalError "Pattern info not added"
+                  Just (Right found) ->
+                    pure [found]
+                  Just (Left ptrs) ->
+                    concat <$> traverse getVarInfo ptrs
+          vars <- getVarInfo patPtr
+          p <- currentPhase
+          let rhs' = foldr (flip (addScope p)) stx
+                       [ sc'
+                       | (sc', _, _, _) <- vars
+                       ]
+          withLocalVarTypes
+            [ (var, varStx, t)
+            | (_sc, varStx, var, t) <- vars
+            ] $
+            expandOneExpression ty dest rhs'
+    AwaitingTypePattern patPtr ty dest stx -> do
+      ready <- has (expanderCompletedTypePatterns . ix patPtr) <$> getState
+      if not ready
+        then stillStuck tid task
+        else do
+          varInfo <- view (expanderTypePatternBinders . at patPtr) <$> getState
+          case varInfo of
+            Nothing -> throwError $ InternalError "Type pattern info not added"
+            Just vars -> do
+              p <- currentPhase
+              let rhs' = foldr (flip (addScope p)) stx
+                           [ sc'
+                           | (sc', _, _, _) <- vars
+                           ]
+              withLocalVarTypes
+                [ (var, varStx, t)
+                | (_sc, varStx, var, t) <- vars
+                ] $
+                expandOneExpression ty dest rhs'
 
   where
     laterMacro tid' b v x dest deps mdest stx = do
@@ -977,20 +1116,27 @@ runTask (tid, localData, task) = withLocal localData $ do
       bind b val
 
 
-expandOnePattern :: Ty -> Ty -> PatternPtr -> Syntax -> Expand ()
-expandOnePattern exprTy scrutTy dest stx =
-  expandOneForm (PatternDest exprTy scrutTy dest) stx
+expandOnePattern :: Ty -> PatternPtr -> Syntax -> Expand ()
+-- This case means that identifier-only macro invocations aren't valid in pattern contexts
+expandOnePattern scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
+  ty <- trivialScheme scrutTy
+  (sc, x, v) <- Prims.prepareVar var
+  modifyState $ set (expanderPatternBinders . at dest) $ Just $ Right (sc, x, v, ty)
+  linkPattern dest $ PatternVar x v
+expandOnePattern scrutTy dest stx =
+  expandOneForm (PatternDest scrutTy dest) stx
 
-expandOneTypePattern :: Ty -> TypePatternPtr -> Syntax -> Expand ()
-expandOneTypePattern exprTy dest stx =
-  expandOneForm (TypePatternDest exprTy dest) stx
-
+expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
+expandOneTypePattern dest stx =
+  expandOneForm (TypePatternDest dest) stx
 
 expandOneType :: SplitTypePtr -> Syntax -> Expand ()
 expandOneType dest stx = expandOneForm (TypeDest dest) stx
 
 expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
 expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
+
+
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
@@ -1022,11 +1168,11 @@ requireTypeCtx _ (TypeDest dest) = return dest
 requireTypeCtx stx other =
   throwError $ WrongMacroContext stx TypeCtx (problemContext other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, Ty, PatternPtr) (Ty, TypePatternPtr))
-requirePatternCtx _ (PatternDest exprTy scrutTy dest) =
-  return $ Left (exprTy, scrutTy, dest)
-requirePatternCtx _ (TypePatternDest exprTy dest) =
-  return $ Right (exprTy, dest)
+requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCtx _ (PatternDest scrutTy dest) =
+  return $ Left (scrutTy, dest)
+requirePatternCtx _ (TypePatternDest dest) =
+  return $ Right dest
 requirePatternCtx stx other =
   throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
 
@@ -1058,26 +1204,23 @@ expandOneForm prob stx
                   else for (zip args' foundArgs) (uncurry schedule)
               linkExpr dest (CoreCtor ctor argDests)
               saveExprType dest t
-            PatternDest _exprTy patTy dest -> do
-              Stx _ loc (_cname, patVars) <- mustBeCons stx
+            PatternDest patTy dest -> do
+              Stx _ loc (_cname, subPats) <- mustBeCons stx
               tyArgs <- makeTypeMetas arity
-              argTypes <- for args \ a -> do
-                            t <- inst (Scheme arity a) tyArgs
-                            trivialScheme t
+              argTypes <- for args \ a ->
+                            inst (Scheme arity a) tyArgs
               unify loc (tDatatype dt tyArgs) patTy
-              if length patVars /= length argTypes
-                then throwError $ WrongArgCount stx ctor (length argTypes) (length patVars)
+              if length subPats /= length argTypes
+                then throwError $ WrongArgCount stx ctor (length argTypes) (length subPats)
                 else do
-                  varInfo <- traverse Prims.prepareVar patVars
-                  modifyState $
-                    set (expanderPatternBinders . at (Left dest)) $
-                    Just [ (sc, name, x, t)
-                         | ((sc, name, x), t) <- zip varInfo argTypes
-                         ]
+                  subPtrs <- for (zip subPats argTypes) \(sp, t) -> do
+                    ptr <- liftIO newPatternPtr
+                    let subPatDest = PatternDest t ptr
+                    forkExpandSyntax subPatDest sp
+                    pure ptr
+                  modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
                   linkPattern dest $
-                    ConstructorPattern ctor [ (varStx, var)
-                                            | (_, varStx, var) <- varInfo
-                                            ]
+                    CtorPattern ctor subPtrs
             other ->
               throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
         EPrimModuleMacro _ ->
@@ -1089,7 +1232,7 @@ expandOneForm prob stx
           case prob of
             TypeDest dest ->
               implT dest stx
-            TypePatternDest _exprTy dest ->
+            TypePatternDest dest ->
               implP dest stx
             otherDest ->
               throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)

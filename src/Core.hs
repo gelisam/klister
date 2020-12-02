@@ -63,14 +63,22 @@ data TypePattern
   | AnyType Ident Var
   deriving (Data, Eq, Show)
 
-data ConstructorPattern
-  = ConstructorPattern !Constructor [(Ident, Var)]
-  | AnyConstructor Ident Var
+data ConstructorPatternF pat
+  = CtorPattern !Constructor [pat]
+  | PatternVar Ident Var
+  deriving (Data, Eq, Foldable, Functor, Show, Traversable)
+makePrisms ''ConstructorPatternF
+
+newtype ConstructorPattern =
+  ConstructorPattern { unConstructorPattern :: ConstructorPatternF ConstructorPattern }
   deriving (Data, Eq, Show)
 makePrisms ''ConstructorPattern
 
+instance Phased a => Phased (ConstructorPatternF a) where
+  shift i = fmap (shift i)
+
 instance Phased ConstructorPattern where
-  shift _ = id
+  shift i = over _ConstructorPattern (shift i)
 
 instance Phased TypePattern where
   shift _ = id
@@ -134,8 +142,8 @@ data CoreF typePat pat core
   | CoreDataCase SrcLoc core [(pat, core)]
   | CoreString Text
   | CoreError core
-  | CorePure core                       -- :: a -> Macro a
-  | CoreBind core core                  -- :: Macro a -> (a -> Macro b) -> Macro b
+  | CorePureMacro core                  -- :: a -> Macro a
+  | CoreBindMacro core core             -- :: Macro a -> (a -> Macro b) -> Macro b
   | CoreSyntaxError (SyntaxError core)  -- :: Macro a
   | CoreIdentEq HowEq core core         -- bound-identifier=? :: Syntax -> Syntax -> Macro Bool
                                         -- free-identifier=?  :: Syntax -> Syntax -> Macro Bool
@@ -181,10 +189,10 @@ mapCoreF _f _g _h (CoreString str) =
   CoreString str
 mapCoreF _f _g h (CoreError msg) =
   CoreError (h msg)
-mapCoreF _f _g h (CorePure core) =
-  CorePure (h core)
-mapCoreF _f _g h (CoreBind act k) =
-  CoreBind (h act) (h k)
+mapCoreF _f _g h (CorePureMacro core) =
+  CorePureMacro (h core)
+mapCoreF _f _g h (CoreBindMacro act k) =
+  CoreBindMacro (h act) (h k)
 mapCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError (fmap h err)
 mapCoreF _f _g h (CoreIdentEq how l r) =
@@ -237,10 +245,10 @@ traverseCoreF _f _g _h (CoreString str) =
   pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
   CoreError <$> h msg
-traverseCoreF _f _g h (CorePure core) =
-  CorePure <$> h core
-traverseCoreF _f _g h (CoreBind act k) =
-  CoreBind <$> h act <*> h k
+traverseCoreF _f _g h (CorePureMacro core) =
+  CorePureMacro <$> h core
+traverseCoreF _f _g h (CoreBindMacro act k) =
+  CoreBindMacro <$> h act <*> h k
 traverseCoreF _f _g h (CoreSyntaxError err) =
   CoreSyntaxError <$> traverse h err
 traverseCoreF _f _g h (CoreIdentEq how l r) =
@@ -312,11 +320,11 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
              (CoreApp fun2 arg2) = do
     alphaCheck fun1 fun2
     alphaCheck arg1 arg2
-  alphaCheck (CorePure x1)
-             (CorePure x2) = do
+  alphaCheck (CorePureMacro x1)
+             (CorePureMacro x2) = do
     alphaCheck x1 x2
-  alphaCheck (CoreBind hd1 tl1)
-             (CoreBind hd2 tl2) = do
+  alphaCheck (CoreBindMacro hd1 tl1)
+             (CoreBindMacro hd2 tl2) = do
     alphaCheck hd1 hd2
     alphaCheck tl1 tl2
   alphaCheck (CoreSyntaxError syntaxError1)
@@ -361,12 +369,16 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
 
 
 instance AlphaEq ConstructorPattern where
-  alphaCheck (ConstructorPattern c1 vars1)
-             (ConstructorPattern c2 vars2) = do
+  alphaCheck p1 p2 =
+    alphaCheck (unConstructorPattern p1) (unConstructorPattern p2)
+
+instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
+  alphaCheck (CtorPattern c1 vars1)
+             (CtorPattern c2 vars2) = do
     alphaCheck c1 c2
     for_ (zip vars1 vars2) (uncurry alphaCheck)
-  alphaCheck (AnyConstructor _ x1)
-             (AnyConstructor _ x2) = do
+  alphaCheck (PatternVar _ x1)
+             (PatternVar _ x2) = do
     alphaCheck x1 x2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -490,12 +502,12 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(Error "
    ++ shortShow what
    ++ ")"
-  shortShow (CorePure x)
-    = "(Pure "
+  shortShow (CorePureMacro x)
+    = "(PureMacro "
    ++ shortShow x
    ++ ")"
-  shortShow (CoreBind hd tl)
-    = "(Bind "
+  shortShow (CoreBindMacro hd tl)
+    = "(BindMacro "
    ++ shortShow hd
    ++ " "
    ++ shortShow tl
@@ -566,12 +578,15 @@ instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
 instance ShortShow ConstructorPattern where
-  shortShow (ConstructorPattern ctor vars) =
+  shortShow = shortShow . unConstructorPattern
+
+instance ShortShow a => ShortShow (ConstructorPatternF a) where
+  shortShow (CtorPattern ctor vars) =
     "(" ++ shortShow ctor ++
     " " ++ intercalate " " (map shortShow vars) ++
     ")"
-  shortShow (AnyConstructor ident _var) =
-    "(AnyConstructor " ++ shortShow ident ++ " )"
+  shortShow (PatternVar ident _var) =
+    "(PatternVar " ++ shortShow ident ++ " )"
 
 instance ShortShow TypePattern where
   shortShow (TypePattern t) =

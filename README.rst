@@ -31,7 +31,8 @@ Usage
 Run ``klister repl`` to be dropped into a read-eval-print loop where you can try
 out writing some Klister expressions.
 
-``klister run file.kl`` will evaluate the contents of ``file.kl``.
+``klister run file.kl`` will evaluate the examples and run the IO
+actions in ``file.kl``.
 
 Imports
 ~~~~~~~
