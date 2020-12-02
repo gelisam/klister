@@ -138,6 +138,17 @@
   (interactive)
   (klister-run-buffer (current-buffer)))
 
+(add-to-list 'compilation-error-regexp-alist-alist
+             '(klister-example
+               "\\(Example at\\)\\s-+\\(\\([^:]+\\):\\([0-9]+\\).\\([0-9]+\\)-\\([0-9]+\\).\\([0-9]+\\)\\):"
+               3 (4 . 6) (5 . 7) 0 2 (1 "compilation-info")))
+(cl-pushnew 'klister-example compilation-error-regexp-alist)
+(add-to-list 'compilation-error-regexp-alist-alist
+             '(klister-type-error
+               "\\(Type mismatch at\\)\\s-+\\(\\([^:]+\\):\\([0-9]+\\).\\([0-9]+\\)-\\([0-9]+\\).\\([0-9]+\\)\\)."
+               3 (4 . 6) (5 . 7) 0 2 (1 "compilation-error")))
+(cl-pushnew 'klister-type-error compilation-error-regexp-alist)
+
 ;;; Default keybindings
 
 (defvar klister-mode-map

@@ -49,14 +49,14 @@
                                                       (list-syntax ('quasiquote s)
                                                                    s))
                                                     e)
-                                        (list-syntax ('quote (replace-loc e 'foo)) 'foo))
+                                        (list-syntax ('quote e) 'foo))
                                       e)]]]]]
               [_ [pure
                   (list-syntax ('list-syntax
                                   (map-syntax (lambda (s)
                                                 (list-syntax ('quasiquote s) s))
                                               e)
-                                  (list-syntax ('quote (replace-loc e 'foo)) 'foo))
+                                  (list-syntax ('quote e) 'foo))
                                 e)]])])]
         [_ (syntax-error [list-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
 
