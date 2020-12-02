@@ -345,7 +345,7 @@ identEqual how t dest stx = do
 
 quote :: ExprPrim
 quote t dest stx = do
-  unify dest tSyntax t
+  unify dest t tSyntax
   Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
 
