@@ -368,8 +368,10 @@ inferKind blame (Ty (TyF ctor args)) = do
     ctorKind TSyntax = pure KStar
     ctorKind TInteger = pure KStar
     ctorKind TString = pure KStar
+    ctorKind TOutputPort = pure KStar
     ctorKind TFun = pure $ kFun [KStar, KStar] KStar
     ctorKind TMacro = pure $ kFun [KStar] KStar
+    ctorKind TIO = pure $ kFun [KStar] KStar
     ctorKind TType = pure KStar
     ctorKind (TDatatype dt) = do
       DatatypeInfo argKinds _ <- datatypeInfo dt

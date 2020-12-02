@@ -36,8 +36,10 @@ data TypeConstructor
   = TSyntax
   | TInteger
   | TString
+  | TOutputPort
   | TFun
   | TMacro
+  | TIO
   | TType
   | TDatatype Datatype
   | TSchemaVar Natural
@@ -100,22 +102,26 @@ instance ShortShow a => ShortShow (TyF a) where
 
 
 class TyLike a arg | a -> arg where
-  tSyntax    :: a
-  tInteger   :: a
-  tString    :: a
-  tFun1      :: arg -> arg -> a
-  tMacro     :: arg -> a
-  tType      :: a
-  tDatatype  :: Datatype -> [arg] -> a
-  tSchemaVar :: Natural -> [arg] -> a
-  tMetaVar   :: MetaPtr -> a
+  tSyntax     :: a
+  tInteger    :: a
+  tString     :: a
+  tOutputPort :: a
+  tFun1       :: arg -> arg -> a
+  tMacro      :: arg -> a
+  tIO         :: arg -> a
+  tType       :: a
+  tDatatype   :: Datatype -> [arg] -> a
+  tSchemaVar  :: Natural -> [arg] -> a
+  tMetaVar    :: MetaPtr -> a
 
 instance TyLike (TyF a) a where
   tSyntax         = TyF TSyntax []
   tInteger        = TyF TInteger []
   tString         = TyF TString []
+  tOutputPort     = TyF TOutputPort []
   tFun1 t1 t2     = TyF TFun [t1, t2]
   tMacro t        = TyF TMacro [t]
+  tIO t           = TyF TIO [t]
   tType           = TyF TType []
   tDatatype x ts  = TyF (TDatatype x) ts
   tSchemaVar x ts = TyF (TSchemaVar x) ts
@@ -125,8 +131,10 @@ instance TyLike Ty Ty where
   tSyntax         = Ty $ tSyntax
   tInteger        = Ty $ tInteger
   tString         = Ty $ tString
+  tOutputPort     = Ty $ tOutputPort
   tFun1 t1 t2     = Ty $ tFun1 t1 t2
   tMacro t        = Ty $ tMacro t
+  tIO t           = Ty $ tIO t
   tType           = Ty $ tType
   tDatatype x ts  = Ty $ tDatatype x ts
   tSchemaVar x ts = Ty $ tSchemaVar x ts

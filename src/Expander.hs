@@ -51,8 +51,10 @@ import Data.Maybe
 import qualified Data.Set as Set
 import Data.Text (Text)
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import Data.Traversable
 import System.Directory
+import System.IO (stdout)
 
 import Binding
 import Core
@@ -296,13 +298,16 @@ evalMod (Expanded em _) = execWriterT $ do
         Example loc sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
-          tell $ [EvalResult { resultLoc = loc
-                             , resultEnv = env
-                             , resultExpr = expr
-                             , resultType = sch
-                             , resultValue = value
-                             }]
-
+          tell $ [ExampleResult loc env expr sch value]
+        Run loc expr -> do
+          lift (expandEval (eval expr)) >>=
+            \case
+              (ValueIOAction act) ->
+                tell $ [IOResult $ void $ act]
+              _ -> throwError $ InternalError $
+                   "While running an action at " ++
+                   T.unpack (pretty loc) ++
+                   " an unexpected non-IO value was encountered."
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
@@ -391,11 +396,61 @@ initializeKernel = do
       , ("Integer", Prims.baseType tInteger)
       , ("->", Prims.arrowType)
       , ("Macro", Prims.macroType)
+      , ("IO", Prims.ioType)
+      , ("Output-Port", Prims.baseType tOutputPort)
       , ("Type", Prims.baseType tType)
       ]
 
     funPrims :: [(Text, Scheme Ty, Value)]
     funPrims =
+      [ ( "open-syntax"
+        , Scheme [] $ tFun [tSyntax] (Prims.primitiveDatatype "Syntax-Contents" [tSyntax])
+        , ValueClosure $ HO $
+          \(ValueSyntax stx) ->
+            case syntaxE stx of
+              Id name ->
+                primitiveCtor "identifier-contents" [ValueString name]
+              String str ->
+                primitiveCtor "string-contents" [ValueString str]
+              LitInt i ->
+                primitiveCtor "integer-contents" [ValueInteger i]
+              List xs ->
+                primitiveCtor "list-contents" [foldr consVal nilVal xs]
+                where
+                  nilVal = primitiveCtor "nil" []
+                  consVal x v = primitiveCtor "::" [ValueSyntax x, v]
+        )
+      , ( "close-syntax"
+        , Scheme [] $
+          tFun [tSyntax, tSyntax, Prims.primitiveDatatype "Syntax-Contents" [tSyntax]] tSyntax
+        , ValueClosure $ HO $
+          \(ValueSyntax locStx) ->
+            ValueClosure $ HO $
+            \(ValueSyntax scopesStx) ->
+              ValueClosure $ HO $
+              -- N.B. Assuming correct constructors
+              \(ValueCtor ctor [arg]) ->
+                let close x = Syntax $ Stx (view (unSyntax . stxScopeSet) scopesStx) (stxLoc locStx) x
+                    unList =
+                      \case
+                        (ValueCtor c [])
+                          | view (constructorName . constructorNameText) c == "nil" ->
+                            []
+                        (ValueCtor c [ValueSyntax x, xs])
+                          | view (constructorName . constructorNameText) c == "::" -> x : unList xs
+                in
+                  ValueSyntax $
+                  case (view (constructorName . constructorNameText) ctor, arg) of
+                    ("identifier-contents", ValueString name) ->
+                      close (Id name)
+                    ("string-contents", ValueString str) ->
+                      close (String str)
+                    ("integer-contents", ValueInteger i) ->
+                      close (LitInt i)
+                    ("list-contents", unList -> lst) ->
+                      close (List lst)
+        )
+      ] ++
       [ ( "string=?"
         , Scheme [] $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
         , ValueClosure $ HO $
@@ -479,6 +534,51 @@ initializeKernel = do
         , Prims.binaryIntPred fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ("pure-IO"
+        , Scheme [KStar, KStar] $ tFun [tSchemaVar 0 []] (tIO (tSchemaVar 0 []))
+        , ValueClosure $ HO $ \v -> ValueIOAction (pure v)
+        )
+      , ("bind-IO"
+        , Scheme [KStar, KStar] $
+          tFun [ tIO (tSchemaVar 0 [])
+               , tFun [tSchemaVar 0 []] (tIO (tSchemaVar 1 []))
+               ]
+               (tIO (tSchemaVar 1 []))
+        , ValueClosure $ HO $ \(ValueIOAction m) ->
+            ValueClosure $ HO $ \(ValueClosure f) ->
+            ValueIOAction $ do
+            v <- m
+            case f of
+              HO fun -> do
+                let ValueIOAction io = fun v
+                io
+              FO clos -> do
+                let env = view closureEnv clos
+                    var = view closureVar clos
+                    ident = view closureIdent clos
+                    body = view closureBody clos
+                out <- runExceptT $ flip runReaderT env $ runEval $
+                  withExtendedEnv ident var v $
+                  eval body
+                case out of
+                  Left err -> error (T.unpack (pretty err))
+                  Right done -> pure done
+        )
+      , ( "stdout"
+        , Scheme [] $ tOutputPort
+        , ValueOutputPort stdout
+        )
+      , ( "write"
+        , Scheme [] $ tFun [tOutputPort, tString] (tIO (Prims.primitiveDatatype "Unit" []))
+        , ValueClosure $ HO $
+          \(ValueOutputPort h) ->
+            ValueClosure $ HO $
+            \(ValueString str) ->
+              ValueIOAction $ do
+                T.hPutStr h str
+                pure (primitiveCtor "unit" [])
+        )
       ]
 
     datatypePrims :: [(Text, [Kind], [(Text, [Ty])])]
@@ -488,6 +588,20 @@ initializeKernel = do
       , ("Bool", [], [("true", []), ("false", [])])
       , ("Problem", [], [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
+      , ("List"
+        , [KStar]
+        , [ ("nil", [])
+          , ("::", [tSchemaVar 0 [], Prims.primitiveDatatype "List" [tSchemaVar 0 []]])
+          ]
+        )
+      , ("Syntax-Contents"
+        , [KStar]
+        , [ ("list-contents", [Prims.primitiveDatatype "List" [tSchemaVar 0 []]])
+          , ("integer-contents", [tInteger])
+          , ("string-contents", [tString])
+          , ("identifier-contents", [tString])
+          ]
+        )
       ]
 
     modPrims :: [(Text, Syntax -> Expand ())]
@@ -499,6 +613,7 @@ initializeKernel = do
       , ("datatype", Prims.datatype)
       , ("define-macros", Prims.defineMacros)
       , ("example", Prims.example)
+      , ("run", Prims.run)
       , ("import", primImportModule)
       , ("export", primExport)
       , ("meta", Prims.meta expandDeclForms)
