@@ -111,7 +111,6 @@ test-suite klister-tests
       tests
   ghc-options: -Wall
   build-depends:
-    bytestring,
     call-stack ^>= 0.1,
     hedgehog ^>= 1.0,
     klister,

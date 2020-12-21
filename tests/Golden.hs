@@ -9,7 +9,6 @@ module Golden where
 import Control.Lens hiding (argument)
 import Control.Monad.Except
 import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
-import qualified Data.ByteString.Lazy as ByteString
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
@@ -20,7 +19,7 @@ import Test.Tasty.Golden (findByExtension)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
-import qualified Data.Text.Lazy.Encoding as Text
+import qualified Data.Text.Lazy.IO as Text
 import System.IO.Silently (capture_)
 
 import Evaluator
@@ -40,11 +39,12 @@ mkGoldenTests = do
                    $ allKlisterFiles
   return $ testGroup "Golden tests"
     [ testCase testName $ do
-        outputLines <- execWriterT $ runExamples klisterFile
-        let actual = Text.encodeUtf8 outputLines
-        expected <- ByteString.readFile goldenFile
+        actual <- execWriterT $ runExamples klisterFile
+        expected <- Text.readFile goldenFile
         when (actual /= expected) $ do
-          assertFailure $ "expected " ++ show expected ++ ", got " ++ show actual
+          assertFailure . Text.unpack
+                        $ "expected:\n" <> expected
+                       <> "\ngot:\n" <> actual
     | klisterFile <- klisterFiles
     , let testName = takeBaseName klisterFile
     , let goldenFile = replaceExtension klisterFile ".golden"
