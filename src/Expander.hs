@@ -435,6 +435,8 @@ initializeKernel = do
                             []
                         (ValueCtor c [ValueSyntax x, xs])
                           | view (constructorName . constructorNameText) c == "::" -> x : unList xs
+                        _ ->
+                          error "impossible: List value must be nil or ::"
                 in
                   ValueSyntax $
                   case (view (constructorName . constructorNameText) ctor, arg) of
@@ -446,6 +448,8 @@ initializeKernel = do
                       close (LitInt i)
                     ("list-contents", unList -> lst) ->
                       close (List lst)
+                    _ ->
+                      error "impossible: Syntax-Contents value must be one of its constructors"
         )
       ] ++
       [ ( "string=?"
@@ -593,6 +597,8 @@ initializeKernel = do
           , ("integer-contents", [tInteger])
           , ("string-contents", [tString])
           , ("identifier-contents", [tString])
+          -- if you add a constructor here, remember to also add a
+          -- corresponding pattern in close-syntax!
           ]
         )
       ]
