@@ -236,6 +236,7 @@ err _t dest stx = do
 the :: ExprPrim
 the t dest stx = do
   Stx _ _ (_, ty, expr) <- mustHaveEntries stx
+  saveOrigin dest (stxLoc expr)
   tyDest <- scheduleType ty
   -- TODO add type to elaborated program? Or not?
   forkAwaitingType tyDest [TypeThenUnify dest t, TypeThenExpandExpr dest expr]
@@ -346,7 +347,7 @@ identEqual how t dest stx = do
 
 quote :: ExprPrim
 quote t dest stx = do
-  unify dest tSyntax t
+  unify dest t tSyntax
   Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
 

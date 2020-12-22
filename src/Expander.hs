@@ -912,7 +912,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           for_ after $
           \case
             TypeThenUnify dest ty' ->
-              unify dest ty ty'
+              unify dest ty' ty
             TypeThenExpandExpr dest stx ->
               forkExpandSyntax (ExprDest ty dest) stx
     AwaitingTypeCase loc dest ty env cases kont -> do
@@ -1191,8 +1191,8 @@ expandOneForm prob stx
       case v of
         EPrimExprMacro impl -> do
           (t, dest) <- requireExpressionCtx stx prob
-          impl t dest stx
           saveExprType dest t
+          impl t dest stx
         EConstructor ctor -> do
           ConstructorInfo args dt <- constructorInfo ctor
           DatatypeInfo arity _ <- datatypeInfo dt
@@ -1304,11 +1304,11 @@ expandOneForm prob stx
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
           LitInt s -> do
-            unify dest tInteger t
+            unify dest t tInteger
             expandLiteralInteger dest s
             saveExprType dest t
           String s -> do
-            unify dest tString t
+            unify dest t tString
             expandLiteralString dest s
             saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
