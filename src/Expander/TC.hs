@@ -1,7 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
-{-# OPTIONS -Wno-unused-top-binds #-}
+{-# OPTIONS -Wno-unused-top-binds #-}  -- setTVLevel is currently unused
 module Expander.TC (
   -- * Type checking
   unify, freshMeta, inst, specialize, varType, makeTypeMeta, generalizeType, normType,

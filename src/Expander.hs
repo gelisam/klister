@@ -438,6 +438,8 @@ initializeKernel = do
                             []
                         (ValueCtor c [ValueSyntax x, xs])
                           | view (constructorName . constructorNameText) c == "::" -> x : unList xs
+                        _ ->
+                          error "impossible: List value must be nil or ::"
                 in
                   ValueSyntax $
                   case (view (constructorName . constructorNameText) ctor, arg) of
@@ -449,6 +451,8 @@ initializeKernel = do
                       close (LitInt i)
                     ("list-contents", unList -> lst) ->
                       close (List lst)
+                    _ ->
+                      error "impossible: Syntax-Contents value must be one of its constructors"
         )
       ] ++
       [ ( "string=?"
@@ -600,6 +604,8 @@ initializeKernel = do
           , ("integer-contents", [tInteger])
           , ("string-contents", [tString])
           , ("identifier-contents", [tString])
+          -- if you add a constructor here, remember to also add a
+          -- corresponding pattern in close-syntax!
           ]
         )
       ]
@@ -918,7 +924,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           for_ after $
           \case
             TypeThenUnify dest ty' ->
-              unify dest ty ty'
+              unify dest ty' ty
             TypeThenExpandExpr dest stx ->
               forkExpandSyntax (ExprDest ty dest) stx
     AwaitingTypeCase loc dest ty env cases kont -> do
@@ -1195,8 +1201,8 @@ expandOneForm prob stx
       case v of
         EPrimExprMacro impl -> do
           (t, dest) <- requireExpressionCtx stx prob
-          impl t dest stx
           saveExprType dest t
+          impl t dest stx
         EConstructor ctor -> do
           ConstructorInfo args dt <- constructorInfo ctor
           DatatypeInfo argKinds _ <- datatypeInfo dt
@@ -1322,11 +1328,11 @@ expandOneForm prob stx
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
           LitInt s -> do
-            unify dest tInteger t
+            unify dest t tInteger
             expandLiteralInteger dest s
             saveExprType dest t
           String s -> do
-            unify dest tString t
+            unify dest t tString
             expandLiteralString dest s
             saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"

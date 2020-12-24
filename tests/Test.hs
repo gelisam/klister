@@ -266,19 +266,19 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   assertAlphaEq "Definition is λx y z . y" e spec
                 _ -> assertFailure "Expected an import, a definition, and a macro"
           )
-        , ( "examples/quasiquote.kl"
+        , ( "examples/test-quasiquote.kl"
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                (Import _ : Import _ : Meta _ : DefineMacros [_, _] : DefineMacros [_] : Define _ _ _ thingDef : examples) -> do
+                (Import _ : Import _ : Define _ _ _ thingDef : examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
                       case examples of
-                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _ _, Export _] -> do
+                        [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _ _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
-                        other -> assertFailure ("Expected 8 tested examples, 1 untested, and 1 export: " ++ show other)
+                        other -> assertFailure ("Expected 8 tested examples, 1 untested: " ++ show other)
                     other -> assertFailure ("Unexpected thing def " ++ show other)
-                _ -> assertFailure "Expected an import, two macros, a definition, and examples"
+                _ -> assertFailure "Expected two imports, a definition, and examples"
           )
         , ( "examples/quasiquote-syntax-test.kl"
           , \m _ ->

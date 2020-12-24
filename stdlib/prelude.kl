@@ -3,6 +3,7 @@
 (import "builtins.kl")
 (import "defun.kl")
 (import "n-ary-app.kl")
+(import "quasiquote.kl")
 
 (defun id (x) x)
 (define const (lambda (x y) x))
@@ -84,6 +85,9 @@
         write
 
         -- non-primitive expression macros
+        unquote
+        quasiquote
+        quasiquote/loc
 
         -- non-primitive expressions
         if

@@ -13,12 +13,13 @@ import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
 import System.FilePath (replaceExtension, takeBaseName)
+import Test.Tasty.HUnit (assertFailure, testCase)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Golden (findByExtension, goldenVsStringDiff)
+import Test.Tasty.Golden (findByExtension)
 import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
-import qualified Data.Text.Lazy.Encoding as Text
+import qualified Data.Text.Lazy.IO as Text
 import System.IO.Silently (capture_)
 
 import Evaluator
@@ -37,16 +38,17 @@ mkGoldenTests = do
                    . filter (not . ("/failing-examples/" `List.isInfixOf`))
                    $ allKlisterFiles
   return $ testGroup "Golden tests"
-    [ goldenVsStringDiff testName diffCmd goldenFile $ do
-        outputLines <- execWriterT $ runExamples klisterFile
-        pure . Text.encodeUtf8 $ outputLines
+    [ testCase testName $ do
+        actual <- execWriterT $ runExamples klisterFile
+        expected <- Text.readFile goldenFile
+        when (actual /= expected) $ do
+          assertFailure . Text.unpack
+                        $ "expected:\n" <> expected
+                       <> "\ngot:\n" <> actual
     | klisterFile <- klisterFiles
     , let testName = takeBaseName klisterFile
     , let goldenFile = replaceExtension klisterFile ".golden"
     ]
-
-diffCmd :: FilePath -> FilePath -> [String]
-diffCmd goldenFile actualFile = ["diff", "-u", goldenFile, actualFile]
 
 runExamples :: FilePath -> WriterT Text IO ()
 runExamples file = do
