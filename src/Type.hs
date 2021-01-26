@@ -19,6 +19,7 @@ import Numeric.Natural
 
 import Alpha
 import Datatype
+import Kind
 import ShortShow
 import Unique
 
@@ -53,17 +54,18 @@ data TyF t = TyF
   deriving (Data, Eq, Foldable, Functor, Show, Traversable)
 makeLenses ''TyF
 
-data VarKind t = NoLink | Link (TyF t)
+data VarLinkage t = NoLink | Link (TyF t)
   deriving (Functor, Show)
-makePrisms ''VarKind
+makePrisms ''VarLinkage
 
 newtype BindingLevel = BindingLevel Natural
   deriving (Eq, Ord, Show)
 makePrisms ''BindingLevel
 
 data TVar t = TVar
-  { _varKind :: !(VarKind t)
+  { _varLinkage :: !(VarLinkage t)
   , _varLevel :: !BindingLevel
+  , _varKind :: !Kind
   }
   deriving (Functor, Show)
 makeLenses ''TVar
@@ -80,7 +82,7 @@ instance Ixed (TypeStore t) where
 instance At (TypeStore t) where
   at x f (TypeStore env) = TypeStore <$> at x f env
 
-data Scheme t = Scheme Natural t
+data Scheme t = Scheme [Kind] t
   deriving (Data, Eq, Show)
 makeLenses ''Scheme
 
@@ -109,34 +111,34 @@ class TyLike a arg | a -> arg where
   tIO         :: arg -> a
   tType       :: a
   tDatatype   :: Datatype -> [arg] -> a
-  tSchemaVar  :: Natural -> a
+  tSchemaVar  :: Natural -> [arg] -> a
   tMetaVar    :: MetaPtr -> a
 
 instance TyLike (TyF a) a where
-  tSyntax        = TyF TSyntax []
-  tInteger       = TyF TInteger []
-  tString        = TyF TString []
-  tOutputPort    = TyF TOutputPort []
-  tFun1 t1 t2    = TyF TFun [t1, t2]
-  tMacro t       = TyF TMacro [t]
-  tIO t          = TyF TIO [t]
-  tType          = TyF TType []
-  tDatatype x ts = TyF (TDatatype x) ts
-  tSchemaVar x   = TyF (TSchemaVar x) []
-  tMetaVar x     = TyF (TMetaVar x) []
+  tSyntax         = TyF TSyntax []
+  tInteger        = TyF TInteger []
+  tString         = TyF TString []
+  tOutputPort     = TyF TOutputPort []
+  tFun1 t1 t2     = TyF TFun [t1, t2]
+  tMacro t        = TyF TMacro [t]
+  tIO t           = TyF TIO [t]
+  tType           = TyF TType []
+  tDatatype x ts  = TyF (TDatatype x) ts
+  tSchemaVar x ts = TyF (TSchemaVar x) ts
+  tMetaVar x      = TyF (TMetaVar x) []
 
 instance TyLike Ty Ty where
-  tSyntax        = Ty $ tSyntax
-  tInteger       = Ty $ tInteger
-  tString        = Ty $ tString
-  tOutputPort    = Ty $ tOutputPort
-  tFun1 t1 t2    = Ty $ tFun1 t1 t2
-  tMacro t       = Ty $ tMacro t
-  tIO t          = Ty $ tIO t
-  tType          = Ty $ tType
-  tDatatype x ts = Ty $ tDatatype x ts
-  tSchemaVar x   = Ty $ tSchemaVar x
-  tMetaVar x     = Ty $ tMetaVar x
+  tSyntax         = Ty $ tSyntax
+  tInteger        = Ty $ tInteger
+  tString         = Ty $ tString
+  tOutputPort     = Ty $ tOutputPort
+  tFun1 t1 t2     = Ty $ tFun1 t1 t2
+  tMacro t        = Ty $ tMacro t
+  tIO t           = Ty $ tIO t
+  tType           = Ty $ tType
+  tDatatype x ts  = Ty $ tDatatype x ts
+  tSchemaVar x ts = Ty $ tSchemaVar x ts
+  tMetaVar x      = Ty $ tMetaVar x
 
 tFun :: [Ty] -> Ty -> Ty
 tFun args result = foldr tFun1 result args

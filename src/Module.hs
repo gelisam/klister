@@ -51,6 +51,7 @@ import Numeric.Natural
 import Binding
 import Core
 import Datatype
+import Kind
 import ModuleName
 import Phase
 import Syntax
@@ -195,9 +196,10 @@ data Decl ty scheme decl expr
   | Run SrcLoc expr
   | Import ImportSpec
   | Export ExportSpec
-  | Data Ident DatatypeName Natural [(Ident, Constructor, [ty])]
-    -- ^ User-written name, internal name, arity, constructors
+  | Data Ident DatatypeName [Kind] [(Ident, Constructor, [ty])]
+    -- ^ User-written name, internal name, type-argument kinds, constructors
   deriving (Data, Functor, Show)
+
 
 instance Bifunctor (Decl ty scheme) where
   bimap _f g (Define x v t e) = Define x v t (g e)
@@ -207,7 +209,7 @@ instance Bifunctor (Decl ty scheme) where
   bimap _f g (Run loc e) = Run loc (g e)
   bimap _f _g (Import spec) = Import spec
   bimap _f _g (Export spec) = Export spec
-  bimap _f _g (Data x dn arity ctors) = Data x dn arity ctors
+  bimap _f _g (Data x dn argKinds ctors) = Data x dn argKinds ctors
 
 instance (Phased decl, Phased expr) => Phased (Decl ty scheme decl expr) where
   shift i = bimap (shift i) (shift i)

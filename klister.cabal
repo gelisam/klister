@@ -57,6 +57,7 @@ library
       Expander.Syntax
       Expander.Task
       Expander.TC
+      Kind
       KlisterPath
       Module
       ModuleName

@@ -1,0 +1,48 @@
+#lang kernel
+
+(datatype (Fix F)
+  (in (F (Fix F))))
+
+(define out
+  (lambda (x)
+    (case x
+      ((in y) y))))
+
+(datatype (NatF A)
+  (zero)
+  (succ A))
+
+(datatype (ListF A L)
+  (nil)
+  (cons A L))
+
+(define length
+  (flet (length (xs)
+          (case (out xs)
+            [(nil) (in (zero))]
+            [(cons y ys) (in (succ (length ys)))]))
+    length))
+
+
+(define l1 (the (Fix (ListF String)) (in (cons "hello" (in (cons "world" (in (nil))))))))
+
+(example l1)
+
+(define l1-no-annotation (in (cons "hello" (in (cons "world" (in (nil)))))))
+
+(example l1-no-annotation)
+
+
+(example (length l1))
+
+(define map
+  (lambda (f)
+    (flet (map* (xs)
+            (case (out xs)
+              [(nil) (in (nil))]
+              [(cons y ys) (in (cons (f y) (map* ys)))]))
+      map*)))
+
+(example map)
+
+(example ((map length) (in (cons l1 (in (cons (in (cons "Yes" l1)) (in (nil))))))))

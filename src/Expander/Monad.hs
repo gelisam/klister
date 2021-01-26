@@ -89,6 +89,9 @@ module Expander.Monad
   , stillStuck
   , schedule
   , scheduleType
+  , scheduleTypeInferKind
+  -- * Kinds
+  , zonkKind
   -- * Implementation parts
   , SyntacticCategory(..)
   , ExpansionEnv(..)
@@ -117,6 +120,7 @@ module Expander.Monad
   , expanderCurrentTransformerEnvs
   , expanderDefTypes
   , expanderTypeStore
+  , expanderKindStore
   , expanderDeclOutputScopes
   , expanderExpansionEnv
   , expanderExpressionTypes
@@ -168,6 +172,7 @@ import Expander.Error
 import Expander.Task
 import Module
 import ModuleName
+import Kind
 import KlisterPath
 import PartialCore
 import PartialType
@@ -214,14 +219,15 @@ newtype ExpansionEnv = ExpansionEnv (Map.Map Binding EValue)
 data EValue
   = EPrimExprMacro (Ty -> SplitCorePtr -> Syntax -> Expand ())
     -- ^ For special forms
-  | EPrimTypeMacro (SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
+  | EPrimTypeMacro (Kind -> SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
     -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
-  | ETypeVar !Natural -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
+  | ETypeVar !Kind !Natural
+  -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
@@ -294,6 +300,7 @@ data ExpanderState = ExpanderState
   , _expanderExpressionTypes :: !(Map SplitCorePtr Ty)
   , _expanderCompletedSchemes :: !(Map SchemePtr (Scheme Ty))
   , _expanderTypeStore :: !(TypeStore Ty)
+  , _expanderKindStore :: !KindStore
   , _expanderDefTypes :: !(TypeContext Var SchemePtr) -- ^ Module-level definitions
   }
 
@@ -332,6 +339,7 @@ initExpanderState = ExpanderState
   , _expanderExpressionTypes = Map.empty
   , _expanderCompletedSchemes = Map.empty
   , _expanderTypeStore = mempty
+  , _expanderKindStore = mempty
   , _expanderDefTypes = mempty
   }
 
@@ -495,9 +503,9 @@ forkAwaitingType :: SplitTypePtr -> [AfterTypeTask] -> Expand ()
 forkAwaitingType tdest tasks =
   forkExpanderTask $ AwaitingType tdest tasks
 
-forkExpandType :: SplitTypePtr -> Syntax -> Expand ()
-forkExpandType dest stx =
-  forkExpanderTask $ ExpandSyntax (TypeDest dest) stx
+forkExpandType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
+forkExpandType kind dest stx =
+  forkExpanderTask $ ExpandSyntax (TypeDest kind dest) stx
 
 
 forkGeneralizeType :: SplitCorePtr -> Ty -> SchemePtr -> Expand ()
@@ -549,7 +557,7 @@ forkContinueMacroAction dest value kont = do
 trivialScheme :: Ty -> Expand SchemePtr
 trivialScheme t = do
   sch <- liftIO newSchemePtr
-  linkScheme sch (Scheme 0 t)
+  linkScheme sch (Scheme [] t)
   return sch
 
 -- | Compute the dependencies of a particular slot. The dependencies
@@ -592,7 +600,9 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Define x v sch e'
+            Just (Scheme ks t) -> do
+              ks' <- traverse zonkKindDefault ks
+              pure $ CompleteDecl $ Define x v (Scheme ks' t) e'
     zonkDecl (DefineMacros macros) =
       CompleteDecl . DefineMacros <$>
       for macros \(x, v, e) ->
@@ -600,8 +610,10 @@ getDecl ptr =
         \case
           Nothing -> throwError $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
-    zonkDecl (Data x dn arity ctors) =
-      CompleteDecl . Data x dn arity <$> traverse zonkCtor ctors
+    zonkDecl (Data x dn argKinds ctors) = do
+      argKinds' <- traverse zonkKindDefault argKinds
+      ctors' <- traverse zonkCtor ctors
+      return $ CompleteDecl $ Data x dn argKinds' ctors'
         where
           zonkCtor ::
             (Ident, Constructor, [SplitTypePtr]) ->
@@ -626,7 +638,9 @@ getDecl ptr =
           linkedScheme schPtr >>=
           \case
             Nothing -> throwError $ InternalError "Missing example scheme after expansion"
-            Just sch -> pure $ CompleteDecl $ Example loc sch e'
+            Just (Scheme ks t) -> do
+              ks' <- traverse zonkKindDefault ks
+              pure $ CompleteDecl $ Example loc (Scheme ks' t) e'
     zonkDecl (Run loc e) =
       linkedCore e >>=
       \case
@@ -634,6 +648,7 @@ getDecl ptr =
         Just e' -> pure $ CompleteDecl $ Run loc e'
     zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
     zonkDecl (Export x) = return $ CompleteDecl $ Export x
+
 
 currentBindingLevel :: Expand BindingLevel
 currentBindingLevel = do
@@ -851,11 +866,39 @@ currentEnv = do
   localEnv <- maybe Env.empty id . view (expanderCurrentEnvs . at phase) <$> getState
   return (globalEnv <> localEnv)
 
-scheduleType :: Syntax -> Expand SplitTypePtr
-scheduleType stx = do
+scheduleType :: Kind -> Syntax -> Expand SplitTypePtr
+scheduleType kind stx = do
   dest <- liftIO newSplitTypePtr
-  forkExpandType dest stx
+  forkExpandType kind dest stx
   return dest
+
+
+scheduleTypeInferKind :: Syntax -> Expand SplitTypePtr
+scheduleTypeInferKind stx = do
+  kind <- KMetaVar <$> liftIO newKindVar
+  dest <- liftIO newSplitTypePtr
+  forkExpandType kind dest stx
+  return dest
+
+
+zonkKind :: Kind -> Expand Kind
+zonkKind (KMetaVar v) =
+  (view (expanderKindStore . at v) <$> getState) >>=
+  \case
+    Just k -> zonkKind k
+    Nothing -> pure (KMetaVar v)
+zonkKind KStar = pure KStar
+zonkKind (KFun k1 k2) = KFun <$> zonkKind k1 <*> zonkKind k2
+
+zonkKindDefault :: Kind -> Expand Kind
+zonkKindDefault (KMetaVar v) =
+  (view (expanderKindStore . at v) <$> getState) >>=
+  \case
+    Just k -> zonkKindDefault k
+    Nothing -> pure KStar
+zonkKindDefault KStar = pure KStar
+zonkKindDefault (KFun k1 k2) = KFun <$> zonkKindDefault k1 <*> zonkKindDefault k2
+
 
 importing :: ModuleName -> Expand a -> Expand a
 importing mn act = do

@@ -2,7 +2,12 @@
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS -Wno-unused-top-binds #-}  -- setTVLevel is currently unused
-module Expander.TC (unify, freshMeta, inst, specialize, varType, makeTypeMetas, generalizeType, normType) where
+module Expander.TC (
+  -- * Type checking
+  unify, freshMeta, inst, specialize, varType, makeTypeMeta, generalizeType, normType,
+  -- * Kind checking
+  equateKinds, typeVarKind
+  ) where
 
 import Control.Lens hiding (indices)
 import Control.Monad.Except
@@ -14,7 +19,10 @@ import Numeric.Natural
 
 import Expander.Monad
 import Core
+import Datatype
+import Kind
 import SplitCore
+import Syntax (Syntax, stxLoc)
 import Syntax.SrcLoc
 import Type
 import World
@@ -27,10 +35,10 @@ derefType ptr =
     Just var -> pure var
 
 
-setTVKind :: MetaPtr -> VarKind Ty -> Expand ()
-setTVKind ptr k = do
+setTVLinkage :: MetaPtr -> VarLinkage Ty -> Expand ()
+setTVLinkage ptr k = do
   _ <- derefType ptr -- fail if not present
-  modifyState $ over (expanderTypeStore . at ptr) $ fmap (set varKind k)
+  modifyState $ over (expanderTypeStore . at ptr) $ fmap (set varLinkage k)
 
 setTVLevel :: MetaPtr -> BindingLevel -> Expand ()
 setTVLevel ptr l = do
@@ -39,17 +47,14 @@ setTVLevel ptr l = do
 
 -- expand outermost constructor to a non-variable, if possible
 normType :: Ty -> Expand Ty
-normType t@(unTy -> TyF (TMetaVar ptr) args) =
-  if null args
-  then do
-    tv <- derefType ptr
-    case view varKind tv of
-      Link found -> do
-        t' <- normType (Ty found)
-        setTVKind ptr (Link (unTy t'))
-        return t'
-      _ -> return t
-  else throwError $ InternalError "type variable cannot have parameters (yet)"
+normType t@(unTy -> TyF (TMetaVar ptr) args) = do
+  tv <- derefType ptr
+  case view varLinkage tv of
+    Link found -> do
+      t'@(Ty (TyF ctor tyArgs)) <- normType (Ty found)
+      setTVLinkage ptr (Link (unTy t'))
+      return $ Ty (TyF ctor (tyArgs <> args))
+    _ -> return t
 normType t = return t
 
 normAll :: Ty -> Expand Ty
@@ -82,25 +87,31 @@ pruneLevel l = traverse_ reduce
       modifyState $
       over (expanderTypeStore . ix ptr . varLevel) (min l)
 
-linkToType :: MetaPtr -> Ty -> Expand ()
-linkToType var ty = do
+linkToType :: UnificationErrorBlame blame => blame -> MetaPtr -> Ty -> Expand ()
+linkToType blame var ty = do
   lvl <- view varLevel <$> derefType var
   occursCheck var ty
   pruneLevel lvl =<< metas ty
-  setTVKind var (Link (unTy ty))
+  k <- typeVarKind var
+  checkKind blame k ty
+  setTVLinkage var (Link (unTy ty))
 
-freshMeta :: Expand MetaPtr
-freshMeta = do
+freshMeta :: Maybe Kind -> Expand MetaPtr
+freshMeta kind = do
   lvl <- currentBindingLevel
-  ptr <- liftIO $ newMetaPtr
-  modifyState (set (expanderTypeStore . at ptr) (Just (TVar NoLink lvl)))
+  ptr <- liftIO newMetaPtr
+  k <- maybe (KMetaVar <$> liftIO newKindVar) pure kind
+  modifyState (set (expanderTypeStore . at ptr) (Just (TVar NoLink lvl k)))
   return ptr
 
-inst :: Scheme Ty -> [Ty] -> Expand Ty
-inst (Scheme n ty) ts
-  | length ts /= fromIntegral n =
+
+inst :: UnificationErrorBlame blame => blame -> Scheme Ty -> [Ty] -> Expand Ty
+inst blame (Scheme argKinds ty) ts
+  | length ts /= length argKinds =
     throwError $ InternalError "Mismatch in number of type vars"
-  | otherwise = instTy ty
+  | otherwise = do
+      traverse_ (uncurry $ checkKind blame) (zip argKinds ts)
+      instTy ty
   where
     instTy :: Ty -> Expand Ty
     instTy t = do
@@ -122,10 +133,10 @@ inst (Scheme n ty) ts
     instCtor ctor           = TyF ctor []
 
 
-specialize :: Scheme Ty -> Expand Ty
-specialize sch@(Scheme n _) = do
-  freshVars <- makeTypeMetas n
-  inst sch freshVars
+specialize :: UnificationErrorBlame blame => blame -> Scheme Ty -> Expand Ty
+specialize blame sch@(Scheme argKinds _) = do
+  freshVars <- traverse makeTypeMeta argKinds
+  inst blame sch freshVars
 
 varType :: Var -> Expand (Maybe (Scheme Ty))
 varType x = do
@@ -149,45 +160,46 @@ notFreeInCtx var = do
 generalizeType :: Ty -> Expand (Scheme Ty)
 generalizeType ty = do
   canGeneralize <- filterM notFreeInCtx =<< metas ty
-  (body, (n, _)) <- flip runStateT (0, Map.empty) $
+  (body, (_, _, argKinds)) <- flip runStateT (0, Map.empty, []) $ do
     genTyVars canGeneralize ty
-  pure $ Scheme n body
+  pure $ Scheme argKinds body
 
   where
     genTyVars ::
       [MetaPtr] -> Ty ->
-      StateT (Natural, Map MetaPtr Natural) Expand Ty
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
       Ty <$> genVarsTyF vars t'
 
     genVarsTyF ::
       [MetaPtr] -> TyF Ty ->
-      StateT (Natural, Map MetaPtr Natural) Expand (TyF Ty)
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand (TyF Ty)
     genVarsTyF vars (TyF ctor args) =
       TyF <$> genVarsCtor vars ctor
           <*> traverse (genTyVars vars) args
 
     genVarsCtor ::
       [MetaPtr] -> TypeConstructor ->
-      StateT (Natural, Map MetaPtr Natural) Expand TypeConstructor
+      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand TypeConstructor
     genVarsCtor vars (TMetaVar v)
       | v `elem` vars = do
-          (i, indices) <- get
+          (i, indices, argKinds) <- get
           case Map.lookup v indices of
             Nothing -> do
-              put (i + 1, Map.insert v i indices)
+              k <- lift $ typeVarKind v
+              put (i + 1, Map.insert v i indices, argKinds ++ [k])
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
     genVarsCtor _ (TSchemaVar _) =
-      throwError $ InternalError "Can't generalize in schema"
+      throwError $ InternalError "Can't generalize in scheme"
     genVarsCtor _ ctor =
       pure ctor
 
 
-makeTypeMetas :: Natural -> Expand [Ty]
-makeTypeMetas n = replicateM (fromIntegral n) $ tMetaVar <$> freshMeta
+makeTypeMeta :: Kind -> Expand Ty
+makeTypeMeta k = tMetaVar <$> freshMeta (Just k)
 
 class UnificationErrorBlame a where
   getBlameLoc :: a -> Expand (Maybe SrcLoc)
@@ -195,11 +207,18 @@ class UnificationErrorBlame a where
 instance UnificationErrorBlame SrcLoc where
   getBlameLoc = pure . pure
 
+instance UnificationErrorBlame Syntax where
+  getBlameLoc = pure . pure . stxLoc
+
 instance UnificationErrorBlame SplitCorePtr where
   getBlameLoc ptr = view (expanderOriginLocations . at ptr) <$> getState
 
 unify :: UnificationErrorBlame blame => blame -> Ty -> Ty -> Expand ()
-unify loc t1 t2 = unifyWithBlame (loc, t1, t2) 0 t1 t2
+unify loc t1 t2 = do
+  -- NB is this kind check necessary?
+  k1 <- inferKind loc t1
+  checkKind loc k1 t2
+  unifyWithBlame (loc, t1, t2) 0 t1 t2
 
 -- The expected type is first, the received is second
 unifyWithBlame :: UnificationErrorBlame blame => (blame, Ty, Ty) -> Natural -> Ty -> Ty -> Expand ()
@@ -212,34 +231,57 @@ unifyWithBlame blame depth t1 t2 = do
     unifyTyFs :: TyF Ty -> TyF Ty -> Expand ()
 
     -- Flex-flex
-    unifyTyFs (TyF (TMetaVar ptr1) args1) (TyF (TMetaVar ptr2) args2) =
-      if null args1 && null args2
-      then do
+    unifyTyFs (TyF (TMetaVar ptr1) args1) (TyF (TMetaVar ptr2) args2)
+      | length args1 == length args2 = do
         l1 <- view varLevel <$> derefType ptr1
         l2 <- view varLevel <$> derefType ptr2
         if | ptr1 == ptr2 -> pure ()
-           | l1 < l2 -> linkToType ptr1 t2
-           | otherwise -> linkToType ptr2 t1
-      else throwError $ InternalError "type variable cannot have parameters (yet)"
+           | l1 < l2 -> linkVar ptr1 t2
+           | otherwise -> linkVar ptr2 t1
+        traverse_ (uncurry $ unifyWithBlame blame (depth + 1)) (zip args1 args2)
+      | null args1 = linkVar ptr1 t2
+      | null args2 = linkVar ptr2 t1
+      | otherwise = do
+          let argCount1 = length args1
+          let argCount2 = length args2
+          let argCount = min argCount1 argCount2
+          let args1' = drop (argCount1 - argCount) args1
+          let args2' = drop (argCount2 - argCount) args2
+          traverse_ (uncurry $ unifyWithBlame blame (depth + 1)) (zip args1' args2')
+          unifyWithBlame blame (depth + 1)
+            (Ty (TyF (TMetaVar ptr1) (take (argCount1 - argCount) args1)))
+            (Ty (TyF (TMetaVar ptr2) (take (argCount2 - argCount) args2)))
 
     -- Flex-rigid
-    unifyTyFs (TyF (TMetaVar ptr1) args1) _ =
-      if null args1
-      then linkToType ptr1 t2
-      else throwError $ InternalError "type variable cannot have parameters (yet)"
-    unifyTyFs _ (TyF (TMetaVar ptr2) args2) =
-      if null args2
-      then linkToType ptr2 t1
-      else throwError $ InternalError "type variable cannot have parameters (yet)"
+    unifyTyFs expected@(TyF (TMetaVar ptr1) args1) received@(TyF ctor2 args2)
+      | null args1 =
+        linkVar ptr1 t2
+      | length args1 <= length args2 = do
+          traverse_ (uncurry $ unifyWithBlame blame (depth + 1)) $
+            zip args1 (drop (length args2 - length args1) args2)
+          let args2' = take (length args2 - length args1) args2
+          unifyWithBlame blame (depth + 1) (Ty $ TyF (TMetaVar ptr1) []) (Ty $ TyF ctor2 args2')
+      | otherwise = liftIO (putStrLn "hey") >> mismatch expected received
 
-    unifyTyFs expected@(TyF ctor1 args1) received@(TyF ctor2 args2) =
-      if ctor1 == ctor2 && length args1 == length args2
-      then do
-        -- Rigid-rigid
-        for_ (zip args1 args2) $ \(arg1, arg2) -> do
-          unifyWithBlame blame (depth + 1) arg1 arg2
-      else do
-        -- Mismatch
+    unifyTyFs expected@(TyF ctor1 args1) received@(TyF (TMetaVar ptr2) args2)
+      | null args2 = do
+          linkVar ptr2 t1
+      | length args2 <= length args1 = do
+          traverse_ (uncurry $ unifyWithBlame blame (depth + 1)) $
+            zip (drop (length args1 - length args2) args1) args2
+          let args1' = take (length args1 - length args2) args1
+          unifyWithBlame blame (depth + 1) (Ty $ TyF ctor1 args1') (Ty $ TyF (TMetaVar ptr2) [])
+      | otherwise = mismatch expected received
+
+
+    unifyTyFs expected@(TyF ctor1 args1) received@(TyF ctor2 args2)
+      -- Rigid-rigid
+      | ctor1 == ctor2 && length args1 == length args2 =
+          for_ (zip args1 args2) $ \(arg1, arg2) ->
+            unifyWithBlame blame (depth + 1) arg1 arg2
+      | otherwise = mismatch expected received
+
+    mismatch expected received = do
         let (here, outerExpected, outerReceived) = blame
         loc <- getBlameLoc here
         e' <- normAll $ Ty expected
@@ -250,3 +292,98 @@ unifyWithBlame blame depth t1 t2 = do
             outerE' <- normAll outerExpected
             outerR' <- normAll outerReceived
             throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
+
+    linkVar ptr t = linkToType (view _1 blame) ptr t
+
+
+typeVarKind :: MetaPtr -> Expand Kind
+typeVarKind ptr =
+  (view (expanderTypeStore . at ptr) <$> getState) >>=
+  \case
+    Nothing -> throwError $ InternalError "Type variable not found!"
+    Just v -> pure $ view varKind v
+
+
+setKindVar :: KindVar -> Kind -> Expand ()
+setKindVar v k@(KMetaVar v') =
+  (view (expanderKindStore . at v') <$> getState) >>=
+  \case
+    Nothing -> modifyState $ set (expanderKindStore . at v) (Just k)
+    -- Path compression step
+    Just k' -> setKindVar v k'
+setKindVar v k = modifyState $ set (expanderKindStore . at v) (Just k)
+
+equateKinds :: UnificationErrorBlame blame => blame -> Kind -> Kind -> Expand ()
+equateKinds blame kind1 kind2 =
+  equateKinds' kind1 kind2 >>=
+  \case
+    True -> pure ()
+    False -> do
+      k1' <- zonkKind kind1
+      k2' <- zonkKind kind2
+      loc <- getBlameLoc blame
+      throwError $ KindMismatch loc k1' k2'
+  where
+-- Rigid-rigid cases
+    equateKinds' KStar KStar = pure True
+    equateKinds' (KFun k1 k2) (KFun k1' k2') =
+      (&&) <$> equateKinds' k1 k1' <*> equateKinds' k2 k2'
+    -- Flex-flex
+    equateKinds' (KMetaVar v1) (KMetaVar v2)
+      | v1 == v2 = pure True
+      | otherwise = do
+          k1 <- view (expanderKindStore . at v1) <$> getState
+          k2 <- view (expanderKindStore . at v2) <$> getState
+          case (k1, k2) of
+            (Nothing, Nothing) -> setKindVar v1 (KMetaVar v2) >> pure True
+            (Just k, Nothing) ->  setKindVar v2 k >> pure True
+            (Nothing, Just k) ->  setKindVar v1 k >> pure True
+            (Just k, Just k') ->  equateKinds' k k'
+    -- Flex-rigid
+    equateKinds' (KMetaVar v) k =
+      (view (expanderKindStore . at v) <$> getState) >>=
+      \case
+        Just k' -> equateKinds' k' k
+        Nothing -> setKindVar v k >> pure True
+    equateKinds' k (KMetaVar v) =
+      (view (expanderKindStore . at v) <$> getState) >>=
+      \case
+        Just k' -> equateKinds' k k'
+        Nothing -> setKindVar v k >> pure True
+    -- Errors
+    equateKinds' _ _ = pure False
+
+checkKind :: UnificationErrorBlame blame => blame -> Kind -> Ty -> Expand ()
+checkKind blame k t = do
+  k' <- inferKind blame t
+  equateKinds blame k k'
+
+inferKind :: UnificationErrorBlame blame => blame -> Ty -> Expand Kind
+inferKind blame (Ty (TyF ctor args)) = do
+  k1 <- ctorKind ctor
+  argKinds <- traverse (inferKind blame) args
+  appKind k1 argKinds
+
+  where
+    ctorKind TSyntax = pure KStar
+    ctorKind TInteger = pure KStar
+    ctorKind TString = pure KStar
+    ctorKind TOutputPort = pure KStar
+    ctorKind TFun = pure $ kFun [KStar, KStar] KStar
+    ctorKind TMacro = pure $ kFun [KStar] KStar
+    ctorKind TIO = pure $ kFun [KStar] KStar
+    ctorKind TType = pure KStar
+    ctorKind (TDatatype dt) = do
+      DatatypeInfo argKinds _ <- datatypeInfo dt
+      pure $ kFun argKinds KStar
+    ctorKind (TSchemaVar _) = throwError $ InternalError "Tried to find kind in open context"
+    ctorKind (TMetaVar mv) = typeVarKind mv
+
+    appKind k [] = pure k
+    appKind (KFun k1 k2) (k : ks) =
+      equateKinds blame k1 k *> appKind k2 ks
+    appKind other (k : ks) = do
+      k1 <- KMetaVar <$> liftIO newKindVar
+      k2 <- KMetaVar <$> liftIO newKindVar
+      equateKinds blame other (KFun k1 k2)
+      appKind (KFun k1 k2) (k : ks)

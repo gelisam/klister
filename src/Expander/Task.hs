@@ -8,6 +8,7 @@ import Binding
 import Core
 import Datatype
 import Expander.DeclScope
+import Kind
 import Module
 import Phase
 import Pretty
@@ -22,7 +23,7 @@ import Value
 
 data MacroDest
   = ExprDest Ty SplitCorePtr
-  | TypeDest SplitTypePtr
+  | TypeDest Kind SplitTypePtr
   | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
   | PatternDest Ty PatternPtr

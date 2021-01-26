@@ -1,0 +1,231 @@
+#lang "prelude.kl"
+
+(import "defun.kl")
+(import "lambda-case.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "let.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+
+(example (lambda (x) x))
+
+(datatype (Functor F A B)
+  (functor (-> (-> A B) (-> (F A) (F B)))))
+
+(datatype (List A)
+  (nil)
+  (:: A (List A)))
+
+(defun map (f xs)
+  (case xs
+    [(nil) (nil)]
+    [(:: y ys) (:: (f y) (map f ys))]))
+
+(define list-functor
+  (functor map))
+
+(datatype (Maybe A)
+  (nothing)
+  (just A))
+
+(define maybe-functor
+  (functor
+    (lambda (f x)
+      (case x
+        [(nothing) (nothing)]
+        [(just x) (just (f x))]))))
+
+(define macro-functor
+  (functor
+    (lambda (f x)
+      (>>= x (lambda (y) (pure (f y)))))))
+
+(define fmap
+  (lambda (inst f x)
+    (case inst
+      [(functor op) (op f x)])))
+
+(example fmap)
+
+(datatype (Applicative F A B)
+  (applicative (Functor F A B)
+               (-> A (F A))
+               (-> (F (-> A B)) (F A) (F B))))
+
+
+(define macro-applicative
+  (applicative
+    macro-functor
+    (lambda (x) (pure x))
+    (lambda (fun arg)
+      (>>= fun (lambda (g) (>>= arg (lambda (x) (pure (g x)))))))))
+
+(example macro-applicative)
+
+(define maybe-applicative
+  (applicative
+    maybe-functor
+    (lambda (x) (just x))
+    (lambda (fun arg)
+      (case fun
+        ((nothing) (nothing))
+        ((just f)
+         (case arg
+           ((nothing) (nothing))
+           ((just x) (just (f x)))))))))
+
+(define return
+  (lambda (inst x)
+    (case inst
+      [(applicative fun p ap) (p x)])))
+
+(example return)
+
+(define ap
+  (lambda (inst f arg)
+    (case inst
+      [(applicative fun p ap) (ap f arg)])))
+
+(example ap)
+
+(define-macros
+  ([idiom
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ inst-and-args)
+         (syntax-case inst-and-args
+           [(cons inst args)
+            (syntax-case args
+              [(cons fun more)
+               (pure
+                (quasiquote/loc stx
+                  (let (inst ,inst)
+                    (idiom-helper inst (return inst ,fun) ,more))))])])]))]
+   [idiom-helper
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ inst fun args))
+         (syntax-case args
+           [() (pure fun)]
+           [(cons x xs)
+            (pure
+             (quasiquote/loc stx
+               (idiom-helper ,inst (ap ,inst ,fun ,x) ,xs)))])]))]))
+
+(example (idiom maybe-applicative string-append (just "applicative") (just " notation")))
+(example (idiom maybe-applicative string-append (just "applicative") (nothing)))
+
+(define-macros
+  ([define-idiom
+    (lambda (stx)
+      (syntax-case stx
+       [(list (_ kw inst))
+        (pure
+         (quasiquote/loc stx
+           (group
+            (define inst ,inst)
+            (define-macros
+              ([,kw
+                (lambda (stx)
+                  (syntax-case stx
+                    [(cons _ args)
+                     (pure (cons-list-syntax 'idiom (cons-list-syntax 'inst args stx) stx))]))])))))]))]))
+
+(define-idiom perhaps maybe-applicative)
+
+(example (perhaps string-append (just "applicative") (just " notation")))
+(example (perhaps string-append (just "applicative") (nothing)))
+
+
+(datatype (Monad M A B)
+  (monad (Applicative M A B)
+         (-> (M A) (-> A (M B))
+             (M B))))
+
+(define macro-monad
+  (monad macro-applicative (lambda (m f) (>>= m f))))
+
+(define maybe-monad
+  (monad maybe-applicative
+    (lambda (m f)
+      (case m
+        ((nothing) (nothing))
+        ((just x) (f x))))))
+
+(define bind
+  (lambda (inst m f)
+    (case inst
+      [(monad app >>=) (>>= m f)])))
+
+(example bind)
+
+(define monad->applicative
+  (lambda (m)
+    (case m ((monad app _) app))))
+
+(define-macros
+  ((<-
+    (lambda (stx)
+      (syntax-error (quote "<- used out of context") stx)))
+   (do (lambda (stx)
+         (syntax-case stx
+          ((cons _ inst-and-actions)
+           (syntax-case inst-and-actions
+            ((cons inst all-actions)
+             (syntax-case all-actions
+               ((list (last-action))
+                (pure last-action))
+               ((cons first-action actions)
+                (let ((otherwise (pure `(bind ,inst
+                                              ,first-action (lambda (_)
+                                                              ,(cons-list-syntax
+                                                                 'do
+                                                                 (cons-list-syntax inst actions stx)
+                                                                 stx))))))
+                  (syntax-case first-action
+                    ((list (<-? var action))
+                     (>>= (free-identifier=? '<- <-?)
+                          (lambda (isArrow)
+                                  (if isArrow
+                                      (pure `(bind ,inst
+                                                   ,action (lambda (,var)
+                                                              ,(cons-list-syntax
+                                                                'do
+                                                                (cons-list-syntax inst actions stx)
+                                                                stx))))
+                                      otherwise))))
+                    (_
+                     otherwise)))))))))))))
+
+(example
+  (do maybe-monad
+      (<- f (just (lambda (x) x)))
+      (<- y (just "hey"))
+      (return (monad->applicative maybe-monad) (f y))))
+
+
+(define-macros
+  ((define-do
+    (lambda (stx)
+      (syntax-case stx
+       ((list (_ kw inst))
+        (pure
+          (quasiquote/loc stx
+            (group
+              (define the-instance ,inst)
+              (define-macros
+                ((,kw
+                  (lambda (stx)
+                    (syntax-case stx
+                      ((cons _ cases)
+                       (pure (cons-list-syntax 'do (cons-list-syntax 'the-instance cases stx) stx)))))))))))))))))
+
+(define-do maybe-do maybe-monad)
+
+
+(example
+  (maybe-do
+    (<- f (just (lambda (x) x)))
+    (<- y (just "hey"))
+    (return (monad->applicative maybe-monad) (f y))))
+

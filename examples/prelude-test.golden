@@ -1,4 +1,4 @@
 #[prelude-test.kl:3.18-3.19]<a> : Syntax
-#<closure> : ∀α β. ((α → β) → (α → β))
-#<closure> : ∀α. (α → α)
-#<closure> : ∀α. (α → α)
+#<closure> : ∀(α : *) (β : *). ((α → β) → (α → β))
+#<closure> : ∀(α : *). (α → α)
+#<closure> : ∀(α : *). (α → α)

@@ -3,6 +3,7 @@
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 module Pretty (Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
@@ -24,6 +25,7 @@ import Core
 import Datatype
 import Env
 import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
+import Kind
 import Module
 import ModuleName
 import KlisterPath
@@ -287,16 +289,23 @@ instance PrettyBinder VarInfo [CompleteDecl] where
                      in (doc:docs, e'')
 
 
+instance Pretty VarInfo Kind where
+  pp _   KStar        = text "*"
+  pp env (KFun k1 k2) = parens (pp env k1 <+> text "→" <+> pp env k2)
+  pp _   (KMetaVar v) = text "META" <> viaShow v -- TODO make it look better
+
 instance Pretty VarInfo (Scheme Ty) where
-  pp env (Scheme 0 t) =
+  pp env (Scheme [] t) =
     pp env t
-  pp env (Scheme n t) =
+  pp env (Scheme argKinds t) =
     text "∀" <>
     (align $ group $
      vsep [ group $
-            vsep (map text (take (fromIntegral n) typeVarNames)) <> text "."
+            vsep (zipWith ppArgKind typeVarNames argKinds) <> text "."
           , pp env t
           ])
+    where
+      ppArgKind varName kind = parens (text varName <+> text ":" <+> pp env kind)
 
 typeVarNames :: [Text]
 typeVarNames =
@@ -363,11 +372,12 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
           | (Stx _ _ x, v, e) <- macros
           ],
      mempty)
-  ppBind env (Data (Stx _ _ x) _dn arity ctors) =
+  ppBind env (Data (Stx _ _ x) _dn argKinds ctors) =
     (hang 2 $ group $
      vsep ( text "data" <+> text x <+>
-            hsep [ text α
-                 | α <- take (fromIntegral arity) typeVarNames
+            hsep [ parens (text α <+> ":" <+> pp env k)
+                 | α <- typeVarNames
+                 | k <- argKinds
                  ] <+>
             text "="
           : punc (space <> text "|")

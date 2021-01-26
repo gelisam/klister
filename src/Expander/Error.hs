@@ -11,6 +11,7 @@ import Core
 import Datatype
 import Evaluator
 import Expander.Task
+import Kind
 import KlisterPath
 import ModuleName
 import Phase
@@ -52,6 +53,7 @@ data ExpansionErr
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
   | WrongDatatypeArity Syntax Datatype Natural Int
+  | KindMismatch (Maybe SrcLoc) Kind Kind
   | CircularImports ModuleName [ModuleName]
   deriving (Show)
 
@@ -180,6 +182,11 @@ instance Pretty VarInfo ExpansionErr where
                   , text "Got" <+> viaShow got
                   , text "In" <+> align (pp env stx)
                   ]
+  pp env (KindMismatch loc k1 k2) =
+    hang 2 $ group $ vsep [ text "Kind mismatch at" <+>
+                            maybe (text "unknown location") (pp env) loc <> text "."
+                          , group $ vsep [pp env k1, text "≠", pp env k2]
+                          ]
   pp env (CircularImports current stack) =
     hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", pp env current]
                   , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
