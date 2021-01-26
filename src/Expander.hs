@@ -1275,7 +1275,6 @@ expandOneForm prob stx
                               pure (newKind, a)
               equateKinds vStx k $ kFun (map fst kindedArgs) k'
               argDests <- traverse (uncurry scheduleType) kindedArgs
-              -- TODO schedule args
               linkType dest $ tSchemaVar i argDests
             Id _ -> do
               equateKinds stx k k'
