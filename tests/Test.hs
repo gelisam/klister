@@ -647,15 +647,6 @@ genCoreF subgen varGen =
         constructor
         <$> sameVars (constructor True False)
         <*> sameVars (constructor False True)
-      -- A ternary constructor with no binding
-      ternary ::
-        (forall b. b -> b -> b -> CoreF TypePattern ConstructorPattern b) ->
-        GenT IO (CoreF TypePattern ConstructorPattern a)
-      ternary constructor =
-        constructor
-        <$> sameVars (constructor True False False)
-        <*> sameVars (constructor False True False)
-        <*> sameVars (constructor False False True)
       nonRecursive =
         [ (\b -> corePrimitiveCtor (if b then "true" else "false") []) <$> Gen.bool
         , CoreInteger . fromIntegral <$> Gen.int range1024
