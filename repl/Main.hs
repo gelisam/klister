@@ -74,7 +74,7 @@ mainWithOptions opts =
   case optCommand opts of
     Repl (ReplOptions Nothing) -> do
       ctx <- mkInitContext (KernelName kernelName)
-      void $ execExpand ctx initializeKernel
+      void $ execExpand ctx (initializeKernel stdout)
       repl ctx initialWorld
     Repl (ReplOptions (Just file)) -> do
       (_mn, ctx, result) <- expandFile file
@@ -97,7 +97,7 @@ mainWithOptions opts =
   where expandFile file = do
           mn <- moduleNameFromPath file
           ctx <- mkInitContext mn
-          void $ execExpand ctx initializeKernel
+          void $ execExpand ctx (initializeKernel stdout)
           st <- execExpand ctx $ completely $ do
             void $ visit mn
             getState

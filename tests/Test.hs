@@ -13,6 +13,7 @@ import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (maybeToList)
 import Data.Text (Text)
 import Data.Set (Set)
+import System.IO (stdout)
 import qualified Data.Text as T
 
 import Test.Tasty
@@ -465,7 +466,7 @@ testExpander input spec = do
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
       c <- execExpand ctx $ completely $ do
-             initializeKernel
+             initializeKernel stdout
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
@@ -485,7 +486,7 @@ testExpansionFails input okp =
     Right expr -> do
       ctx <- mkInitContext (KernelName kernelName)
       c <- execExpand ctx $ completely $ do
-             initializeKernel
+             initializeKernel stdout
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
              inEarlierPhase $
                initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
@@ -507,7 +508,7 @@ testFile :: FilePath -> (Module [] CompleteDecl -> [Value] -> Assertion) -> Asse
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
-  void $ execExpand ctx initializeKernel
+  void $ execExpand ctx (initializeKernel stdout)
   (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case
@@ -529,7 +530,7 @@ testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
   mn <- moduleNameFromPath f
   ctx <- mkInitContext mn
-  void $ execExpand ctx initializeKernel
+  void $ execExpand ctx (initializeKernel stdout)
   (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
     \case

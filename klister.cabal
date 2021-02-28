@@ -28,6 +28,7 @@ common deps
     bifunctors           >= 5.5.5 && < 5.6,
     containers           >= 0.6 && < 0.7,
     directory            >= 1.3.3 && < 1.4,
+    exceptions,
     extra                >= 1.6.18 && < 1.8,
     filepath             >= 1.4.2 && < 1.5,
     lens                 >= 4.17.1 && < 4.20,
