@@ -54,7 +54,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import Data.Traversable
 import System.Directory
-import System.IO (stdout)
+import System.IO (Handle)
 
 import Binding
 import Core
@@ -376,8 +376,8 @@ resolve stx@(Stx scs srcLoc x) = do
          return (snd best)
 
 
-initializeKernel :: Expand ()
-initializeKernel = do
+initializeKernel :: Handle -> Expand ()
+initializeKernel outputChannel = do
   traverse_ (uncurry addExprPrimitive) exprPrims
   traverse_ (uncurry addModulePrimitive) modPrims
   traverse_ (uncurry addDeclPrimitive) declPrims
@@ -571,7 +571,7 @@ initializeKernel = do
         )
       , ( "stdout"
         , Scheme [] $ tOutputPort
-        , ValueOutputPort stdout
+        , ValueOutputPort outputChannel
         )
       , ( "write"
         , Scheme [] $ tFun [tOutputPort, tString] (tIO (Prims.primitiveDatatype "Unit" []))

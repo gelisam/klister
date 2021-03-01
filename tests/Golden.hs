@@ -7,6 +7,7 @@
 module Golden where
 
 import Control.Lens hiding (argument)
+import Control.Monad.Catch (bracket)
 import Control.Monad.Except
 import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
@@ -20,7 +21,8 @@ import qualified Data.List as List
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
 import qualified Data.Text.Lazy.IO as Text
-import System.IO.Silently (capture_)
+import System.IO (Handle, openFile, hClose, IOMode(WriteMode))
+import System.IO.Silently (hCapture_)
 
 import Evaluator
 import Expander
@@ -52,28 +54,35 @@ mkGoldenTests = do
 
 runExamples :: FilePath -> WriterT Text IO ()
 runExamples file = do
-  (moduleName, result) <- expandFile file
-  case Map.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
-    Nothing -> fail "Internal error: module not evaluated"
-    Just results -> do
-      -- Show just the results of evaluation in the module the user
-      -- asked to run
-      for_ results $
-        \case
-          (ExampleResult _ _ _ tp val) -> do
-            prettyTell val
-            tell " : "
-            prettyTellLn tp
-          (IOResult io) -> do
-            output <- liftIO $ capture_ io
-            tell (T.pack output)
-  where
+  -- We want to capture whatever the test writes to Klister's stdout without
+  -- accidentally capturing what the test harness writes to Haskell's stdout.
+  -- Here we create a Handle which is distinct from Haskell's stdout. Below, we
+  -- use 'hCapture_' to replace it with a handle to which we can actually
+  -- write, not /dev/null.
+  bracket (liftIO $ openFile "/dev/null" WriteMode)
+          (liftIO . hClose)
+        $ \magicHandle -> do
+    (moduleName, result) <- expandFile magicHandle file
+    case Map.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
+      Nothing -> fail "Internal error: module not evaluated"
+      Just results -> do
+        -- Show just the results of evaluation in the module the user
+        -- asked to run
+        for_ results $
+          \case
+            (ExampleResult _ _ _ tp val) -> do
+              prettyTell val
+              tell " : "
+              prettyTellLn tp
+            (IOResult io) -> do
+              output <- liftIO $ hCapture_ [magicHandle] io
+              tell (T.pack output)
 
-expandFile :: FilePath -> WriterT Text IO (ModuleName, ExpanderState)
-expandFile file = do
+expandFile :: Handle -> FilePath -> WriterT Text IO (ModuleName, ExpanderState)
+expandFile magicHandle file = do
   moduleName <- liftIO $ moduleNameFromPath file
   ctx <- liftIO $ mkInitContext moduleName
-  void $ liftIO $ execExpand ctx initializeKernel
+  void $ liftIO $ execExpand ctx (initializeKernel magicHandle)
   st <- liftIO $ execExpand ctx (visit moduleName >> getState)
   case st of
     Left err -> liftIO $ prettyPrintLn err *> fail ""
