@@ -1,0 +1,18 @@
+#lang "prelude.kl"
+(import (shift "prelude.kl" 1))
+(import (shift (only "lambda-case.kl" lambda-case) 1))
+
+(define-macros
+ ([var
+   -- Recieves a scrutinee, a success continuation, a failure continuation, and
+   -- the name of a variable. Calls the success continuation on a list of pairs
+   -- of variables and what they should be bound to.
+   --
+   -- TODO: Currently fails because of a bug in lambda-case.
+  (lambda-case
+    ((list (scrutinee success failure var-name))
+      `(,success (list (list ,var-name ,scrutinee))))
+    (else (syntax-error '"bad application of ")))]))
+
+(example
+ (var hello (lambda (vars) 'success) (lambda () 'failure) "name"))
