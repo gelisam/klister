@@ -1,4 +1,4 @@
 #lang kernel
-(import (rename "bool.kl" (not negb)))
+(import (rename "prelude.kl" (not negb)))
 (example (negb (true)))
 (export negb)

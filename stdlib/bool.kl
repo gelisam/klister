@@ -1,0 +1,40 @@
+#lang kernel
+
+(import (shift kernel 1))
+(import (shift "quasiquote.kl" 1))
+
+(import "n-ary-app.kl")
+
+(define not
+  (lambda (b)
+    (if b (false) (true))))
+
+(define binary-and
+  (lambda (x y)
+    (if x y (false))))
+
+(define binary-or
+  (lambda (x y)
+    (if x (true) y)))
+
+(define-macros
+  ((and (lambda (stx)
+          (syntax-case stx
+            ((cons _ args)
+             (syntax-case args
+               (()
+                (pure '(true)))
+               ((cons x xs)
+                (pure `(binary-and ,x
+                                   ,(cons-list-syntax 'and xs stx)))))))))
+   (or (lambda (stx)
+         (syntax-case stx
+           ((cons _ args)
+            (syntax-case args
+              (()
+               (pure '(false)))
+              ((cons x xs)
+               (pure `(binary-or ,x
+                                 ,(cons-list-syntax 'or xs stx)))))))))))
+                                 
+(export not binary-and binary-or and or)

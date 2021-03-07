@@ -1,5 +1,6 @@
 #lang kernel
 
+(import "bool.kl")
 (import "builtins.kl")
 (import "defun.kl")
 (import "n-ary-app.kl")
@@ -93,4 +94,10 @@
         if
         id
         const
-        compose)
+        compose
+        -- Bool
+        not
+        binary-and
+        binary-or
+        and
+        or)
