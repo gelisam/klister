@@ -1,7 +1,6 @@
 #lang "prelude.kl"
 
 (import "defun.kl")
-(import "lambda-case.kl")
 (import (shift "prelude.kl" 1))
 (import (shift "let.kl" 1))
 (import (shift "quasiquote.kl" 1))
