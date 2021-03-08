@@ -7,9 +7,16 @@
   ([lambda-case
     (lambda (stx)
       (syntax-case stx
-        [(list (_ cases))
+        [(cons _ cases)
          (pure
-          (quasiquote/loc stx
-            (lambda (x) (case x ,cases))))]))]))
+           (list-syntax
+             ('lambda
+              '(x)
+              (cons-list-syntax 'case
+                (cons-list-syntax 'x
+                  cases
+                  stx)
+                stx))
+             stx))]))]))
 
 (export lambda-case)

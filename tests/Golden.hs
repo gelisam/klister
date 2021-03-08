@@ -13,6 +13,7 @@ import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
+import System.Directory (doesFileExist)
 import System.FilePath (replaceExtension, takeBaseName)
 import Test.Tasty.HUnit (assertFailure, testCase)
 import Test.Tasty (TestTree, testGroup)
@@ -42,6 +43,10 @@ mkGoldenTests = do
   return $ testGroup "Golden tests"
     [ testCase testName $ do
         actual <- execWriterT $ runExamples klisterFile
+        firstRun <- not <$> doesFileExist goldenFile
+        when firstRun $ do
+          putStrLn $ "first run: creating " ++ goldenFile
+          Text.writeFile goldenFile actual
         expected <- Text.readFile goldenFile
         when (actual /= expected) $ do
           assertFailure . Text.unpack
