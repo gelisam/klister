@@ -1,0 +1,12 @@
+#lang "prelude.kl"
+
+(import "lambda-case.kl")
+(import "list.kl")
+
+(define classify
+  (lambda-case
+    [(nil) 'nil]
+    [(:: a b) 'cons]))
+
+(example (classify (nil)))
+(example (classify (:: 1 (:: 2 (nil)))))
