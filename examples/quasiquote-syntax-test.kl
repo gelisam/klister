@@ -2,6 +2,12 @@
 
 (import "quasiquote.kl")
 
+(define special-characters
+  '(`(is quasiquote)
+    ,(is unquote)
+    ,@(is unquote-splicing)))
+(example special-characters)
+
 (define thing 'nothing)
 
 (example thing)

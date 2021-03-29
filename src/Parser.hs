@@ -42,7 +42,7 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> ident <|> integer <|> string <|> quoted <|> quasiquoted <|> unquoted
+expr = list <|> ident <|> integer <|> string <|> quoted <|> quasiquoted <|> unquote_spliced <|> unquoted
 
 ident :: Parser Syntax
 ident =
@@ -110,6 +110,14 @@ unquoted =
             , e
             ]
 
+unquote_spliced :: Parser Syntax
+unquote_spliced =
+  do Located loc1 _ <- lexeme (literal ",@")
+     e@(Syntax (Stx _ loc2 _)) <- expr
+     return $ Syntax $ Stx ScopeSet.empty (spanLocs loc1 loc2) $
+       List [ Syntax (Stx ScopeSet.empty loc1 (Id "unquote-splicing"))
+            , e
+            ]
 
 -- | Mostly like the identifier rules from R6RS Scheme, minus hex escapes
 identName :: Parser Text
