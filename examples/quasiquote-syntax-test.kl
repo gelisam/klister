@@ -1,18 +1,24 @@
 #lang "prelude.kl"
 
-[import "quasiquote.kl"]
+(import "quasiquote.kl")
 
-[define thing 'nothing]
+(define special-characters
+  '(`(is quasiquote)
+    ,(is unquote)
+    ,@(is unquote-splicing)))
+(example special-characters)
 
-[example thing]
-[example `thing]
-[example `,thing]
+(define thing 'nothing)
 
-[example `[thing]]
-[example `[,thing]]
+(example thing)
+(example `thing)
+(example `,thing)
 
-[example `[list-syntax [,thing thing] thing]]
+(example `(thing))
+(example `(,thing))
 
-[example `[list-syntax [,thing thing ()] thing]]
+(example `(list-syntax (,thing thing) thing))
 
-[example `(thing ,thing thing)]
+(example `(list-syntax (,thing thing ()) thing))
+
+(example `(thing ,thing thing))
