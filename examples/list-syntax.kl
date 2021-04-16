@@ -3,6 +3,22 @@
 (import "defun.kl")
 
 
+(defun pair-list-syntax (head tail stx)
+  (cons-list-syntax head
+    (cons-list-syntax tail
+      '()
+      stx)
+    stx))
+
+(defun append-list-syntax (list tail stx)
+  (syntax-case list
+    [()
+     tail]
+    [(cons car cdr)
+     (cons-list-syntax car
+       (append-list-syntax cdr tail stx)
+       stx)]))
+
 (define car
   (lambda (stx)
     (syntax-case stx
@@ -67,6 +83,11 @@
           (lambda (a2)
             (foldlM f a2 as))))))
 
+(example (pair-list-syntax '1 '2 'stx))
+(example (append-list-syntax
+           '(1 2 3)
+           '(4 5 6)
+           'stx))
 (example (car '(1 2 3)))
 (example (cdr '(1 2 3)))
 (example (map car '((x 1) (y 2) (z 3))))
@@ -84,4 +105,4 @@
 -- foldrM and foldlM can't be tested here because we'd need to define a macro
 -- but foldrM and foldlM are only available at phase 0.
 
-(export car cdr map foldr foldl foldrM foldlM)
+(export pair-list-syntax append-list-syntax car cdr map foldr foldl foldrM foldlM)

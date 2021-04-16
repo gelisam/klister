@@ -1,23 +1,20 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import (shift "dot-dot-dot.kl" 1))
 
 (define-macros
   ([mcond
     (lambda (stx)
-      (syntax-case stx
-        [(cons mc cases)
-         (syntax-case cases
-           [()
-            (pure `(syntax-error ,(replace-loc mc ''"No more cases")))]
-           [(cons c cs)
-            (syntax-case c
-              [(list (condition result))
-               (pure
-                (quasiquote/loc c
-                  (>>= ,condition
-                       (lambda (x)
-                         (if x ,result ,(cons-list-syntax mc cs stx))))))])])]))]))
+      (syntax-case stx ()
+        [(,mc)
+         (pure `(syntax-error ,(replace-loc mc ''"No more cases")))]
+        [(,mc (,condition ,result) ,cs ...)
+         (pure (replace-loc condition
+                 `(>>= ,condition
+                    (lambda (x)
+                      (if x
+                          ,result
+                          (,mc ,cs ...))))))]))]))
 
 (export mcond)
