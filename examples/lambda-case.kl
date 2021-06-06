@@ -4,6 +4,14 @@
 (import (shift "quasiquote.kl" 1))
 
 (define-macros
+  -- (lambda-case
+  --   [(nil) 'nil]
+  --   [(:: a b) 'cons])
+  -- =>
+  -- (lambda (x)
+  --   (case x
+  --     [(nil) 'nil]
+  --     [(:: a b) 'cons]))
   ([lambda-case
     (lambda (stx)
       (syntax-case stx

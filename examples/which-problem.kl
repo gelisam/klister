@@ -22,6 +22,9 @@
            ((m) true)))
 
 
+-- (the (-> Bool Bool Bool Bool Unit) (mega-const unit))
+-- =>
+-- (the (-> Bool Bool Bool Bool Unit) (lambda (_ _ _ _) unit))
 (define-macro (mega-const e)
   (>>= (which-problem)
        (lambda (prob)
