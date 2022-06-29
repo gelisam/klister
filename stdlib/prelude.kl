@@ -26,6 +26,7 @@
         Bool true false
         Problem declaration expression type pattern
         Maybe nothing just
+        List nil ::
         Syntax-Contents list-contents integer-contents string-contents identifier-contents
 
         -- primitive module macros
