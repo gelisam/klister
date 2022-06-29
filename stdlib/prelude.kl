@@ -10,7 +10,7 @@
 (define compose (lambda (f g x) (f (g x))))
 
 (export -- primitive types
-        Syntax
+        Syntax open-syntax close-syntax
         ->
         Integer + - * / abs negate > >= < <= = /= integer->string
         Macro
@@ -26,6 +26,7 @@
         Bool true false
         Problem declaration expression type pattern
         Maybe nothing just
+        Syntax-Contents list-contents integer-contents string-contents identifier-contents
 
         -- primitive module macros
         #%module
