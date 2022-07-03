@@ -52,4 +52,17 @@
 (example (both (lambda (x) (lambda (y) (lambda (z) 'hello))) (mega-const 'world)))
 (example (both (mega-const 'hello) (lambda (x) (lambda (y) (lambda (z) 'world)))))
 
-      
+(define-macro (type-name)
+  (>>= (which-problem)
+       (lambda (prob)
+         (case prob
+           [(expression t)
+            (type-case t
+              [(-> a b)
+               (pure '"arrow")]
+              [String
+               (pure '"string")])]))))
+
+--   Internal error during expansion! This is a bug in the implementation.
+--   Type pattern info not added
+(example (the String (type-name)))
