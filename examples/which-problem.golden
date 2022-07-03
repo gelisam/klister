@@ -6,4 +6,4 @@
 (both #<closure> #<closure>) : ∀(α : *) (β : *) (γ : *). (Both (α → (β → (γ → Syntax))))
 "String" : String
 "String -> String" : String
-"String -> String" : String
+"String -> String -> String" : String
