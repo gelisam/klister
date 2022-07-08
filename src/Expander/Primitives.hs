@@ -494,6 +494,9 @@ baseType ctor = (implT, implP)
       linkType dest ctor
     implP dest stx = do
       _actualName <- mustBeIdent stx
+      modifyState $
+        set (expanderTypePatternBinders . at dest) $
+        Just []
       linkTypePattern dest $ TypePattern ctor
 
 arrowType :: TypePrim
