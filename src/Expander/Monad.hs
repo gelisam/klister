@@ -427,8 +427,9 @@ linkPattern :: PatternPtr -> ConstructorPatternF PatternPtr -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> Map.singleton dest pat)
 
-linkTypePattern :: TypePatternPtr -> TypePattern -> Expand ()
-linkTypePattern dest pat =
+linkTypePattern :: TypePatternPtr -> TypePattern -> [(Scope, Ident, Var, SchemePtr)] -> Expand ()
+linkTypePattern dest pat vars = do
+  modifyState $ set (expanderTypePatternBinders . at dest) $ Just vars
   modifyState $ over expanderCompletedTypePatterns (<> Map.singleton dest pat)
 
 linkDeclTree :: DeclTreePtr -> DeclTreeF DeclPtr DeclTreePtr -> Expand ()
