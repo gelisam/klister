@@ -52,6 +52,7 @@
 (example (both (lambda (x) (lambda (y) (lambda (z) 'hello))) (mega-const 'world)))
 (example (both (mega-const 'hello) (lambda (x) (lambda (y) (lambda (z) 'world)))))
 
+-- regression test for a bug where matching on String didn't work
 (define-macro (type-name)
   (>>= (which-problem)
        (lambda (prob)
@@ -63,6 +64,4 @@
               [String
                (pure '"string")])]))))
 
---   Internal error during expansion! This is a bug in the implementation.
---   Type pattern info not added
 (example (the String (type-name)))
