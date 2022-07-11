@@ -707,13 +707,11 @@ initializeKernel outputChannel = do
                 else do
                   varInfo <- traverse Prims.prepareVar args
                   sch <- trivialScheme tType
-                  modifyState $
-                    set (expanderTypePatternBinders . at dest) $
-                    Just [ (sc, n, x, sch)
-                         | (sc, n, x) <- varInfo
-                         ]
-                  linkTypePattern dest $
-                    TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo]
+                  linkTypePattern dest
+                    (TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo])
+                    [ (sc, n, x, sch)
+                    | (sc, n, x) <- varInfo
+                    ]
       let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val

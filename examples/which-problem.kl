@@ -52,4 +52,16 @@
 (example (both (lambda (x) (lambda (y) (lambda (z) 'hello))) (mega-const 'world)))
 (example (both (mega-const 'hello) (lambda (x) (lambda (y) (lambda (z) 'world)))))
 
-      
+-- regression test for a bug where matching on String didn't work
+(define-macro (type-name)
+  (>>= (which-problem)
+       (lambda (prob)
+         (case prob
+           [(expression t)
+            (type-case t
+              [(-> a b)
+               (pure '"arrow")]
+              [String
+               (pure '"string")])]))))
+
+(example (the String (type-name)))

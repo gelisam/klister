@@ -494,7 +494,9 @@ baseType ctor = (implT, implP)
       linkType dest ctor
     implP dest stx = do
       _actualName <- mustBeIdent stx
-      linkTypePattern dest $ TypePattern ctor
+      linkTypePattern dest
+        (TypePattern ctor)
+        []
 
 arrowType :: TypePrim
 arrowType = (implT, implP)
@@ -510,10 +512,9 @@ arrowType = (implT, implP)
       (sc1, n1, x1) <- prepareVar arg
       (sc2, n2, x2) <- prepareVar ret
       sch <- trivialScheme tType
-      modifyState $
-        set (expanderTypePatternBinders . at dest) $
-        Just [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
-      linkTypePattern dest $ TypePattern (tFun1 (n1, x1) (n2, x2))
+      linkTypePattern dest
+        (TypePattern (tFun1 (n1, x1) (n2, x2)))
+        [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
 
 macroType :: TypePrim
 macroType = unaryType (\a -> tMacro a)
@@ -533,10 +534,9 @@ unaryType ctor = (implT, implP)
       Stx _ _ (_ :: Syntax, a) <- mustHaveEntries stx
       (sc, n, x) <- prepareVar a
       sch <- trivialScheme tType
-      modifyState $
-        set (expanderTypePatternBinders . at dest) $
-        Just [(sc, n, x, sch)]
-      linkTypePattern dest $ TypePattern $ ctor (n, x)
+      linkTypePattern dest
+        (TypePattern $ ctor (n, x))
+        [(sc, n, x, sch)]
 
 -------------
 -- Modules --
@@ -606,9 +606,9 @@ elsePattern (Right dest) stx = do
   Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
-  modifyState $ set (expanderTypePatternBinders . at dest) $
-    Just [(sc, x, v, ty)]
-  linkTypePattern dest $ AnyType x v
+  linkTypePattern dest
+    (AnyType x v)
+    [(sc, x, v, ty)]
 
 -------------
 -- Helpers --
@@ -632,13 +632,12 @@ addDatatype name dt argKinds = do
           _ <- mustBeIdent me
           patVarInfo <- traverse prepareVar args
           sch <- trivialScheme tType
-          modifyState $
-            set (expanderTypePatternBinders . at dest) $
-            Just [ (sc, n, x, sch)
-                 | (sc, n, x) <- patVarInfo
-                 ]
           -- FIXME kind check here
-          linkTypePattern dest $ TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo]
+          linkTypePattern dest
+            (TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo])
+            [ (sc, n, x, sch)
+            | (sc, n, x) <- patVarInfo
+            ]
   let val = EPrimTypeMacro implType implPat
   b <- freshBinding
   addDefinedBinding name' b
