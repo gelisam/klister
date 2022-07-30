@@ -52,16 +52,37 @@
 (example (both (lambda (x) (lambda (y) (lambda (z) 'hello))) (mega-const 'world)))
 (example (both (mega-const 'hello) (lambda (x) (lambda (y) (lambda (z) 'world)))))
 
--- regression test for a bug where matching on String didn't work
+-- Regression test for a bug where matching on String didn't work.
+--
+-- Now also a demonstration of a separate bug where matching on (-> a b)
+-- binds the same type to both 'a' and 'b'.
 (define-macro (type-name)
-  (>>= (which-problem)
-       (lambda (prob)
-         (case prob
-           [(expression t)
-            (type-case t
-              [(-> a b)
-               (pure '"arrow")]
-              [String
-               (pure '"string")])]))))
+  (flet (render-type (in-lhs type)
+          (type-case type
+            [(-> type1 type2)
+             (>>= (render-type true type1)
+                  (lambda (string1)
+                    (>>= (render-type false type2)
+                         (lambda (string2)
+                           (let (r (string-append string1
+                                     (string-append " -> " string2)))
+                             (case in-lhs
+                               [(true)
+                                (pure (string-append "("
+                                        (string-append r ")")))]
+                               [(false)
+                                 (pure r)]))))))]
+            [String
+             (pure "String")]))
+    (>>= (which-problem)
+         (lambda (prob)
+           (case prob
+             [(expression t)
+              (>>= (render-type false t)
+                   (lambda (string)
+                     (let (syntax (close-syntax '() '() (string-contents string)))
+                       (pure `(mega-const ,syntax)))))])))))
 
 (example (the String (type-name)))
+(example (the String ((type-name) "foo")))
+(example (the String ((type-name) "foo" "bar")))  -- should be "String -> String -> String", but is "String -> String"
