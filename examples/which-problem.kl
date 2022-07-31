@@ -86,3 +86,4 @@
 (example (the String (type-name)))
 (example (the String ((type-name) "foo")))
 (example (the String ((type-name) "foo" "bar")))
+(example (the String ((type-name) (lambda (x) (the String x)))))
