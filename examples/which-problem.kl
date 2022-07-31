@@ -54,8 +54,8 @@
 
 -- Regression test for a bug where matching on String didn't work.
 --
--- Now also a demonstration of a separate bug where matching on (-> a b)
--- binds the same type to both 'a' and 'b'.
+-- Also acts as a regression test for a bug where the pattern (-> a b)
+-- was binding the same type to both a and b.
 (define-macro (type-name)
   (flet (render-type (in-lhs type)
           (type-case type
@@ -85,4 +85,4 @@
 
 (example (the String (type-name)))
 (example (the String ((type-name) "foo")))
-(example (the String ((type-name) "foo" "bar")))  -- should be "String -> String -> String", but is "String -> String"
+(example (the String ((type-name) "foo" "bar")))
