@@ -14,11 +14,14 @@ jobs:
       matrix:
         include:
             # latest GHC, default OS
-          - cabal: "3.2"
-            ghc: "8.10.2"
+          - cabal: "3.4"
+            ghc: "9.0.1"
             os: ubuntu-latest
 
             # non-latest GHC, default OS
+          - cabal: "3.2"
+            ghc: "8.10.2"
+            os: ubuntu-latest
           - cabal: "3.2"
             ghc: "8.8.4"
             os: ubuntu-latest
@@ -28,14 +31,14 @@ jobs:
 
             # latest GHC, non-default OS
           - cabal: "3.2"
-            ghc: "8.10.2"
+            ghc: "9.0.1"
             os: macOS-latest
 
     steps:
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
 
-    - uses: actions/setup-haskell@v1
+    - uses: haskell/actions/setup@v2
       id: setup-haskell-cabal
       name: Setup Haskell
       with:

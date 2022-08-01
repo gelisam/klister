@@ -8,7 +8,7 @@ author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Géline
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 license:        BSD-3-Clause
 license-file:   LICENSE
-tested-with:    GHC==8.6.5, GHC==8.8.4, GHC==8.10.2
+tested-with:    GHC==8.6.5, GHC==8.8.4, GHC==8.10.2, GHC==9.0.1
 build-type:     Simple
 data-files:
     stdlib/builtins.kl
@@ -24,15 +24,15 @@ source-repository head
 
 common deps
   build-depends:
-    base                 >= 4.12.0 && < 4.15,
+    base                 >= 4.12.0 && < 4.16,
     bifunctors           >= 5.5.5 && < 5.6,
     containers           >= 0.6 && < 0.7,
     directory            >= 1.3.3 && < 1.4,
     exceptions,
     extra                >= 1.6.18 && < 1.8,
     filepath             >= 1.4.2 && < 1.5,
-    lens                 >= 4.17.1 && < 4.20,
-    megaparsec           >= 7.0.5 && < 9.1,
+    lens                 >= 4.17.1 && < 5.2,
+    megaparsec           >= 7.0.5 && < 9.3,
     mtl                  >= 2.2.2 && < 2.3,
     prettyprinter        >= 1.2 && < 1.8,
     text                 ^>= 1.2,
@@ -98,7 +98,7 @@ executable klister
       repl
   ghc-options: -Wall
   build-depends:
-    optparse-applicative >= 0.14 && < 0.17,
+    optparse-applicative >= 0.14 && < 0.18,
     klister
   default-language: Haskell2010
 
