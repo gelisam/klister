@@ -1,0 +1,3 @@
+#lang "custom-module.kl"
+
+(example "untouched module")
