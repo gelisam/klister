@@ -1238,7 +1238,7 @@ expandOneForm prob stx
             other ->
               throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
         EPrimModuleMacro _ ->
-          throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
+          throwError $ WrongMacroContext stx ModuleCtx (problemContext prob)
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCtx stx prob
           impl dest outScopesDest stx
