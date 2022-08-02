@@ -119,6 +119,7 @@ expandModule thisMod src = do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
     declTreeDest <- newDeclTreePtr
+    modifyState $ set expanderModuleTop Nothing
     decls <- addModuleScope (view moduleContents src)
     completely do
       expandModuleForm declTreeDest decls
@@ -588,7 +589,7 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
+      , ("Problem", [], [("module", []), ("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
