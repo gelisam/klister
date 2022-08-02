@@ -590,7 +590,7 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("declaration", []), ("type", []), ("expression", [tType]), ("pattern", [])])
+      , ("Problem", [], [("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
