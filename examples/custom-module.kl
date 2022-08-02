@@ -5,7 +5,8 @@
 
 
 (define-macro (my-module body)
-  (pure '(example "customized module")))
+  (pure '(#%module
+           (example "customized module"))))
 
 (export (rename ([my-module #%module])
                 my-module
