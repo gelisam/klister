@@ -1,0 +1,3 @@
+#lang "custom-module.kl"
+
+(example "inside module")

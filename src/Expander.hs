@@ -119,11 +119,10 @@ expandModule thisMod src = do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
     declTreeDest <- newDeclTreePtr
-    outScopesDest <- newDeclOutputScopesPtr
-    modifyState $ set expanderModuleTop $ Just declTreeDest
+    modifyState $ set expanderModuleTop Nothing
     decls <- addModuleScope (view moduleContents src)
     completely do
-      expandDeclForms declTreeDest mempty outScopesDest decls
+      expandModuleForm declTreeDest decls
       expandTasks
     body <- getDeclGroup declTreeDest
     let modName = view moduleSource src
@@ -590,7 +589,7 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
+      , ("Problem", [], [("module", []), ("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
@@ -610,7 +609,7 @@ initializeKernel outputChannel = do
         )
       ]
 
-    modPrims :: [(Text, Syntax -> Expand ())]
+    modPrims :: [(Text, DeclTreePtr -> Syntax -> Expand ())]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
     declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
@@ -750,7 +749,7 @@ initializeKernel outputChannel = do
       bind b val
       addToKernel name runtime b
 
-    addModulePrimitive :: Text -> (Syntax -> Expand ()) -> Expand ()
+    addModulePrimitive :: Text -> (DeclTreePtr -> Syntax -> Expand ()) -> Expand ()
     addModulePrimitive name impl = do
       let val = EPrimModuleMacro impl
       b <- freshBinding
@@ -904,12 +903,14 @@ runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
       case dest of
-        ExprDest t d ->
-          expandOneExpression t d stx
+        ModuleDest d ->
+          expandModuleForm d stx
         DeclTreeDest d outScopesDest ->
           expandDeclForm d outScopesDest stx
         TypeDest k d ->
           expandOneType k d stx
+        ExprDest t d ->
+          expandOneExpression t d stx
         PatternDest scrutT d ->
           expandOnePattern scrutT d stx
         TypePatternDest d ->
@@ -1130,6 +1131,12 @@ runTask (tid, localData, task) = withLocal localData $ do
       bind b val
 
 
+expandOneType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
+expandOneType k dest stx = expandOneForm (TypeDest k dest) stx
+
+expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
+expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
+
 expandOnePattern :: Ty -> PatternPtr -> Syntax -> Expand ()
 -- This case means that identifier-only macro invocations aren't valid in pattern contexts
 expandOnePattern scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
@@ -1144,12 +1151,6 @@ expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
 expandOneTypePattern dest stx =
   expandOneForm (TypePatternDest dest) stx
 
-expandOneType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
-expandOneType k dest stx = expandOneForm (TypeDest k dest) stx
-
-expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
-expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
-
 
 
 -- | Insert a function application marker with a lexical context from
@@ -1160,35 +1161,36 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-problemContext :: MacroDest -> MacroContext
-problemContext (DeclTreeDest {}) = DeclarationCtx
-problemContext (TypeDest {}) = TypeCtx
-problemContext (ExprDest {}) = ExpressionCtx
-problemContext (PatternDest {}) = PatternCaseCtx
-problemContext (TypePatternDest {}) = TypePatternCaseCtx
+problemCategory :: MacroDest -> SyntacticCategory
+problemCategory (ModuleDest {}) = ModuleCat
+problemCategory (DeclTreeDest {}) = DeclarationCat
+problemCategory (TypeDest {}) = TypeCat
+problemCategory (ExprDest {}) = ExpressionCat
+problemCategory (PatternDest {}) = PatternCaseCat
+problemCategory (TypePatternDest {}) = TypePatternCaseCat
 
-requireDeclarationCtx :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
-requireDeclarationCtx _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
-requireDeclarationCtx stx other =
-  throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
+requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
+requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
+requireDeclarationCat stx other =
+  throwError $ WrongSyntacticCategory stx DeclarationCat (problemCategory other)
 
-requireExpressionCtx :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
-requireExpressionCtx _ (ExprDest ty dest) = return (ty, dest)
-requireExpressionCtx stx other =
-  throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
+requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
+requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
+requireTypeCat stx other =
+  throwError $ WrongSyntacticCategory stx TypeCat (problemCategory other)
 
-requireTypeCtx :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
-requireTypeCtx _ (TypeDest kind dest) = return (kind, dest)
-requireTypeCtx stx other =
-  throwError $ WrongMacroContext stx TypeCtx (problemContext other)
+requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
+requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
+requireExpressionCat stx other =
+  throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
-requirePatternCtx _ (PatternDest scrutTy dest) =
+requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCat _ (PatternDest scrutTy dest) =
   return $ Left (scrutTy, dest)
-requirePatternCtx _ (TypePatternDest dest) =
+requirePatternCat _ (TypePatternDest dest) =
   return $ Right dest
-requirePatternCtx stx other =
-  throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
+requirePatternCat stx other =
+  throwError $ WrongSyntacticCategory stx PatternCaseCat (problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1198,7 +1200,7 @@ expandOneForm prob stx
       v <- getEValue b
       case v of
         EPrimExprMacro impl -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           saveExprType dest t
           impl t dest stx
         EConstructor ctor -> do
@@ -1236,11 +1238,15 @@ expandOneForm prob stx
                   linkPattern dest $
                     CtorPattern ctor subPtrs
             other ->
-              throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
-        EPrimModuleMacro _ ->
-          throwError $ WrongMacroContext stx (problemContext prob) ModuleCtx
+              throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
+        EPrimModuleMacro impl ->
+          case prob of
+            ModuleDest dest -> do
+              impl dest stx
+            other ->
+              throwError $ WrongSyntacticCategory stx ModuleCat (problemCategory other)
         EPrimDeclMacro impl -> do
-          (dest, outScopesDest) <- requireDeclarationCtx stx prob
+          (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
         EPrimTypeMacro implT implP ->
           case prob of
@@ -1249,14 +1255,14 @@ expandOneForm prob stx
             TypePatternDest dest ->
               implP dest stx
             otherDest ->
-              throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)
+              throwError $ WrongSyntacticCategory stx TypeCat (problemCategory otherDest)
         EPrimPatternMacro impl -> do
-          dest <- requirePatternCtx stx prob
+          dest <- requirePatternCat stx prob
           impl dest stx
         EPrimUniversalMacro impl ->
           impl prob stx
         EVarMacro var -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           case syntaxE stx of
             Id _ ->
               forkExpandVar t dest stx var
@@ -1264,7 +1270,7 @@ expandOneForm prob stx
             LitInt _ -> error "Impossible - literal integer not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar k i -> do
-          (k', dest) <- requireTypeCtx stx prob
+          (k', dest) <- requireTypeCat stx prob
           case syntaxE stx of
             List (vStx@(syntaxE -> Id _) : arg : args) -> do
               kindedArgs <- for (arg : args) $
@@ -1280,7 +1286,7 @@ expandOneForm prob stx
             _ -> throwError $ NotValidType stx
 
         EIncompleteDefn x n d -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           forkAwaitingDefn x n b d t dest stx
         EIncompleteMacro transformerName sourceIdent mdest ->
           forkAwaitingMacro b transformerName sourceIdent mdest prob stx
@@ -1313,14 +1319,12 @@ expandOneForm prob stx
             Just other -> throwError $ ValueNotMacro other
   | otherwise =
     case prob of
+      ModuleDest {} ->
+        throwError $ InternalError "All modules should be identifier-headed"
       DeclTreeDest {} ->
         throwError $ InternalError "All declarations should be identifier-headed"
       TypeDest {} ->
         throwError $ NotValidType stx
-      PatternDest {} ->
-        throwError $ InternalError "All patterns should be identifier-headed"
-      TypePatternDest {} ->
-        throwError $ InternalError "All type patterns should be identifier-headed"
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
@@ -1333,7 +1337,15 @@ expandOneForm prob stx
             expandLiteralString dest s
             saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+      PatternDest {} ->
+        throwError $ InternalError "All patterns should be identifier-headed"
+      TypePatternDest {} ->
+        throwError $ InternalError "All type patterns should be identifier-headed"
 
+
+expandModuleForm :: DeclTreePtr -> Syntax -> Expand ()
+expandModuleForm dest stx = do
+  expandOneForm (ModuleDest dest) stx
 
 -- | Each declaration form fills a node in the declaration tree, and also fills
 -- a DeclOutputScopesPtr with the scopes it introduces, so that later code can
@@ -1453,9 +1465,10 @@ interpretMacroAction prob =
             _ -> error "Impossible!"
     MacroActionWhichProblem -> do
       case prob of
-        ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
-        TypeDest {} -> pure $ Done $ primitiveCtor "type" []
+        ModuleDest {} -> pure $ Done $ primitiveCtor "module" []
         DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
+        TypeDest {} -> pure $ Done $ primitiveCtor "type" []
+        ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
         PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
         TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
     MacroActionTypeCase env loc ty cases -> do

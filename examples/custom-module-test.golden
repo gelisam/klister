@@ -1,0 +1,3 @@
+"before module" : String
+"inside module" : String
+"after module" : String

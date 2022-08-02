@@ -30,10 +30,16 @@ readModule filename =
        Right (lang, decls) ->
          pure $ Right $ ParsedModule { _moduleSource = name
                                      , _moduleLanguage = lang
-                                     , _moduleContents = decls
+                                     , _moduleContents = addModule decls
                                      }
   where
     source = (,) <$> hashLang <*> manyStx expr <* eof
+    addModule (Syntax (Stx scs loc (List decls)))
+      = Syntax (Stx scs loc (List (module_ : decls)))
+      where
+        module_ = Syntax (Stx scs loc (Id "#%module"))
+    addModule _
+      = error "internal error: manyStx somehow didn't return a List"
 
 readExpr :: FilePath -> Text -> Either Text Syntax
 readExpr filename fileContents =

@@ -542,17 +542,15 @@ unaryType ctor = (implT, implP)
 -- Modules --
 -------------
 
-makeModule :: DeclExpander -> Syntax -> Expand ()
-makeModule expandDeclForms stx =
+makeModule :: DeclExpander -> DeclTreePtr -> Syntax -> Expand ()
+makeModule expandDeclForms bodyPtr stx =
   view expanderModuleTop <$> getState >>=
   \case
     Just _ ->
       error "TODO throw real error - already expanding a module"
     Nothing -> do
-      bodyPtr <- newDeclTreePtr
       modifyState $ set expanderModuleTop (Just bodyPtr)
-      Stx _ _ (_ :: Syntax, name, body) <- mustHaveEntries stx
-      _actualName <- mustBeIdent name
+      (_ :: Syntax, body) <- mustHaveShape stx
 
       outScopesDest <- newDeclOutputScopesPtr
       expandDeclForms bodyPtr mempty outScopesDest body

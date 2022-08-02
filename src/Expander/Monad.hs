@@ -93,7 +93,6 @@ module Expander.Monad
   -- * Kinds
   , zonkKind
   -- * Implementation parts
-  , SyntacticCategory(..)
   , ExpansionEnv(..)
   , EValue(..)
   -- * Expander reader effects
@@ -221,7 +220,7 @@ data EValue
     -- ^ For special forms
   | EPrimTypeMacro (Kind -> SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
     -- ^ For type-level special forms - first as types, then as type patterns
-  | EPrimModuleMacro (Syntax -> Expand ())
+  | EPrimModuleMacro (DeclTreePtr -> Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
@@ -233,8 +232,6 @@ data EValue
   | EIncompleteDefn !Var !Ident !SplitCorePtr -- ^ Definitions that are not yet ready to go
   | EConstructor !Constructor
   -- ^ Constructor identity, elaboration procedure
-
-data SyntacticCategory = ModuleMacro | DeclMacro | ExprMacro
 
 
 data ExpanderContext = ExpanderContext
@@ -415,7 +412,6 @@ phaseRoot = do
 makePrisms ''Binding
 makePrisms ''ExpansionErr
 makePrisms ''EValue
-makePrisms ''SyntacticCategory
 makePrisms ''ExpansionEnv
 makePrisms ''ExpanderTask
 

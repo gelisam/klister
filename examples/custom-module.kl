@@ -1,0 +1,15 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+
+
+(define-macro (my-module body)
+  (pure `(#%module
+           (example "before module")
+           ,body
+           (example "after module"))))
+
+(export (rename ([my-module #%module])
+                my-module
+                example))

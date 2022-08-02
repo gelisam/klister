@@ -21,11 +21,14 @@ import Syntax.SrcLoc
 import Type
 import Value
 
+-- | One constructor for each 'SyntacticCategory'
 data MacroDest
-  = ExprDest Ty SplitCorePtr
-  | TypeDest Kind SplitTypePtr
+  = ModuleDest DeclTreePtr
+    -- ^ produced declaration tree
   | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
+  | TypeDest Kind SplitTypePtr
+  | ExprDest Ty SplitCorePtr
   | PatternDest Ty PatternPtr
     -- ^ scrutinee type, destination pointer
   | TypePatternDest TypePatternPtr
