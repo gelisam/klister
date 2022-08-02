@@ -5,8 +5,10 @@
 
 
 (define-macro (my-module body)
-  (pure '(#%module
-           (example "customized module"))))
+  (pure `(#%module
+           (example "before module")
+           ,body
+           (example "after module"))))
 
 (export (rename ([my-module #%module])
                 my-module
