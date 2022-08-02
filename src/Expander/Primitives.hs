@@ -550,8 +550,7 @@ makeModule expandDeclForms bodyPtr stx =
       error "TODO throw real error - already expanding a module"
     Nothing -> do
       modifyState $ set expanderModuleTop (Just bodyPtr)
-      Stx _ _ (_ :: Syntax, name, body) <- mustHaveEntries stx
-      _actualName <- mustBeIdent name
+      (_ :: Syntax, body) <- mustHaveShape stx
 
       outScopesDest <- newDeclOutputScopesPtr
       expandDeclForms bodyPtr mempty outScopesDest body
