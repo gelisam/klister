@@ -309,8 +309,10 @@ doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0
 
         (TyF ctor1 args1, TyF ctor2 args2)
           | ctor1 == ctor2 && length args1 == length args2 ->
-            withManyExtendedEnv [(n, x, ValueType arg) | (n, x) <- args1, arg <- args2] $
-            eval rhs
+            withManyExtendedEnv [ (n, x, ValueType arg)
+                                | (n, x) <- args1
+                                | arg <- args2]
+                                (eval rhs)
         (_, _) -> next
     match _next (AnyType n x) rhs scrut =
       withExtendedEnv n x (ValueType (Ty scrut)) (eval rhs)
