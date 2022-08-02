@@ -47,7 +47,9 @@ data ExpansionErr
   | NoSuchFile String
   | NotExported Ident Phase
   | ReaderError Text
-  | WrongMacroContext Syntax MacroContext MacroContext
+  | WrongSyntacticCategory Syntax
+      SyntacticCategory  -- actual
+      SyntacticCategory  -- expected
   | NotValidType Syntax
   | TypeCheckError TypeCheckError
   | WrongArgCount Syntax Constructor Int Int
@@ -64,13 +66,13 @@ data TypeCheckError
   deriving (Show)
 
 
-data MacroContext
-  = ExpressionCtx
-  | TypeCtx
-  | ModuleCtx
-  | DeclarationCtx
-  | PatternCaseCtx
-  | TypePatternCaseCtx
+data SyntacticCategory
+  = ExpressionCat
+  | TypeCat
+  | ModuleCat
+  | DeclarationCat
+  | PatternCaseCat
+  | TypePatternCaseCat
   deriving Show
 
 instance Pretty VarInfo ExpansionErr where
@@ -151,7 +153,7 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
-  pp env (WrongMacroContext stx actual expected) =
+  pp env (WrongSyntacticCategory stx actual expected) =
     hang 2 $ group $
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
@@ -221,10 +223,10 @@ instance Pretty VarInfo TypeCheckError where
                           ]
 
 
-instance Pretty VarInfo MacroContext where
-  pp _env ExpressionCtx = text "an expression"
-  pp _env ModuleCtx = text "a module"
-  pp _env TypeCtx = text "a type"
-  pp _env DeclarationCtx = text "a top-level declaration or example"
-  pp _env PatternCaseCtx = text "a pattern"
-  pp _env TypePatternCaseCtx = text "a typecase pattern"
+instance Pretty VarInfo SyntacticCategory where
+  pp _env ExpressionCat = text "an expression"
+  pp _env ModuleCat = text "a module"
+  pp _env TypeCat = text "a type"
+  pp _env DeclarationCat = text "a top-level declaration or example"
+  pp _env PatternCaseCat = text "a pattern"
+  pp _env TypePatternCaseCat = text "a typecase pattern"

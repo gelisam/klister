@@ -1160,35 +1160,35 @@ addApp ctor (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
-problemContext :: MacroDest -> MacroContext
-problemContext (DeclTreeDest {}) = DeclarationCtx
-problemContext (TypeDest {}) = TypeCtx
-problemContext (ExprDest {}) = ExpressionCtx
-problemContext (PatternDest {}) = PatternCaseCtx
-problemContext (TypePatternDest {}) = TypePatternCaseCtx
+problemCategory :: MacroDest -> SyntacticCategory
+problemCategory (DeclTreeDest {}) = DeclarationCat
+problemCategory (TypeDest {}) = TypeCat
+problemCategory (ExprDest {}) = ExpressionCat
+problemCategory (PatternDest {}) = PatternCaseCat
+problemCategory (TypePatternDest {}) = TypePatternCaseCat
 
-requireDeclarationCtx :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
-requireDeclarationCtx _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
-requireDeclarationCtx stx other =
-  throwError $ WrongMacroContext stx DeclarationCtx (problemContext other)
+requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
+requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
+requireDeclarationCat stx other =
+  throwError $ WrongSyntacticCategory stx DeclarationCat (problemCategory other)
 
-requireExpressionCtx :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
-requireExpressionCtx _ (ExprDest ty dest) = return (ty, dest)
-requireExpressionCtx stx other =
-  throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
+requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
+requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
+requireExpressionCat stx other =
+  throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
 
-requireTypeCtx :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
-requireTypeCtx _ (TypeDest kind dest) = return (kind, dest)
-requireTypeCtx stx other =
-  throwError $ WrongMacroContext stx TypeCtx (problemContext other)
+requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
+requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
+requireTypeCat stx other =
+  throwError $ WrongSyntacticCategory stx TypeCat (problemCategory other)
 
-requirePatternCtx :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
-requirePatternCtx _ (PatternDest scrutTy dest) =
+requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCat _ (PatternDest scrutTy dest) =
   return $ Left (scrutTy, dest)
-requirePatternCtx _ (TypePatternDest dest) =
+requirePatternCat _ (TypePatternDest dest) =
   return $ Right dest
-requirePatternCtx stx other =
-  throwError $ WrongMacroContext stx PatternCaseCtx (problemContext other)
+requirePatternCat stx other =
+  throwError $ WrongSyntacticCategory stx PatternCaseCat (problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1198,7 +1198,7 @@ expandOneForm prob stx
       v <- getEValue b
       case v of
         EPrimExprMacro impl -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           saveExprType dest t
           impl t dest stx
         EConstructor ctor -> do
@@ -1236,11 +1236,11 @@ expandOneForm prob stx
                   linkPattern dest $
                     CtorPattern ctor subPtrs
             other ->
-              throwError $ WrongMacroContext stx ExpressionCtx (problemContext other)
+              throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
         EPrimModuleMacro _ ->
-          throwError $ WrongMacroContext stx ModuleCtx (problemContext prob)
+          throwError $ WrongSyntacticCategory stx ModuleCat (problemCategory prob)
         EPrimDeclMacro impl -> do
-          (dest, outScopesDest) <- requireDeclarationCtx stx prob
+          (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
         EPrimTypeMacro implT implP ->
           case prob of
@@ -1249,14 +1249,14 @@ expandOneForm prob stx
             TypePatternDest dest ->
               implP dest stx
             otherDest ->
-              throwError $ WrongMacroContext stx TypeCtx (problemContext otherDest)
+              throwError $ WrongSyntacticCategory stx TypeCat (problemCategory otherDest)
         EPrimPatternMacro impl -> do
-          dest <- requirePatternCtx stx prob
+          dest <- requirePatternCat stx prob
           impl dest stx
         EPrimUniversalMacro impl ->
           impl prob stx
         EVarMacro var -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           case syntaxE stx of
             Id _ ->
               forkExpandVar t dest stx var
@@ -1264,7 +1264,7 @@ expandOneForm prob stx
             LitInt _ -> error "Impossible - literal integer not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar k i -> do
-          (k', dest) <- requireTypeCtx stx prob
+          (k', dest) <- requireTypeCat stx prob
           case syntaxE stx of
             List (vStx@(syntaxE -> Id _) : arg : args) -> do
               kindedArgs <- for (arg : args) $
@@ -1280,7 +1280,7 @@ expandOneForm prob stx
             _ -> throwError $ NotValidType stx
 
         EIncompleteDefn x n d -> do
-          (t, dest) <- requireExpressionCtx stx prob
+          (t, dest) <- requireExpressionCat stx prob
           forkAwaitingDefn x n b d t dest stx
         EIncompleteMacro transformerName sourceIdent mdest ->
           forkAwaitingMacro b transformerName sourceIdent mdest prob stx
