@@ -904,6 +904,8 @@ runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
       case dest of
+        ModuleDest ->
+          expandModuleForm stx
         DeclTreeDest d outScopesDest ->
           expandDeclForm d outScopesDest stx
         TypeDest k d ->
@@ -1161,6 +1163,7 @@ addApp ctor (Syntax (Stx scs loc _)) args =
     app = Syntax (Stx scs loc (Id "#%app"))
 
 problemCategory :: MacroDest -> SyntacticCategory
+problemCategory (ModuleDest {}) = ModuleCat
 problemCategory (DeclTreeDest {}) = DeclarationCat
 problemCategory (TypeDest {}) = TypeCat
 problemCategory (ExprDest {}) = ExpressionCat
@@ -1237,8 +1240,12 @@ expandOneForm prob stx
                     CtorPattern ctor subPtrs
             other ->
               throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
-        EPrimModuleMacro _ ->
-          throwError $ WrongSyntacticCategory stx ModuleCat (problemCategory prob)
+        EPrimModuleMacro impl ->
+          case prob of
+            ModuleDest -> do
+              impl stx
+            other ->
+              throwError $ WrongSyntacticCategory stx ModuleCat (problemCategory other)
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
@@ -1313,6 +1320,8 @@ expandOneForm prob stx
             Just other -> throwError $ ValueNotMacro other
   | otherwise =
     case prob of
+      ModuleDest {} ->
+        throwError $ InternalError "All modules should be identifier-headed"
       DeclTreeDest {} ->
         throwError $ InternalError "All declarations should be identifier-headed"
       TypeDest {} ->
@@ -1334,6 +1343,10 @@ expandOneForm prob stx
       TypePatternDest {} ->
         throwError $ InternalError "All type patterns should be identifier-headed"
 
+
+expandModuleForm :: Syntax -> Expand ()
+expandModuleForm stx = do
+  expandOneForm ModuleDest stx
 
 -- | Each declaration form fills a node in the declaration tree, and also fills
 -- a DeclOutputScopesPtr with the scopes it introduces, so that later code can
@@ -1453,6 +1466,7 @@ interpretMacroAction prob =
             _ -> error "Impossible!"
     MacroActionWhichProblem -> do
       case prob of
+        ModuleDest {} -> pure $ Done $ primitiveCtor "module" []
         DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
         TypeDest {} -> pure $ Done $ primitiveCtor "type" []
         ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]

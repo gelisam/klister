@@ -38,7 +38,7 @@
         ScopeAction flip add remove
         Unit unit
         Bool true false
-        Problem declaration type expression pattern type-pattern
+        Problem module declaration type expression pattern type-pattern
         Maybe nothing just
         List nil ::
         Syntax-Contents list-contents integer-contents string-contents identifier-contents
