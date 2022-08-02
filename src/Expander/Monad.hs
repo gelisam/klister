@@ -220,7 +220,7 @@ data EValue
     -- ^ For special forms
   | EPrimTypeMacro (Kind -> SplitTypePtr -> Syntax -> Expand ()) (TypePatternPtr -> Syntax -> Expand ())
     -- ^ For type-level special forms - first as types, then as type patterns
-  | EPrimModuleMacro (Syntax -> Expand ())
+  | EPrimModuleMacro (DeclTreePtr -> Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())

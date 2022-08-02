@@ -119,11 +119,9 @@ expandModule thisMod src = do
     lang <- mustBeModName (view moduleLanguage src)
     initializeLanguage lang
     declTreeDest <- newDeclTreePtr
-    outScopesDest <- newDeclOutputScopesPtr
-    modifyState $ set expanderModuleTop $ Just declTreeDest
     decls <- addModuleScope (view moduleContents src)
     completely do
-      expandDeclForms declTreeDest mempty outScopesDest decls
+      expandModuleForm declTreeDest decls
       expandTasks
     body <- getDeclGroup declTreeDest
     let modName = view moduleSource src
@@ -610,7 +608,7 @@ initializeKernel outputChannel = do
         )
       ]
 
-    modPrims :: [(Text, Syntax -> Expand ())]
+    modPrims :: [(Text, DeclTreePtr -> Syntax -> Expand ())]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
     declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
@@ -750,7 +748,7 @@ initializeKernel outputChannel = do
       bind b val
       addToKernel name runtime b
 
-    addModulePrimitive :: Text -> (Syntax -> Expand ()) -> Expand ()
+    addModulePrimitive :: Text -> (DeclTreePtr -> Syntax -> Expand ()) -> Expand ()
     addModulePrimitive name impl = do
       let val = EPrimModuleMacro impl
       b <- freshBinding
@@ -904,8 +902,8 @@ runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
       case dest of
-        ModuleDest ->
-          expandModuleForm stx
+        ModuleDest d ->
+          expandModuleForm d stx
         DeclTreeDest d outScopesDest ->
           expandDeclForm d outScopesDest stx
         TypeDest k d ->
@@ -1242,8 +1240,8 @@ expandOneForm prob stx
               throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
         EPrimModuleMacro impl ->
           case prob of
-            ModuleDest -> do
-              impl stx
+            ModuleDest dest -> do
+              impl dest stx
             other ->
               throwError $ WrongSyntacticCategory stx ModuleCat (problemCategory other)
         EPrimDeclMacro impl -> do
@@ -1344,9 +1342,9 @@ expandOneForm prob stx
         throwError $ InternalError "All type patterns should be identifier-headed"
 
 
-expandModuleForm :: Syntax -> Expand ()
-expandModuleForm stx = do
-  expandOneForm ModuleDest stx
+expandModuleForm :: DeclTreePtr -> Syntax -> Expand ()
+expandModuleForm dest stx = do
+  expandOneForm (ModuleDest dest) stx
 
 -- | Each declaration form fills a node in the declaration tree, and also fills
 -- a DeclOutputScopesPtr with the scopes it introduces, so that later code can

@@ -23,7 +23,8 @@ import Value
 
 -- | One constructor for each 'SyntacticCategory'
 data MacroDest
-  = ModuleDest
+  = ModuleDest DeclTreePtr
+    -- ^ produced declaration tree
   | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
   | TypeDest Kind SplitTypePtr
