@@ -9,7 +9,21 @@
 (define const (lambda (x y) x))
 (define compose (lambda (f g x) (f (g x))))
 
-(export -- primitive types
+(export -- primitive module macros
+        #%module
+
+        -- primitive declaration macros
+        define
+        datatype
+        define-macros
+        example
+        run
+        import
+        export
+        meta
+        group
+
+        -- primitive types
         Syntax open-syntax close-syntax
         ->
         Integer + - * / abs negate > >= < <= = /= integer->string
@@ -24,24 +38,10 @@
         ScopeAction flip add remove
         Unit unit
         Bool true false
-        Problem declaration expression type pattern
+        Problem declaration type expression pattern
         Maybe nothing just
         List nil ::
         Syntax-Contents list-contents integer-contents string-contents identifier-contents
-
-        -- primitive module macros
-        #%module
-
-        -- primitive declaration macros
-        define
-        datatype
-        define-macros
-        example
-        run
-        import
-        export
-        meta
-        group
 
         -- primitive expression macros
         oops
@@ -81,11 +81,6 @@
         -- non-primitive declaration macros
         defun
 
-        -- IO primitives
-        Output-Port
-        stdout
-        write
-
         -- non-primitive expression macros
         unquote
         quasiquote
@@ -95,4 +90,9 @@
         if
         id
         const
-        compose)
+        compose
+        
+        -- IO primitives
+        Output-Port
+        stdout
+        write)

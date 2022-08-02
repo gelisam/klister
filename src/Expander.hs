@@ -590,7 +590,7 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("declaration", []), ("expression", [tType]), ("type", []), ("pattern", [])])
+      , ("Problem", [], [("declaration", []), ("type", []), ("expression", [tType]), ("pattern", [])])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
@@ -904,12 +904,12 @@ runTask (tid, localData, task) = withLocal localData $ do
   case task of
     ExpandSyntax dest stx ->
       case dest of
-        ExprDest t d ->
-          expandOneExpression t d stx
         DeclTreeDest d outScopesDest ->
           expandDeclForm d outScopesDest stx
         TypeDest k d ->
           expandOneType k d stx
+        ExprDest t d ->
+          expandOneExpression t d stx
         PatternDest scrutT d ->
           expandOnePattern scrutT d stx
         TypePatternDest d ->
@@ -1130,6 +1130,12 @@ runTask (tid, localData, task) = withLocal localData $ do
       bind b val
 
 
+expandOneType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
+expandOneType k dest stx = expandOneForm (TypeDest k dest) stx
+
+expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
+expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
+
 expandOnePattern :: Ty -> PatternPtr -> Syntax -> Expand ()
 -- This case means that identifier-only macro invocations aren't valid in pattern contexts
 expandOnePattern scrutTy dest var@(Syntax (Stx _ _ (Id _))) = do
@@ -1143,12 +1149,6 @@ expandOnePattern scrutTy dest stx =
 expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
 expandOneTypePattern dest stx =
   expandOneForm (TypePatternDest dest) stx
-
-expandOneType :: Kind -> SplitTypePtr -> Syntax -> Expand ()
-expandOneType k dest stx = expandOneForm (TypeDest k dest) stx
-
-expandOneExpression :: Ty -> SplitCorePtr -> Syntax -> Expand ()
-expandOneExpression t dest stx = expandOneForm (ExprDest t dest) stx
 
 
 
@@ -1172,15 +1172,15 @@ requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outSco
 requireDeclarationCat stx other =
   throwError $ WrongSyntacticCategory stx DeclarationCat (problemCategory other)
 
-requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
-requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
-requireExpressionCat stx other =
-  throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
-
 requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
 requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
 requireTypeCat stx other =
   throwError $ WrongSyntacticCategory stx TypeCat (problemCategory other)
+
+requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
+requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
+requireExpressionCat stx other =
+  throwError $ WrongSyntacticCategory stx ExpressionCat (problemCategory other)
 
 requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
 requirePatternCat _ (PatternDest scrutTy dest) =
@@ -1317,10 +1317,6 @@ expandOneForm prob stx
         throwError $ InternalError "All declarations should be identifier-headed"
       TypeDest {} ->
         throwError $ NotValidType stx
-      PatternDest {} ->
-        throwError $ InternalError "All patterns should be identifier-headed"
-      TypePatternDest {} ->
-        throwError $ InternalError "All type patterns should be identifier-headed"
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
@@ -1333,6 +1329,10 @@ expandOneForm prob stx
             expandLiteralString dest s
             saveExprType dest t
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+      PatternDest {} ->
+        throwError $ InternalError "All patterns should be identifier-headed"
+      TypePatternDest {} ->
+        throwError $ InternalError "All type patterns should be identifier-headed"
 
 
 -- | Each declaration form fills a node in the declaration tree, and also fills
@@ -1453,9 +1453,9 @@ interpretMacroAction prob =
             _ -> error "Impossible!"
     MacroActionWhichProblem -> do
       case prob of
-        ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
-        TypeDest {} -> pure $ Done $ primitiveCtor "type" []
         DeclTreeDest {} -> pure $ Done $ primitiveCtor "declaration" []
+        TypeDest {} -> pure $ Done $ primitiveCtor "type" []
+        ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
         PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
         TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
     MacroActionTypeCase env loc ty cases -> do

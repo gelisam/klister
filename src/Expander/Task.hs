@@ -22,10 +22,10 @@ import Type
 import Value
 
 data MacroDest
-  = ExprDest Ty SplitCorePtr
-  | TypeDest Kind SplitTypePtr
-  | DeclTreeDest DeclTreePtr DeclOutputScopesPtr
+  = DeclTreeDest DeclTreePtr DeclOutputScopesPtr
     -- ^ produced declaration tree, scopes introduced
+  | TypeDest Kind SplitTypePtr
+  | ExprDest Ty SplitCorePtr
   | PatternDest Ty PatternPtr
     -- ^ scrutinee type, destination pointer
   | TypePatternDest TypePatternPtr

@@ -67,10 +67,10 @@ data TypeCheckError
 
 
 data SyntacticCategory
-  = ExpressionCat
-  | TypeCat
-  | ModuleCat
+  = ModuleCat
   | DeclarationCat
+  | TypeCat
+  | ExpressionCat
   | PatternCaseCat
   | TypePatternCaseCat
   deriving Show
