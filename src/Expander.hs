@@ -1155,9 +1155,9 @@ expandOneTypePattern dest stx =
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
-addApp :: (forall a . [a] -> ExprF a) -> Syntax -> [Syntax] -> Syntax
-addApp ctor (Syntax (Stx scs loc _)) args =
-  Syntax (Stx scs loc (ctor (app : args)))
+addApp :: Syntax -> [Syntax] -> Syntax
+addApp (Syntax (Stx scs loc _)) args =
+  Syntax (Stx scs loc (List (app : args)))
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
@@ -1268,7 +1268,7 @@ expandOneForm prob stx
               forkExpandVar t dest stx var
             String _ -> error "Impossible - string not ident"
             Integer _ -> error "Impossible - integer not ident"
-            List xs -> expandOneExpression t dest (addApp List stx xs)
+            List xs -> expandOneExpression t dest (addApp stx xs)
         ETypeVar k i -> do
           (k', dest) <- requireTypeCat stx prob
           case syntaxE stx of
@@ -1327,7 +1327,7 @@ expandOneForm prob stx
         throwError $ NotValidType stx
       ExprDest t dest ->
         case syntaxE stx of
-          List xs -> expandOneExpression t dest (addApp List stx xs)
+          List xs -> expandOneExpression t dest (addApp stx xs)
           Integer s -> do
             unify dest t tInteger
             expandLiteralInteger dest s
