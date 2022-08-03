@@ -58,7 +58,7 @@ ident =
 integer :: Parser Syntax
 integer =
   do Located srcloc s <- lexeme integerNum
-     return $ Syntax $ Stx ScopeSet.empty srcloc (LitInt s)
+     return $ Syntax $ Stx ScopeSet.empty srcloc (Integer s)
 
 list :: Parser Syntax
 list = parenned "(" ")" <|> parenned "[" "]"

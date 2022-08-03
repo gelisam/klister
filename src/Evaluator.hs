@@ -161,7 +161,7 @@ eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   case identSyntax of
     Syntax (Stx _ _ expr) ->
       case expr of
-        LitInt _ ->
+        Integer _ ->
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "id"
             , _typeErrorActual   = "integer"
@@ -195,7 +195,7 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
             { _typeErrorExpected = "list"
             , _typeErrorActual   = "id"
             }
-        LitInt _ ->
+        Integer _ ->
           throwError $ EvalErrorType $ TypeError
             { _typeErrorExpected = "list"
             , _typeErrorActual   = "integer"

@@ -411,7 +411,7 @@ initializeKernel outputChannel = do
                 primitiveCtor "identifier-contents" [ValueString name]
               String str ->
                 primitiveCtor "string-contents" [ValueString str]
-              LitInt i ->
+              Integer i ->
                 primitiveCtor "integer-contents" [ValueInteger i]
               List xs ->
                 primitiveCtor "list-contents" [foldr consVal nilVal xs]
@@ -447,7 +447,7 @@ initializeKernel outputChannel = do
                     ("string-contents", ValueString str) ->
                       close (String str)
                     ("integer-contents", ValueInteger i) ->
-                      close (LitInt i)
+                      close (Integer i)
                     ("list-contents", unList -> lst) ->
                       close (List lst)
                     _ ->
@@ -522,19 +522,19 @@ initializeKernel outputChannel = do
       [
         ( name
         , Scheme [] $ tFun [tInteger] tInteger
-        , Prims.unaryIntPrim fun
+        , Prims.unaryIntegerPrim fun
         )
       | (name, fun) <- [("abs", abs), ("negate", negate)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] tInteger
-        , Prims.binaryIntPrim fun
+        , Prims.binaryIntegerPrim fun
         )
       | (name, fun) <- [("+", (+)), ("-", (-)), ("*", (*)), ("/", div)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] (Prims.primitiveDatatype "Bool" [])
-        , Prims.binaryIntPred fun
+        , Prims.binaryIntegerPred fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
@@ -811,7 +811,7 @@ primImportModule dest outScopesDest importStx = do
       | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
           subSpec <- importSpec spec
           RenameImports subSpec <$> traverse getRename renamings
-      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (LitInt i))] <- elts = do
+      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Integer i))] <- elts = do
           subSpec <- importSpec spec
           return $ ShiftImports subSpec (fromIntegral i)
       | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
@@ -854,7 +854,7 @@ primExport dest outScopesDest stx = do
                 _ -> throwError $ NotExportSpec blame
             "shift" ->
               case args of
-                (Syntax (Stx _ _ (LitInt i)) : more) -> do
+                (Syntax (Stx _ _ (Integer i)) : more) -> do
                   spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
                   if i >= 0
                     then return $ ExportShifted spec (fromIntegral i)
@@ -1267,7 +1267,7 @@ expandOneForm prob stx
             Id _ ->
               forkExpandVar t dest stx var
             String _ -> error "Impossible - string not ident"
-            LitInt _ -> error "Impossible - literal integer not ident"
+            Integer _ -> error "Impossible - integer not ident"
             List xs -> expandOneExpression t dest (addApp List stx xs)
         ETypeVar k i -> do
           (k', dest) <- requireTypeCat stx prob
@@ -1328,7 +1328,7 @@ expandOneForm prob stx
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp List stx xs)
-          LitInt s -> do
+          Integer s -> do
             unify dest t tInteger
             expandLiteralInteger dest s
             saveExprType dest t

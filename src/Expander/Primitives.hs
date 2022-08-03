@@ -57,9 +57,9 @@ module Expander.Primitives
   -- * Local primitives
   , prepareVar
   -- * Primitive values
-  , unaryIntPrim
-  , binaryIntPrim
-  , binaryIntPred
+  , unaryIntegerPrim
+  , binaryIntegerPrim
+  , binaryIntegerPred
   , binaryStringPred
   ) where
 
@@ -746,22 +746,22 @@ primitiveDatatype name args =
                     }
   in tDatatype dt args
 
-unaryIntPrim :: (Integer -> Integer) -> Value
-unaryIntPrim f =
+unaryIntegerPrim :: (Integer -> Integer) -> Value
+unaryIntegerPrim f =
   ValueClosure $ HO $
   \(ValueInteger i) ->
     ValueInteger (f i)
 
-binaryIntPrim :: (Integer -> Integer -> Integer) -> Value
-binaryIntPrim f =
+binaryIntegerPrim :: (Integer -> Integer -> Integer) -> Value
+binaryIntegerPrim f =
   ValueClosure $ HO $
   \(ValueInteger i1) ->
     ValueClosure $ HO $
     \(ValueInteger i2) ->
       ValueInteger (f i1 i2)
 
-binaryIntPred :: (Integer -> Integer -> Bool) -> Value
-binaryIntPred f =
+binaryIntegerPred :: (Integer -> Integer -> Bool) -> Value
+binaryIntegerPred f =
   ValueClosure $ HO $
   \(ValueInteger i1) ->
     ValueClosure $ HO $

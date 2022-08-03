@@ -491,10 +491,10 @@ instance Pretty VarInfo Syntax where
   pp env (Syntax e) = pp env e
 
 instance Pretty VarInfo (ExprF Syntax) where
-  pp _   (Id x)     = text x
-  pp _   (String s) = viaShow s
-  pp _   (LitInt s)    = viaShow s
-  pp env (List xs)  = parens (group (vsep (map (pp env . syntaxE) xs)))
+  pp _   (Id x)      = text x
+  pp _   (String s)  = viaShow s
+  pp _   (Integer s) = viaShow s
+  pp env (List xs)   = parens (group (vsep (map (pp env . syntaxE) xs)))
 
 instance Pretty VarInfo Closure where
   pp _ _ = text "#<closure>"
