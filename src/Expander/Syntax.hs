@@ -38,6 +38,10 @@ mustBeList :: Syntax -> Expand (Stx [Syntax])
 mustBeList (Syntax (Stx scs srcloc (List xs))) = return (Stx scs srcloc xs)
 mustBeList other = throwError (NotList other)
 
+mustBeInteger :: Syntax -> Expand (Stx Integer)
+mustBeInteger (Syntax (Stx scs srcloc (Integer n))) = return (Stx scs srcloc n)
+mustBeInteger other = throwError (NotInteger other)
+
 mustBeString :: Syntax -> Expand (Stx Text)
 mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
 mustBeString other = throwError (NotString other)
