@@ -634,6 +634,8 @@ initializeKernel outputChannel = do
       , ("flet", Prims.flet)
       , ("lambda", Prims.lambda)
       , ("#%app", Prims.app)
+      , ("#%integer-literal", Prims.integerLiteral)
+      , ("#%string-literal", Prims.stringLiteral)
       , ("pure", Prims.pureMacro)
       , (">>=", Prims.bindMacro)
       , ("syntax-error", Prims.syntaxError)
@@ -1161,6 +1163,24 @@ addApp (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
+-- | Insert an integer literal marker with a lexical context from
+-- the original expression
+addIntegerLiteral :: Syntax -> Integer -> Syntax
+addIntegerLiteral (Syntax (Stx scs loc _)) n =
+  Syntax (Stx scs loc (List [integerLiteral, n']))
+  where
+    integerLiteral = Syntax (Stx scs loc (Id "#%integer-literal"))
+    n' = Syntax (Stx scs loc (Integer n))
+
+-- | Insert a string literal marker with a lexical context from
+-- the original expression
+addStringLiteral :: Syntax -> Text -> Syntax
+addStringLiteral (Syntax (Stx scs loc _)) s =
+  Syntax (Stx scs loc (List [stringLiteral, s']))
+  where
+    stringLiteral = Syntax (Stx scs loc (Id "#%string-literal"))
+    s' = Syntax (Stx scs loc (String s))
+
 problemCategory :: MacroDest -> SyntacticCategory
 problemCategory (ModuleDest {}) = ModuleCat
 problemCategory (DeclTreeDest {}) = DeclarationCat
@@ -1328,14 +1348,8 @@ expandOneForm prob stx
       ExprDest t dest ->
         case syntaxE stx of
           List xs -> expandOneExpression t dest (addApp stx xs)
-          Integer s -> do
-            unify dest t tInteger
-            expandLiteralInteger dest s
-            saveExprType dest t
-          String s -> do
-            unify dest t tString
-            expandLiteralString dest s
-            saveExprType dest t
+          Integer n -> expandOneExpression t dest (addIntegerLiteral stx n)
+          String s -> expandOneExpression t dest (addStringLiteral stx s)
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
       PatternDest {} ->
         throwError $ InternalError "All patterns should be identifier-headed"
@@ -1379,14 +1393,6 @@ expandDeclForms dest scs outScopesDest (Syntax (Stx stxScs loc (List (d:ds)))) =
 expandDeclForms _dest _scs _outScopesDest _stx =
   error "TODO real error message - malformed module body"
 
-
--- | Link the destination to a literal integer object
-expandLiteralInteger :: SplitCorePtr -> Integer -> Expand ()
-expandLiteralInteger dest i = linkExpr dest (CoreInteger i)
-
-expandLiteralString :: SplitCorePtr -> Text -> Expand ()
-expandLiteralString dest str = do
-  linkExpr dest (CoreString str)
 
 data MacroOutput
   = StuckOnType SrcLoc Ty VEnv [(TypePattern, Core)] [Closure]

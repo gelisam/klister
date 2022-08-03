@@ -17,6 +17,8 @@ module Expander.Primitives
   , meta
   -- * Expression primitives
   , app
+  , integerLiteral
+  , stringLiteral
   , bindMacro
   , consListSyntax
   , dataCase
@@ -309,6 +311,22 @@ app t dest stx = do
   funDest <- schedule (tFun1 argT t) fun
   argDest <- schedule argT arg
   linkExpr dest $ CoreApp funDest argDest
+
+integerLiteral :: ExprPrim
+integerLiteral t dest stx = do
+  Stx _ _ (_, arg) <- mustHaveEntries stx
+  Stx _ _ i <- mustBeInteger arg
+  unify dest t tInteger
+  linkExpr dest (CoreInteger i)
+  saveExprType dest t
+
+stringLiteral :: ExprPrim
+stringLiteral t dest stx = do
+  Stx _ _ (_, arg) <- mustHaveEntries stx
+  Stx _ _ s <- mustBeString arg
+  unify dest t tString
+  linkExpr dest (CoreString s)
+  saveExprType dest t
 
 pureMacro :: ExprPrim
 pureMacro t dest stx = do

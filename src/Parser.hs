@@ -145,8 +145,10 @@ identName =
          guard (null more || not (all isDigit more))
          return (str <> T.pack more)
 
-    magicIdent = (literal "#%app" $> "#%app")       <|>
-                 (literal "#%module" $> "#%module")
+    magicIdent = (literal "#%app" $> "#%app")
+             <|> (literal "#%module" $> "#%module")
+             <|> (literal "#%integer-literal" $> "#%integer-literal")
+             <|> (literal "#%string-literal" $> "#%string-literal")
 
     initial :: Parser Char
     initial =

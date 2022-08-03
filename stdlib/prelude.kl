@@ -51,6 +51,8 @@
         flet
         lambda
         #%app
+        #%integer-literal
+        #%string-literal
         pure
         >>=
         syntax-error
