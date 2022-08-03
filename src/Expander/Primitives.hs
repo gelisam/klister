@@ -170,7 +170,7 @@ datatype dest outScopesDest stx = do
 
 defineMacros :: DeclPrim
 defineMacros dest outScopesDest stx = do
-  Stx _ _ (_ :: Syntax, macroList) <- mustHaveEntries stx
+  Stx _ _ (_, macroList) <- mustHaveEntries stx
   Stx _ _ macroDefs <- mustBeList macroList
   p <- currentPhase
   sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
@@ -190,7 +190,7 @@ defineMacros dest outScopesDest stx = do
 
 example :: DeclPrim
 example dest outScopesDest stx = do
-  Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
+  Stx _ _ (_, expr) <- mustHaveEntries stx
   exprDest <- liftIO $ newSplitCorePtr
   sch <- liftIO newSchemePtr
   linkOneDecl dest (Example (view (unSyntax . stxSrcLoc) stx) sch exprDest)
@@ -203,7 +203,7 @@ example dest outScopesDest stx = do
 
 run :: DeclPrim
 run dest outScopesDest stx = do
-  Stx _ _ (_ :: Syntax, expr) <- mustHaveEntries stx
+  Stx _ _ (_, expr) <- mustHaveEntries stx
   exprDest <- liftIO $ newSplitCorePtr
   linkOneDecl dest (Run (stxLoc stx) exprDest)
   forkExpandSyntax (ExprDest (tIO (primitiveDatatype "Unit" [])) exprDest) expr
@@ -230,7 +230,7 @@ oops _t _dest stx = throwError (InternalError $ "oops" ++ show stx)
 
 err :: ExprPrim
 err _t dest stx = do
-  Stx _ _ (_ :: Syntax, msg) <- mustHaveEntries stx
+  Stx _ _ (_, msg) <- mustHaveEntries stx
   msgDest <- schedule tSyntax msg
   linkExpr dest $ CoreError msgDest
 
@@ -312,7 +312,7 @@ app t dest stx = do
 
 pureMacro :: ExprPrim
 pureMacro t dest stx = do
-  Stx _ _ (_ :: Syntax, v) <- mustHaveEntries stx
+  Stx _ _ (_, v) <- mustHaveEntries stx
   innerT <- tMetaVar <$> freshMeta (Just KStar)
   unify dest (tMacro innerT) t
   argDest <- schedule innerT v
@@ -342,27 +342,27 @@ syntaxError t dest stx = do
 identEqual :: HowEq -> ExprPrim
 identEqual how t dest stx = do
   unify dest t (tMacro (primitiveDatatype "Bool" []))
-  Stx _ _ (_ :: Syntax, id1, id2) <- mustHaveEntries stx
+  Stx _ _ (_, id1, id2) <- mustHaveEntries stx
   newE <- CoreIdentEq how <$> schedule tSyntax id1 <*> schedule tSyntax id2
   linkExpr dest newE
 
 quote :: ExprPrim
 quote t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, quoted) <- mustHaveEntries stx
+  Stx _ _ (_, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
 
 ident :: ExprPrim
 ident t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, someId) <- mustHaveEntries stx
+  Stx _ _ (_, someId) <- mustHaveEntries stx
   x@(Stx _ _ _) <- mustBeIdent someId
   linkExpr dest $ CoreIdentifier x
 
 identSyntax :: ExprPrim
 identSyntax t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, someId, source) <- mustHaveEntries stx
+  Stx _ _ (_, someId, source) <- mustHaveEntries stx
   idDest <- schedule tSyntax someId
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreIdent $ ScopedIdent idDest sourceDest
@@ -370,14 +370,14 @@ identSyntax t dest stx = do
 emptyListSyntax :: ExprPrim
 emptyListSyntax t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, source) <- mustHaveEntries stx
+  Stx _ _ (_, source) <- mustHaveEntries stx
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreEmpty $ ScopedEmpty sourceDest
 
 consListSyntax :: ExprPrim
 consListSyntax t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, car, cdr, source) <- mustHaveEntries stx
+  Stx _ _ (_, car, cdr, source) <- mustHaveEntries stx
   carDest <- schedule tSyntax car
   cdrDest <- schedule tSyntax cdr
   sourceDest <- schedule tSyntax source
@@ -386,7 +386,7 @@ consListSyntax t dest stx = do
 listSyntax :: ExprPrim
 listSyntax t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, list, source) <- mustHaveEntries stx
+  Stx _ _ (_, list, source) <- mustHaveEntries stx
   Stx _ _ listItems <- mustHaveEntries list
   listDests <- traverse (schedule tSyntax) listItems
   sourceDest <- schedule tSyntax source
@@ -395,7 +395,7 @@ listSyntax t dest stx = do
 stringSyntax :: ExprPrim
 stringSyntax t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, str, source) <- mustHaveEntries stx
+  Stx _ _ (_, str, source) <- mustHaveEntries stx
   strDest <- schedule tString str
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreStringSyntax $ ScopedString strDest sourceDest
@@ -403,7 +403,7 @@ stringSyntax t dest stx = do
 replaceLoc :: ExprPrim
 replaceLoc t dest stx = do
   unify dest t tSyntax
-  Stx _ _ (_ :: Syntax, loc, valStx) <- mustHaveEntries stx
+  Stx _ _ (_, loc, valStx) <- mustHaveEntries stx
   locDest <- schedule tSyntax loc
   valStxDest <- schedule tSyntax valStx
   linkExpr dest $ CoreReplaceLoc locDest valStxDest
@@ -418,7 +418,7 @@ syntaxCase t dest stx = do
 
 letSyntax :: ExprPrim
 letSyntax t dest stx = do
-  Stx _ loc (_ :: Syntax, macro, body) <- mustHaveEntries stx
+  Stx _ loc (_, macro, body) <- mustHaveEntries stx
   Stx _ _ (mName, mdef) <- mustHaveEntries macro
   sc <- freshScope $ T.pack $ "Scope for let-syntax at " ++ shortShow loc
   m <- mustBeIdent mName
@@ -452,7 +452,7 @@ makeIntroducer t dest stx = do
 log :: ExprPrim
 log t dest stx = do
   unify dest (tMacro (primitiveDatatype "Unit" [])) t
-  Stx _ _ (_ :: Syntax, message) <- mustHaveEntries stx
+  Stx _ _ (_, message) <- mustHaveEntries stx
   msgDest <- schedule tSyntax message
   linkExpr dest $ CoreLog msgDest
 
@@ -503,12 +503,12 @@ arrowType = (implT, implP)
   where
     implT k dest stx = do
       equateKinds stx KStar k
-      Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
       argDest <- scheduleType KStar arg
       retDest <- scheduleType KStar ret
       linkType dest (tFun1 argDest retDest)
     implP dest stx = do
-      Stx _ _ (_ :: Syntax, arg, ret) <- mustHaveEntries stx
+      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
       (sc1, n1, x1) <- prepareVar arg
       (sc2, n2, x2) <- prepareVar ret
       sch <- trivialScheme tType
@@ -527,11 +527,11 @@ unaryType ctor = (implT, implP)
   where
     implT k dest stx = do
       equateKinds stx KStar k
-      Stx _ _ (_ :: Syntax, t) <- mustHaveEntries stx
+      Stx _ _ (_, t) <- mustHaveEntries stx
       tDest <- scheduleType KStar t
       linkType dest (ctor tDest)
     implP dest stx = do
-      Stx _ _ (_ :: Syntax, a) <- mustHaveEntries stx
+      Stx _ _ (_, a) <- mustHaveEntries stx
       (sc, n, x) <- prepareVar a
       sch <- trivialScheme tType
       linkTypePattern dest
@@ -566,7 +566,7 @@ makeModule expandDeclForms bodyPtr stx =
 -- type.
 makeLocalType :: MacroDest -> Syntax -> Expand ()
 makeLocalType dest stx = do
-  Stx _ _ (_ :: Syntax, binder, body) <- mustHaveEntries stx
+  Stx _ _ (_, binder, body) <- mustHaveEntries stx
   Stx _ _ theVar <- mustHaveEntries binder
   (sc, n, b) <- varPrepHelper theVar
   meta <- freshMeta Nothing
@@ -594,14 +594,14 @@ type PatternPrim = Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()
 
 elsePattern :: PatternPrim
 elsePattern (Left (scrutTy, dest)) stx = do
-  Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
+  Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme scrutTy
   (sc, x, v) <- prepareVar var
   modifyState $ set (expanderPatternBinders . at dest) $
     Just $ Right (sc, x, v, ty)
   linkPattern dest $ PatternVar x v
 elsePattern (Right dest) stx = do
-  Stx _ _ (_ :: Syntax, var) <- mustHaveEntries stx
+  Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
   linkTypePattern dest

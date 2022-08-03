@@ -793,7 +793,7 @@ initializeKernel outputChannel = do
 -- than literals
 primImportModule :: DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
 primImportModule dest outScopesDest importStx = do
-  Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries importStx
+  Stx scs loc (_, toImport) <- mustHaveEntries importStx
   spec <- importSpec toImport
   modExports <- getImports spec
   sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
