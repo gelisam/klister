@@ -1,0 +1,21 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+
+
+(define-macro (my-integer n)
+  (pure `(+ 1 (#%integer-literal ,n))))
+
+(define-macro (my-string s)
+  (pure `(string-append (#%string-literal ,s) (#%string-literal "!"))))
+
+(export (rename ([my-integer #%integer-literal]
+                 [my-string #%string-literal])
+                #%module
+                #%app
+                my-integer
+                my-string
+                example
+                +
+                string-append))
