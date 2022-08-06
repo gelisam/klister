@@ -11,5 +11,7 @@
            (example "after module"))))
 
 (export (rename ([my-module #%module])
+                #%integer-literal
+                #%string-literal
                 my-module
                 example))
