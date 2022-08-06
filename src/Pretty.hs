@@ -169,6 +169,7 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
   pp env (CoreList e) = pp env e
+  pp env (CoreIntegerSyntax i) = pp env i
   pp env (CoreStringSyntax s) = pp env s
   pp env (CoreReplaceLoc loc stx) =
     group $ hang 2 $ vsep [ text "replace-loc"
@@ -229,6 +230,8 @@ instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) 
 instance PrettyBinder VarInfo SyntaxPattern where
   ppBind _env (SyntaxPatternIdentifier ident@(Stx _ _ x) v) =
     (annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternInteger ident@(Stx _ _ x) v) =
+    (parens $ text "integer" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env (SyntaxPatternString ident@(Stx _ _ x) v) =
     (parens $ text "string" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env SyntaxPatternEmpty =
@@ -267,6 +270,11 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedList core) where
   pp env xs =
     vec (hsep $ map (pp env) (view scopedListElements xs)) <>
     angles (pp env (view scopedListScope xs))
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedInteger core) where
+  pp env s =
+    pp env (view scopedInteger s) <>
+    angles (pp env (view scopedIntegerScope s))
 
 instance Pretty VarInfo core => Pretty VarInfo (ScopedString core) where
   pp env s =

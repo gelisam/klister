@@ -647,6 +647,7 @@ initializeKernel outputChannel = do
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)
       , ("list-syntax", Prims.listSyntax)
+      , ("integer-syntax", Prims.integerSyntax)
       , ("string-syntax", Prims.stringSyntax)
       , ("replace-loc", Prims.replaceLoc)
       , ("syntax-case", Prims.syntaxCase)

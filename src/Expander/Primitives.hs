@@ -32,6 +32,7 @@ module Expander.Primitives
   , letExpr
   , letSyntax
   , listSyntax
+  , integerSyntax
   , stringSyntax
   , makeIntroducer
   , Expander.Primitives.log
@@ -410,6 +411,14 @@ listSyntax t dest stx = do
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreList $ ScopedList listDests sourceDest
 
+integerSyntax :: ExprPrim
+integerSyntax t dest stx = do
+  unify dest t tSyntax
+  Stx _ _ (_, int, source) <- mustHaveEntries stx
+  intDest <- schedule tInteger int
+  sourceDest <- schedule tSyntax source
+  linkExpr dest $ CoreIntegerSyntax $ ScopedInteger intDest sourceDest
+
 stringSyntax :: ExprPrim
 stringSyntax t dest stx = do
   unify dest t tSyntax
@@ -672,6 +681,14 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
       let rhs' = addScope p rhs sc
       rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
       let patOut = SyntaxPatternIdentifier x' var
+      return (patOut, rhsDest)
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "integer")),
+                           patVar])) -> do
+      (sc, x', var) <- prepareVar patVar
+      let rhs' = addScope p rhs sc
+      strSch <- trivialScheme tInteger
+      rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
+      let patOut = SyntaxPatternInteger x' var
       return (patOut, rhsDest)
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "string")),
                            patVar])) -> do

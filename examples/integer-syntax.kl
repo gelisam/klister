@@ -1,0 +1,16 @@
+#lang "prelude.kl"
+(import (shift "prelude.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(define-macros
+  ([gotta-be-integer
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ i))
+          (syntax-case i
+            [(integer int) (pure (integer-syntax (+ int int) i))]
+            [_ (syntax-error (quasiquote/loc i "bad syntax"))])]
+        [_ (syntax-error (quasiquote/loc stx "bad syntax"))]))]))
+
+(example (gotta-be-integer 2))
+

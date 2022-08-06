@@ -203,6 +203,9 @@ eval (Core (CoreCons (ScopedCons hd tl scope))) = do
 eval (Core (CoreList (ScopedList elements scope))) = do
   vec <- List <$> traverse evalAsSyntax elements
   withScopeOf scope vec
+eval (Core (CoreIntegerSyntax (ScopedInteger int scope))) = do
+  intV <- evalAsInteger int
+  withScopeOf scope (Integer intV)
 eval (Core (CoreStringSyntax (ScopedString str scope))) = do
   strV <- evalAsString str
   withScopeOf scope (String strV)
@@ -325,6 +328,11 @@ doCase blameLoc v0 ((p, rhs0) : ps) = match (doCase blameLoc v0 ps) p rhs0 v0
       \case
         v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
           withExtendedEnv n x v (eval rhs)
+        _ -> next
+    match next (SyntaxPatternInteger n x) rhs =
+      \case
+        ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
+          withExtendedEnv n x (ValueInteger int) (eval rhs)
         _ -> next
     match next (SyntaxPatternString n x) rhs =
       \case

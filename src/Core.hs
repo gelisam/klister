@@ -85,6 +85,7 @@ instance Phased TypePattern where
 
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
+  | SyntaxPatternInteger Ident Var
   | SyntaxPatternString Ident Var
   | SyntaxPatternEmpty
   | SyntaxPatternCons Ident Var Ident Var
@@ -121,6 +122,13 @@ data ScopedList core = ScopedList
   deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedList
 
+data ScopedInteger core = ScopedInteger
+  { _scopedInteger      :: core
+  , _scopedIntegerScope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedInteger
+
 data ScopedString core = ScopedString
   { _scopedString      :: core
   , _scopedStringScope :: core
@@ -140,6 +148,7 @@ data CoreF typePat pat core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
   | CoreDataCase SrcLoc core [(pat, core)]
+  | CoreInteger Integer
   | CoreString Text
   | CoreError core
   | CorePureMacro core                  -- :: a -> Macro a
@@ -153,11 +162,11 @@ data CoreF typePat pat core
   | CoreSyntax Syntax
   | CoreCase SrcLoc core [(SyntaxPattern, core)]
   | CoreIdentifier Ident
-  | CoreInteger Integer
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
+  | CoreIntegerSyntax (ScopedInteger core)
   | CoreStringSyntax (ScopedString core)
   | CoreReplaceLoc core core
   | CoreTypeCase SrcLoc core [(typePat, core)]
@@ -185,6 +194,8 @@ mapCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor (map h args)
 mapCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc (h scrut) [(g pat, h c) | (pat, c) <- cases]
+mapCoreF _f _g _h (CoreInteger i) =
+  CoreInteger i
 mapCoreF _f _g _h (CoreString str) =
   CoreString str
 mapCoreF _f _g h (CoreError msg) =
@@ -209,8 +220,6 @@ mapCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc (h scrut) [(pat, h c) | (pat, c) <- cases]
 mapCoreF _f _g _h (CoreIdentifier n) =
   CoreIdentifier n
-mapCoreF _f _g _h (CoreInteger i) =
-  CoreInteger i
 mapCoreF _f _g h (CoreIdent ident) =
   CoreIdent (fmap h ident)
 mapCoreF _f _g h (CoreEmpty args) =
@@ -219,6 +228,8 @@ mapCoreF _f _g h (CoreCons args) =
   CoreCons (fmap h args)
 mapCoreF _f _g h (CoreList args) =
   CoreList (fmap h args)
+mapCoreF _f _g h (CoreIntegerSyntax str) =
+  CoreIntegerSyntax (fmap h str)
 mapCoreF _f _g h (CoreStringSyntax str) =
   CoreStringSyntax (fmap h str)
 mapCoreF _f _g h (CoreReplaceLoc src dest) =
@@ -241,6 +252,8 @@ traverseCoreF _f _g h (CoreCtor ctor args) =
   CoreCtor ctor <$> traverse h args
 traverseCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc <$> h scrut <*> for cases \ (pat, c) -> (,) <$> g pat <*> h c
+traverseCoreF _f _g _h (CoreInteger integer) =
+  pure $ CoreInteger integer
 traverseCoreF _f _g _h (CoreString str) =
   pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
@@ -265,8 +278,6 @@ traverseCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc <$> h scrut <*> for cases \(pat, c) -> (pat,) <$> h c
 traverseCoreF _f _g _h (CoreIdentifier n) =
   pure $ CoreIdentifier n
-traverseCoreF _f _g _h (CoreInteger integer) =
-  pure $ CoreInteger integer
 traverseCoreF _f _g h (CoreIdent ident) =
   CoreIdent <$> traverse h ident
 traverseCoreF _f _g h (CoreEmpty args) =
@@ -275,6 +286,8 @@ traverseCoreF _f _g h (CoreCons args) =
   CoreCons <$> traverse h args
 traverseCoreF _f _g h (CoreList args) =
   CoreList <$> traverse h args
+traverseCoreF _f _g h (CoreIntegerSyntax arg) =
+  CoreIntegerSyntax <$> traverse h arg
 traverseCoreF _f _g h (CoreStringSyntax arg) =
   CoreStringSyntax <$> traverse h arg
 traverseCoreF _f _g h (CoreReplaceLoc src dest) =
@@ -496,6 +509,8 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
    ++ " "
    ++ intercalate ", " (map shortShow cases)
    ++ ")"
+  shortShow (CoreInteger i)
+    = show i
   shortShow (CoreString str)
     = "(String " ++ show str ++ ")"
   shortShow (CoreError what)
@@ -540,8 +555,6 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(Identifier "
    ++ shortShow stx
    ++ ")"
-  shortShow (CoreInteger i)
-    = show i
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
    ++ shortShow scopedIdent
@@ -557,6 +570,10 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
   shortShow (CoreList scopedVec)
     = "(List "
    ++ shortShow scopedVec
+   ++ ")"
+  shortShow (CoreIntegerSyntax scopedStr)
+    = "(IntegerSyntax "
+   ++ shortShow scopedStr
    ++ ")"
   shortShow (CoreStringSyntax scopedStr)
     = "(StringSyntax "
@@ -597,6 +614,7 @@ instance ShortShow TypePattern where
 
 instance ShortShow SyntaxPattern where
   shortShow (SyntaxPatternIdentifier _ x) = shortShow x
+  shortShow (SyntaxPatternInteger _ x) = "(Integer " ++ shortShow x ++ ")"
   shortShow (SyntaxPatternString _ x) = "(String " ++ shortShow x ++ ")"
   shortShow SyntaxPatternEmpty = "Empty"
   shortShow (SyntaxPatternCons _ x _ xs)
@@ -643,9 +661,17 @@ instance ShortShow core => ShortShow (ScopedList core) where
    ++ shortShow scope
    ++ ")"
 
+instance ShortShow core => ShortShow (ScopedInteger core) where
+  shortShow (ScopedInteger str scope)
+    = "(ScopedInteger "
+   ++ shortShow str
+   ++ " "
+   ++ shortShow scope
+   ++ ")"
+
 instance ShortShow core => ShortShow (ScopedString core) where
   shortShow (ScopedString str scope)
-    = "(ScopedStringSyntax "
+    = "(ScopedString "
    ++ shortShow str
    ++ " "
    ++ shortShow scope
