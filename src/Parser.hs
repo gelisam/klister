@@ -58,7 +58,7 @@ ident =
 integer :: Parser Syntax
 integer =
   do Located srcloc s <- lexeme integerNum
-     return $ Syntax $ Stx ScopeSet.empty srcloc (LitInt s)
+     return $ Syntax $ Stx ScopeSet.empty srcloc (Integer s)
 
 list :: Parser Syntax
 list = parenned "(" ")" <|> parenned "[" "]"
@@ -145,8 +145,10 @@ identName =
          guard (null more || not (all isDigit more))
          return (str <> T.pack more)
 
-    magicIdent = (literal "#%app" $> "#%app")       <|>
-                 (literal "#%module" $> "#%module")
+    magicIdent = (literal "#%app" $> "#%app")
+             <|> (literal "#%module" $> "#%module")
+             <|> (literal "#%integer-literal" $> "#%integer-literal")
+             <|> (literal "#%string-literal" $> "#%string-literal")
 
     initial :: Parser Char
     initial =

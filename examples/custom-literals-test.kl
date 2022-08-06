@@ -1,0 +1,5 @@
+#lang "custom-literals.kl"
+
+(example 42)
+(example (+ 2 2))
+(example "foo")

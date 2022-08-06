@@ -247,7 +247,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                       ],
                  DefineMacros [(_, _, _)],
                  Example _ _ ex] ->
-                  assertAlphaEq "Example is int" ex (Core (CoreInteger 1))
+                  assertAlphaEq "Example is integer" ex (Core (CoreInteger 1))
                 _ -> assertFailure "Expected an import, two meta-defs, a macro def, and an example"
           )
         , ( "examples/imports-shifted-macro.kl"

@@ -38,6 +38,10 @@ mustBeList :: Syntax -> Expand (Stx [Syntax])
 mustBeList (Syntax (Stx scs srcloc (List xs))) = return (Stx scs srcloc xs)
 mustBeList other = throwError (NotList other)
 
+mustBeInteger :: Syntax -> Expand (Stx Integer)
+mustBeInteger (Syntax (Stx scs srcloc (Integer n))) = return (Stx scs srcloc n)
+mustBeInteger other = throwError (NotInteger other)
+
 mustBeString :: Syntax -> Expand (Stx Text)
 mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
 mustBeString other = throwError (NotString other)
@@ -66,7 +70,7 @@ instance FixedLengthList Syntax where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x]))) = return (Stx scs srcloc x)
   mustHaveEntries other = throwError (NotRightLength 1 other)
 
-instance FixedLengthList (Syntax, Syntax) where
+instance (a ~ Syntax, b ~ Syntax) => FixedLengthList (a, b) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x, y]))) = return (Stx scs srcloc (x, y))
   mustHaveEntries other = throwError (NotRightLength 2 other)
 
@@ -74,16 +78,16 @@ instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => FixedLengthList (a, b, c) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x, y, z]))) = return (Stx scs srcloc (x, y, z))
   mustHaveEntries other = throwError (NotRightLength 3 other)
 
-instance FixedLengthList (Syntax, Syntax, Syntax, Syntax) where
+instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax) => FixedLengthList (a, b, c, d) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
   mustHaveEntries other = throwError (NotRightLength 4 other)
 
-instance FixedLengthList (Syntax, Syntax, Syntax, Syntax, Syntax) where
+instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax, e ~ Syntax) => FixedLengthList (a, b, c, d, e) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [v, w, x, y, z]))) =
     return (Stx scs srcloc (v, w, x, y, z))
   mustHaveEntries other = throwError (NotRightLength 5 other)
 
-instance FixedLengthList [Syntax] where
+instance (a ~ Syntax) => FixedLengthList [a] where
   mustHaveEntries (Syntax (Stx scs srcloc (List xs))) =
     return (Stx scs srcloc xs)
   mustHaveEntries other = throwError (NotList other)

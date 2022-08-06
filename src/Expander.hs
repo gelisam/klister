@@ -411,7 +411,7 @@ initializeKernel outputChannel = do
                 primitiveCtor "identifier-contents" [ValueString name]
               String str ->
                 primitiveCtor "string-contents" [ValueString str]
-              LitInt i ->
+              Integer i ->
                 primitiveCtor "integer-contents" [ValueInteger i]
               List xs ->
                 primitiveCtor "list-contents" [foldr consVal nilVal xs]
@@ -447,7 +447,7 @@ initializeKernel outputChannel = do
                     ("string-contents", ValueString str) ->
                       close (String str)
                     ("integer-contents", ValueInteger i) ->
-                      close (LitInt i)
+                      close (Integer i)
                     ("list-contents", unList -> lst) ->
                       close (List lst)
                     _ ->
@@ -522,19 +522,19 @@ initializeKernel outputChannel = do
       [
         ( name
         , Scheme [] $ tFun [tInteger] tInteger
-        , Prims.unaryIntPrim fun
+        , Prims.unaryIntegerPrim fun
         )
       | (name, fun) <- [("abs", abs), ("negate", negate)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] tInteger
-        , Prims.binaryIntPrim fun
+        , Prims.binaryIntegerPrim fun
         )
       | (name, fun) <- [("+", (+)), ("-", (-)), ("*", (*)), ("/", div)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] (Prims.primitiveDatatype "Bool" [])
-        , Prims.binaryIntPred fun
+        , Prims.binaryIntegerPred fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
@@ -634,6 +634,8 @@ initializeKernel outputChannel = do
       , ("flet", Prims.flet)
       , ("lambda", Prims.lambda)
       , ("#%app", Prims.app)
+      , ("#%integer-literal", Prims.integerLiteral)
+      , ("#%string-literal", Prims.stringLiteral)
       , ("pure", Prims.pureMacro)
       , (">>=", Prims.bindMacro)
       , ("syntax-error", Prims.syntaxError)
@@ -645,6 +647,7 @@ initializeKernel outputChannel = do
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)
       , ("list-syntax", Prims.listSyntax)
+      , ("integer-syntax", Prims.integerSyntax)
       , ("string-syntax", Prims.stringSyntax)
       , ("replace-loc", Prims.replaceLoc)
       , ("syntax-case", Prims.syntaxCase)
@@ -793,7 +796,7 @@ initializeKernel outputChannel = do
 -- than literals
 primImportModule :: DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ()
 primImportModule dest outScopesDest importStx = do
-  Stx scs loc (_ :: Syntax, toImport) <- mustHaveEntries importStx
+  Stx scs loc (_, toImport) <- mustHaveEntries importStx
   spec <- importSpec toImport
   modExports <- getImports spec
   sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
@@ -811,7 +814,7 @@ primImportModule dest outScopesDest importStx = do
       | (Syntax (Stx _ _ (Id "rename")) : spec : renamings) <- elts = do
           subSpec <- importSpec spec
           RenameImports subSpec <$> traverse getRename renamings
-      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (LitInt i))] <- elts = do
+      | [Syntax (Stx _ _ (Id "shift")), spec, Syntax (Stx _ _ (Integer i))] <- elts = do
           subSpec <- importSpec spec
           return $ ShiftImports subSpec (fromIntegral i)
       | [Syntax (Stx _ _ (Id "prefix")), spec, prefix] <- elts = do
@@ -854,7 +857,7 @@ primExport dest outScopesDest stx = do
                 _ -> throwError $ NotExportSpec blame
             "shift" ->
               case args of
-                (Syntax (Stx _ _ (LitInt i)) : more) -> do
+                (Syntax (Stx _ _ (Integer i)) : more) -> do
                   spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
                   if i >= 0
                     then return $ ExportShifted spec (fromIntegral i)
@@ -1155,11 +1158,29 @@ expandOneTypePattern dest stx =
 
 -- | Insert a function application marker with a lexical context from
 -- the original expression
-addApp :: (forall a . [a] -> ExprF a) -> Syntax -> [Syntax] -> Syntax
-addApp ctor (Syntax (Stx scs loc _)) args =
-  Syntax (Stx scs loc (ctor (app : args)))
+addApp :: Syntax -> [Syntax] -> Syntax
+addApp (Syntax (Stx scs loc _)) args =
+  Syntax (Stx scs loc (List (app : args)))
   where
     app = Syntax (Stx scs loc (Id "#%app"))
+
+-- | Insert an integer literal marker with a lexical context from
+-- the original expression
+addIntegerLiteral :: Syntax -> Integer -> Syntax
+addIntegerLiteral (Syntax (Stx scs loc _)) n =
+  Syntax (Stx scs loc (List [integerLiteral, n']))
+  where
+    integerLiteral = Syntax (Stx scs loc (Id "#%integer-literal"))
+    n' = Syntax (Stx scs loc (Integer n))
+
+-- | Insert a string literal marker with a lexical context from
+-- the original expression
+addStringLiteral :: Syntax -> Text -> Syntax
+addStringLiteral (Syntax (Stx scs loc _)) s =
+  Syntax (Stx scs loc (List [stringLiteral, s']))
+  where
+    stringLiteral = Syntax (Stx scs loc (Id "#%string-literal"))
+    s' = Syntax (Stx scs loc (String s))
 
 problemCategory :: MacroDest -> SyntacticCategory
 problemCategory (ModuleDest {}) = ModuleCat
@@ -1267,8 +1288,8 @@ expandOneForm prob stx
             Id _ ->
               forkExpandVar t dest stx var
             String _ -> error "Impossible - string not ident"
-            LitInt _ -> error "Impossible - literal integer not ident"
-            List xs -> expandOneExpression t dest (addApp List stx xs)
+            Integer _ -> error "Impossible - integer not ident"
+            List xs -> expandOneExpression t dest (addApp stx xs)
         ETypeVar k i -> do
           (k', dest) <- requireTypeCat stx prob
           case syntaxE stx of
@@ -1327,15 +1348,9 @@ expandOneForm prob stx
         throwError $ NotValidType stx
       ExprDest t dest ->
         case syntaxE stx of
-          List xs -> expandOneExpression t dest (addApp List stx xs)
-          LitInt s -> do
-            unify dest t tInteger
-            expandLiteralInteger dest s
-            saveExprType dest t
-          String s -> do
-            unify dest t tString
-            expandLiteralString dest s
-            saveExprType dest t
+          List xs -> expandOneExpression t dest (addApp stx xs)
+          Integer n -> expandOneExpression t dest (addIntegerLiteral stx n)
+          String s -> expandOneExpression t dest (addStringLiteral stx s)
           Id _ -> error "Impossible happened - identifiers are identifier-headed!"
       PatternDest {} ->
         throwError $ InternalError "All patterns should be identifier-headed"
@@ -1379,14 +1394,6 @@ expandDeclForms dest scs outScopesDest (Syntax (Stx stxScs loc (List (d:ds)))) =
 expandDeclForms _dest _scs _outScopesDest _stx =
   error "TODO real error message - malformed module body"
 
-
--- | Link the destination to a literal integer object
-expandLiteralInteger :: SplitCorePtr -> Integer -> Expand ()
-expandLiteralInteger dest i = linkExpr dest (CoreInteger i)
-
-expandLiteralString :: SplitCorePtr -> Text -> Expand ()
-expandLiteralString dest str = do
-  linkExpr dest (CoreString str)
 
 data MacroOutput
   = StuckOnType SrcLoc Ty VEnv [(TypePattern, Core)] [Closure]

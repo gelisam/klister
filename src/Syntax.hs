@@ -40,7 +40,7 @@ makeLenses ''Stx
 data ExprF a
   = Id Text
   | String Text
-  | LitInt Integer
+  | Integer Integer
   | List [a]
   deriving (Data, Eq, Functor, Show)
 makePrisms ''ExprF
@@ -80,7 +80,7 @@ instance HasScopes Syntax where
     where
       mapRec (Id x) = Id x
       mapRec (String str) = String str
-      mapRec (LitInt i) = LitInt i
+      mapRec (Integer i) = Integer i
       mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
 
 instance Phased (Stx Text) where
@@ -140,7 +140,7 @@ syntaxText (Syntax (Stx _ _ e)) = go e
   where
     go (Id x) = x
     go (String str) = T.pack $ show str
-    go (LitInt s) = T.pack (show s)
+    go (Integer s) = T.pack (show s)
     go (List xs) = "(" <> T.intercalate " " (map syntaxText xs) <> ")"
 
 instance AlphaEq a => AlphaEq (Stx a) where
@@ -172,7 +172,7 @@ instance ShortShow a => ShortShow (ExprF a) where
   shortShow (Id x) = shortShow x
   shortShow (String s) = show s
   shortShow (List xs) = shortShow xs
-  shortShow (LitInt s) = show s
+  shortShow (Integer s) = show s
 
 instance ShortShow Syntax where
   shortShow (Syntax x) = shortShow x
