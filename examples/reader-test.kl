@@ -1,0 +1,34 @@
+#lang "prelude.kl"
+
+(import "list.kl")
+(import "reader.kl")
+
+
+(define once
+  (mkReader (lambda (r) r)))
+
+(define twice
+  (mkReader (lambda (r) (* 2 r))))
+
+(define thrice
+  (mkReader (lambda (r) (* 3 r))))
+
+(define four-times
+  (apply-Reader (apply-Reader (pure-Reader +)
+                              twice)
+                twice))
+
+(define five-times
+  (apply-Reader (apply-Reader (pure-Reader +)
+                              twice)
+                thrice))
+
+(define six-times
+  (apply-Reader (apply-Reader (pure-Reader +)
+                              thrice)
+                thrice))
+
+(example
+  (map (lambda (n-times)
+         (runReader n-times 10))
+       (list once twice thrice four-times five-times six-times)))
