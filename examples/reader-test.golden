@@ -1,2 +1,3 @@
 (:: 10 (:: 20 (:: 30 (:: 40 (:: 50 (:: 60 (nil))))))) : (List Integer)
 (:: 70 (:: 80 (:: 90 (:: 100 (nil))))) : (List Integer)
+"the string \"foo\" has length 3" : String

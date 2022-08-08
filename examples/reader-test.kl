@@ -45,3 +45,19 @@
   (map (lambda (n-times)
          (run-reader n-times 10))
        (list (n-times 7) (n-times 8) (n-times 9) itself-times)))
+
+
+(define describe
+  (reader-do
+    (<- s ask)
+    (local string-length
+           (reader-do
+             (<- n ask)
+             (return reader-applicative
+                     (string-append "the string \""
+                                    (string-append s
+                                                   (string-append "\" has length "
+                                                                  (integer->string n)))))))))
+
+(example
+  (run-reader describe "foo"))

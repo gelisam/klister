@@ -15,6 +15,11 @@
   (reader (lambda (r)
             r)))
 
+(defun local (r2s reader-s-a)
+  (reader (lambda (r)
+            (let [s (r2s r)]
+              (run-reader reader-s-a s)))))
+
 
 (defun reader-map (a2b reader-a)
   (reader (lambda (r)
@@ -52,7 +57,7 @@
 
 
 (export
-  Reader reader run-reader ask
+  Reader reader run-reader ask local
   reader-functor reader-map
   reader-applicative reader-idiom reader-pure reader-ap
   reader-monad reader-do reader-bind)
