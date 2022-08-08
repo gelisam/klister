@@ -1,0 +1,94 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import (shift "quasiquote.kl" 1))
+(import (shift "reader.kl" 1))
+(import "define-syntax-rule.kl")
+(import "reader.kl")
+
+
+(defun apply-Reader-with (r2a2b readerB2C readerA)
+  (mkReader
+    (lambda (r)
+      ((runReader readerB2C r)
+       (r2a2b r (runReader readerA r))))))
+
+(define-macro (let-implicit f body)
+  (pure `(runReader ,body ,f)))
+
+(define-macro (implicit-apply)
+  (let [type-eq?
+        (lambda (t1 t2)
+          (type-case t1
+            [String
+             (type-case t2
+              [String (pure true)]
+              [(else _) (pure false)])]
+            [Integer
+             (type-case t2
+              [Integer (pure true)]
+              [(else _) (pure false)])]))]
+    (>>= (which-problem)
+         (lambda (prob)
+            (case prob
+              [(expression t)
+               (type-case t
+                 [(-> readerF readerA-to-readerB)
+                  (type-case readerA-to-readerB
+                    [(-> readerA readerB)
+                     (type-case readerF
+                       [(Reader rF e-to-b)
+                        (type-case e-to-b
+                          [(-> e b)
+                           (type-case readerA
+                             [(Reader rA a)
+                              -- "a" for "actual", "e" for "expected".
+                              -- If the actual type doesn't match the
+                              -- expected type, look for a conversion
+                              -- function in "r".
+                              (>>= (type-eq? a e)
+                                   (lambda (eq?)
+                                     (case eq?
+                                       [(true)
+                                        (pure 'apply-Reader)]
+                                       [(false)
+                                        -- TODO: actually look through "r"
+                                        -- instead of assuming there's only
+                                        -- one function in "r".
+                                        (pure '(apply-Reader-with (lambda (str2int) str2int)))])))])])])])])])))))
+
+(define-macros
+  ([my-app (lambda (stx)
+             (flet (go (f args)
+                     (syntax-case args
+                       [(list (x))
+                        (pure `(#%app (implicit-apply) ,f ,x))]
+                       [(cons x xs)
+                        (go `(#%app (implicit-apply) ,f ,x) xs)]))
+               (syntax-case stx
+                 [(cons _ f-and-args)
+                  (syntax-case f-and-args
+                    [(cons f args)
+                     (go f args)])])))]))
+
+(define-macro (implicit-integer n)
+  (pure `(pure-Reader (#%integer-literal ,n))))
+
+(define-macro (implicit-string s)
+  (pure `(pure-Reader (#%string-literal ,s))))
+
+(define implicit-add
+  (pure-Reader +))
+
+(export (rename ([my-app #%app]
+                 [implicit-integer #%integer-literal]
+                 [implicit-string #%string-literal]
+                 [implicit-add +])
+                #%module
+                let-implicit
+                my-app
+                implicit-integer
+                implicit-string
+                example
+                implicit-add
+                string-length))
