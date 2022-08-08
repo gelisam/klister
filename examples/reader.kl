@@ -3,8 +3,8 @@
 (import "monad.kl")
 
 
-(datatype (Reader r a)
-  (reader (-> r a)))
+(datatype (Reader R A)
+  (reader (-> R A)))
 
 (defun run-reader (reader-a r)
   (case reader-a
