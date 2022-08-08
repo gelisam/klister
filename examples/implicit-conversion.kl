@@ -4,17 +4,28 @@
 (import (shift "quasiquote.kl" 1))
 (import (shift "reader.kl" 1))
 (import "define-syntax-rule.kl")
+(import "monad.kl")
+(import "pair-datatype.kl")
 (import "reader.kl")
 
+
+(define-macro (my-example body)
+  (pure `(example
+           (run-reader ,body (unit)))))
+
+(define-macro (let-implicit reader-f body)
+  (pure `(reader-do
+           (<- r ask)
+           (let [f (run-reader ,reader-f r)]
+             (local (lambda (implicits)
+                      (pair f implicits))
+               ,body)))))
 
 (defun reader-ap-with (r2a2b reader-b2c reader-a)
   (reader
     (lambda (r)
       ((run-reader reader-b2c r)
        (r2a2b r (run-reader reader-a r))))))
-
-(define-macro (let-implicit f body)
-  (pure `(run-reader ,body ,f)))
 
 (define-macro (pick-reader-ap-variant)
   (let [type-eq?
@@ -55,7 +66,10 @@
                                         -- TODO: actually look through "r"
                                         -- instead of assuming there's only
                                         -- one function in "r".
-                                        (pure '(reader-ap-with (lambda (str2int) str2int)))])))])])])])])])))))
+                                        (pure '(reader-ap-with (lambda (pair-f-unit)
+                                                                 (case pair-f-unit
+                                                                   [(pair f (unit))
+                                                                    f]))))])))])])])])])])))))
 
 (define-macros
   ([my-app (lambda (stx)
@@ -80,15 +94,20 @@
 (define my-+
   (reader-pure +))
 
+(define my-string-length
+  (reader-pure string-length))
+
 (export (rename ([my-app #%app]
                  [my-integer-literal #%integer-literal]
                  [my-string-literal #%string-literal]
-                 [my-+ +])
+                 [my-example example]
+                 [my-+ +]
+                 [my-string-length string-length])
                 #%module
                 my-app
                 my-integer-literal
                 my-string-literal
-                example
+                my-example
                 let-implicit
                 my-+
-                string-length))
+                my-string-length))
