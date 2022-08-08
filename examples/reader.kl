@@ -1,0 +1,22 @@
+#lang "prelude.kl"
+
+
+(datatype (Reader r a)
+  (mkReader (-> r a)))
+
+(defun runReader (reader r)
+  (case reader
+    [(mkReader f)
+     (f r)]))
+
+(defun pure-Reader (a)
+  (mkReader (lambda (_) a)))
+
+(defun apply-Reader (readerF readerA)
+  (mkReader
+    (lambda (r)
+      ((runReader readerF r)
+       (runReader readerA r)))))
+
+
+(export Reader mkReader runReader pure-Reader apply-Reader)
