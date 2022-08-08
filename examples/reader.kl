@@ -2,21 +2,21 @@
 
 
 (datatype (Reader r a)
-  (mkReader (-> r a)))
+  (reader (-> r a)))
 
-(defun runReader (reader r)
-  (case reader
-    [(mkReader f)
+(defun run-reader (reader-a r)
+  (case reader-a
+    [(reader f)
      (f r)]))
 
-(defun pure-Reader (a)
-  (mkReader (lambda (_) a)))
+(defun reader-pure (a)
+  (reader (lambda (_) a)))
 
-(defun apply-Reader (readerF readerA)
-  (mkReader
+(defun reader-ap (readerF readerA)
+  (reader
     (lambda (r)
-      ((runReader readerF r)
-       (runReader readerA r)))))
+      ((run-reader readerF r)
+       (run-reader readerA r)))))
 
 
-(export Reader mkReader runReader pure-Reader apply-Reader)
+(export Reader reader run-reader reader-pure reader-ap)

@@ -5,30 +5,30 @@
 
 
 (define once
-  (mkReader (lambda (r) r)))
+  (reader (lambda (r) r)))
 
 (define twice
-  (mkReader (lambda (r) (* 2 r))))
+  (reader (lambda (r) (* 2 r))))
 
 (define thrice
-  (mkReader (lambda (r) (* 3 r))))
+  (reader (lambda (r) (* 3 r))))
 
 (define four-times
-  (apply-Reader (apply-Reader (pure-Reader +)
-                              twice)
-                twice))
+  (reader-ap (reader-ap (reader-pure +)
+                        twice)
+             twice))
 
 (define five-times
-  (apply-Reader (apply-Reader (pure-Reader +)
-                              twice)
-                thrice))
+  (reader-ap (reader-ap (reader-pure +)
+                        twice)
+             thrice))
 
 (define six-times
-  (apply-Reader (apply-Reader (pure-Reader +)
-                              thrice)
-                thrice))
+  (reader-ap (reader-ap (reader-pure +)
+                        thrice)
+             thrice))
 
 (example
   (map (lambda (n-times)
-         (runReader n-times 10))
+         (run-reader n-times 10))
        (list once twice thrice four-times five-times six-times)))

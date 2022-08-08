@@ -12,23 +12,23 @@
 -- =>
 -- (example
 --   (let-implicit string-length
---     (my-app implicit-add
---             (implicit-integer 1)
---             (implicit-string "foo"))))
+--     (my-app my-+
+--             (my-integer-literal 1)
+--             (my-string-literal "foo"))))
 -- =>
 -- (example
---   (run-Reader
---     ((implicit-apply) ((implicit-apply) (pure-Reader +)
---                                         (pure-Reader 1))
---                       (pure-Reader "foo"))
+--   (run-reader
+--     ((pick-reader-ap-variant) ((pick-reader-ap-variant) (reader-pure +)
+--                                                         (reader-pure 1))
+--                               (reader-pure "foo"))
 --     string-length)
 -- =>
 -- (example
---   (run-Reader
---     (apply-Reader-with (lambda (str2int) str2int)
---                        (apply-Reader (pure-Reader +)
---                                      (pure-Reader 1))
---                        (pure-Reader "foo"))
+--   (run-reader
+--     (reader-ap-with (lambda (str2int) str2int)
+--                     (reader-ap (reader-pure +)
+--                                (reader-pure 1))
+--                     (reader-pure "foo"))
 --     string-length))
 -- =>
 -- (example

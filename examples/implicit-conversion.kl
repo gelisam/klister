@@ -7,16 +7,16 @@
 (import "reader.kl")
 
 
-(defun apply-Reader-with (r2a2b readerB2C readerA)
-  (mkReader
+(defun reader-ap-with (r2a2b reader-b2c reader-a)
+  (reader
     (lambda (r)
-      ((runReader readerB2C r)
-       (r2a2b r (runReader readerA r))))))
+      ((run-reader reader-b2c r)
+       (r2a2b r (run-reader reader-a r))))))
 
 (define-macro (let-implicit f body)
-  (pure `(runReader ,body ,f)))
+  (pure `(run-reader ,body ,f)))
 
-(define-macro (implicit-apply)
+(define-macro (pick-reader-ap-variant)
   (let [type-eq?
         (lambda (t1 t2)
           (type-case t1
@@ -33,14 +33,14 @@
             (case prob
               [(expression t)
                (type-case t
-                 [(-> readerF readerA-to-readerB)
-                  (type-case readerA-to-readerB
-                    [(-> readerA readerB)
-                     (type-case readerF
+                 [(-> reader-f reader-a-to-reader-b)
+                  (type-case reader-a-to-reader-b
+                    [(-> reader-a reader-b)
+                     (type-case reader-f
                        [(Reader rF e-to-b)
                         (type-case e-to-b
                           [(-> e b)
-                           (type-case readerA
+                           (type-case reader-a
                              [(Reader rA a)
                               -- "a" for "actual", "e" for "expected".
                               -- If the actual type doesn't match the
@@ -50,45 +50,45 @@
                                    (lambda (eq?)
                                      (case eq?
                                        [(true)
-                                        (pure 'apply-Reader)]
+                                        (pure 'reader-ap)]
                                        [(false)
                                         -- TODO: actually look through "r"
                                         -- instead of assuming there's only
                                         -- one function in "r".
-                                        (pure '(apply-Reader-with (lambda (str2int) str2int)))])))])])])])])])))))
+                                        (pure '(reader-ap-with (lambda (str2int) str2int)))])))])])])])])])))))
 
 (define-macros
   ([my-app (lambda (stx)
              (flet (go (f args)
                      (syntax-case args
                        [(list (x))
-                        (pure `(#%app (implicit-apply) ,f ,x))]
+                        (pure `(#%app (pick-reader-ap-variant) ,f ,x))]
                        [(cons x xs)
-                        (go `(#%app (implicit-apply) ,f ,x) xs)]))
+                        (go `(#%app (pick-reader-ap-variant) ,f ,x) xs)]))
                (syntax-case stx
                  [(cons _ f-and-args)
                   (syntax-case f-and-args
                     [(cons f args)
                      (go f args)])])))]))
 
-(define-macro (implicit-integer n)
-  (pure `(pure-Reader (#%integer-literal ,n))))
+(define-macro (my-integer-literal n)
+  (pure `(reader-pure (#%integer-literal ,n))))
 
-(define-macro (implicit-string s)
-  (pure `(pure-Reader (#%string-literal ,s))))
+(define-macro (my-string-literal s)
+  (pure `(reader-pure (#%string-literal ,s))))
 
-(define implicit-add
-  (pure-Reader +))
+(define my-+
+  (reader-pure +))
 
 (export (rename ([my-app #%app]
-                 [implicit-integer #%integer-literal]
-                 [implicit-string #%string-literal]
-                 [implicit-add +])
+                 [my-integer-literal #%integer-literal]
+                 [my-string-literal #%string-literal]
+                 [my-+ +])
                 #%module
-                let-implicit
                 my-app
-                implicit-integer
-                implicit-string
+                my-integer-literal
+                my-string-literal
                 example
-                implicit-add
+                let-implicit
+                my-+
                 string-length))
