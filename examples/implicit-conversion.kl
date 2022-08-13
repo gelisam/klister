@@ -110,9 +110,8 @@
                                        [(true)
                                         (pure 'reader-ap)]
                                        [(false)
-                                        -- TODO: actually look through "r"
-                                        -- instead of assuming there's only
-                                        -- one function in "r".
+                                        -- look through "r" looking for a
+                                        -- function of type (-> a e)
                                         (pure '(reader-ap-with (pick-from-nested-tuple)))])))])])])])])])))))
 
 -- call pick-reader-ap-variant at every function application
