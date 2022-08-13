@@ -6,13 +6,17 @@
 (import "define-syntax-rule.kl")
 (import "monad.kl")
 (import "pair-datatype.kl")
+(import (shift "bool.kl" 1))
+(import (shift "pair-datatype.kl" 1))
 (import "reader.kl")
 
 
+-- start with (unit), the empty nested-tuple
 (define-macro (my-example body)
   (pure `(example
            (run-reader ,body (unit)))))
 
+-- cons another function in front for every let-implicit
 (define-macro (let-implicit reader-f body)
   (pure `(reader-do
            (<- r ask)
@@ -21,12 +25,55 @@
                       (pair f implicits))
                ,body)))))
 
+-- when needed, go through the nested-tuple to find the function we need
+(define-macro (pick-from-nested-tuple)
+  (flet [type-eq? (t1 t2)
+          (type-case t1
+            [String
+             (type-case t2
+              [String (pure true)]
+              [(else _) (pure false)])]
+            [Integer
+             (type-case t2
+              [Integer (pure true)]
+              [(else _) (pure false)])]
+            [(-> t1a t1b)
+             (type-case t2
+               [(-> t2a t2b)
+                (>>= (type-eq? t1a t2a)
+                     (lambda (eq?a)
+                       (>>= (type-eq? t1b t2b)
+                            (lambda (eq?b)
+                              (pure (and eq?a eq?b))))))])])]
+    (>>= (which-problem)
+         (lambda (prob)
+           (case prob
+             [(expression t)
+              (type-case t
+                [(-> nested-tuple needed)
+                 (type-case nested-tuple
+                   [(Pair head tail)
+                    (>>= (type-eq? head needed)
+                         (lambda (eq?)
+                           (case eq?
+                             [(true)
+                              (pure '(lambda (nested-tuple)
+                                       (case nested-tuple
+                                         [(pair head _)
+                                          head])))]
+                             [(false)
+                              (pure '(lambda (nested-tuple)
+                                       (case nested-tuple
+                                         [(pair _ tail)
+                                          ((pick-from-nested-tuple) tail)])))])))])])])))))
+
 (defun reader-ap-with (r2a2b reader-b2c reader-a)
   (reader
     (lambda (r)
       ((run-reader reader-b2c r)
        (r2a2b r (run-reader reader-a r))))))
 
+-- determine whether calling pick-from-nested-tuple is needed
 (define-macro (pick-reader-ap-variant)
   (let [type-eq?
         (lambda (t1 t2)
@@ -66,11 +113,9 @@
                                         -- TODO: actually look through "r"
                                         -- instead of assuming there's only
                                         -- one function in "r".
-                                        (pure '(reader-ap-with (lambda (pair-f-unit)
-                                                                 (case pair-f-unit
-                                                                   [(pair f (unit))
-                                                                    f]))))])))])])])])])])))))
+                                        (pure '(reader-ap-with (pick-from-nested-tuple)))])))])])])])])])))))
 
+-- call pick-reader-ap-variant at every function application
 (define-macros
   ([my-app (lambda (stx)
              (flet (go (f args)
@@ -85,6 +130,9 @@
                     [(cons f args)
                      (go f args)])])))]))
 
+-- because the implicits are stored in a Reader and must be accessible
+-- everywhere, everything must expand to a Reader behind the scenes.
+
 (define-macro (my-integer-literal n)
   (pure `(reader-pure (#%integer-literal ,n))))
 
@@ -94,14 +142,23 @@
 (define my-+
   (reader-pure +))
 
+(define my-integer->string
+  (reader-pure integer->string))
+
+(define my-string-append
+  (reader-pure string-append))
+
 (define my-string-length
   (reader-pure string-length))
+
 
 (export (rename ([my-app #%app]
                  [my-integer-literal #%integer-literal]
                  [my-string-literal #%string-literal]
                  [my-example example]
                  [my-+ +]
+                 [my-integer->string integer->string]
+                 [my-string-append string-append]
                  [my-string-length string-length])
                 #%module
                 my-app
@@ -110,4 +167,6 @@
                 my-example
                 let-implicit
                 my-+
+                my-integer->string
+                my-string-append
                 my-string-length))

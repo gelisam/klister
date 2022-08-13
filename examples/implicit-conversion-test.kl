@@ -46,3 +46,9 @@
 -- =>
 -- (example
 --   4)
+
+-- using let-implicit 2 times
+(example
+  (let-implicit string-length
+    (let-implicit integer->string
+      (string-append (+ 1 "foo") "!"))))
