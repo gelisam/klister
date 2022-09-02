@@ -11,6 +11,12 @@
 (import "reader.kl")
 
 
+-- Our strategy to implement implicit arguments is to make every expression a
+-- (Reader Env _), where Env is a nested tuple of all the implicit functions
+-- which are in scope. Then, at every function application, if there is a type
+-- mismatch, we look through Env for a function of type (-> Actual Expected).
+
+
 -- start with (unit), the empty nested-tuple
 (define-macro (my-example body)
   (pure `(example
