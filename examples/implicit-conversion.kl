@@ -126,9 +126,9 @@
              (flet (go (f args)
                      (syntax-case args
                        [(list (x))
-                        (pure `(#%app (pick-reader-ap-variant) ,f ,x))]
+                        (pure `((pick-reader-ap-variant) ,f ,x))]
                        [(cons x xs)
-                        (go `(#%app (pick-reader-ap-variant) ,f ,x) xs)]))
+                        (go `((pick-reader-ap-variant) ,f ,x) xs)]))
                (syntax-case stx
                  [(cons _ f-and-args)
                   (syntax-case f-and-args
