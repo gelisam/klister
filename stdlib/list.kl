@@ -48,14 +48,14 @@
     [() (nil)]
     [(cons x xs) (:: x (syntax->list xs))]))
 
-(defun list->syntax (xs0)
+(defun list->syntax (xs0 stx)
   (case xs0
     [(nil)
      '()]
    [(:: x xs)
     (cons-list-syntax x
-      (list->syntax xs)
-      x)]))
+      (list->syntax xs stx)
+      stx)]))
 
 (define-macros
   ([list
@@ -87,6 +87,6 @@
   (syntax->list '(a b c)))
 
 (example
-  (list->syntax (list 'a 'b 'c)))
+  (list->syntax (list 'a 'b 'c) 'here))
 
 (export List nil :: foldr map filter snoc reverse syntax->list list->syntax list)
