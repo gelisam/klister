@@ -51,11 +51,12 @@
 (defun list->syntax (xs0 stx)
   (case xs0
     [(nil)
-     '()]
+     (empty-list-syntax stx)]
    [(:: x xs)
     (cons-list-syntax x
       (list->syntax xs stx)
       stx)]))
+
 
 (define-macros
   ([list
