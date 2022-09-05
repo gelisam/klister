@@ -7,10 +7,6 @@
 (import "n-ary-app.kl")
 (import "defun.kl")
 
-(datatype (List A)
-  (nil)
-  (:: A (List A)))
-
 (defun foldr (f base lst)
   (case lst
     [(:: x xs)
