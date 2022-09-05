@@ -52,3 +52,15 @@
   (let-implicit string-length
     (let-implicit integer->string
       (string-append (+ 1 "foo") "!"))))
+
+-- lambdas need a type annotation
+(example
+  (lambda ((the Integer x))
+    (+ 2 x)))
+
+-- making a lambda implicit
+(example
+  (let-implicit (lambda ((the String s))
+                  (* 10 (string-length s)))
+    (let-implicit integer->string
+      (string-append (+ 1 "foo") "!"))))

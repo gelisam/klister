@@ -1,14 +1,17 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "quasiquote.kl" 1))
-(import (shift "reader.kl" 1))
+(import (shift "bool.kl" 1))
 (import "define-syntax-rule.kl")
+(import "list.kl")
+(import (shift "list.kl" 1))
 (import "monad.kl")
 (import "pair-datatype.kl")
-(import (shift "bool.kl" 1))
 (import (shift "pair-datatype.kl" 1))
+(import (shift "quasiquote.kl" 1))
 (import "reader.kl")
+(import (shift "reader.kl" 1))
+(import (shift (only "temporaries.kl" make-temporary) 1))
 
 
 -- Our strategy to implement implicit arguments is to make every expression a
@@ -135,6 +138,63 @@
                     [(cons f args)
                      (go f args)])])))]))
 
+-- The lambda macro must now produce a (Reader Env (-> A B)) out of a body of
+-- type (Reader Env B) which expects the bound variable to have type (Reader Env A).
+--
+-- The arguments must be given a type annotation:
+--
+--     (lambda ([the Integer n]
+--              [the String s])
+--       (+ n s))
+--
+-- We cannot infer the type of the argument from its usage, because
+--
+--     (lambda (x) (+ x 2))
+--
+-- could just as easily be a function from Integer to Integer as it could be a
+-- function from String to Integer which uses an implicit function to convert
+-- its input String to an Integer before adding 2.
+(define-macro (my-lambda annotated-args body)
+  -- (make-temporaries (:: '(the Integer n) (nil)))
+  -- =>
+  -- (:: (pair ('non-reader-n (pair 'n 'Integer)) (nil))
+  (flet [make-temporaries (annotations)
+         (case annotations
+           [(nil)
+            (pure (nil))]
+           [(:: annotation more-annotations)
+            (case (open-syntax annotation)
+              [(list-contents (:: the_ (:: type (:: arg (nil)))))
+               -- TODO: check that the_ is 'the
+               (>>= (make-temporary arg)
+                    (lambda (non-reader-arg)
+                      (>>= (make-temporaries more-annotations)
+                           (lambda (more-temporaries)
+                             (pure (:: (pair non-reader-arg (pair type arg))
+                                       more-temporaries))))))]
+              [_
+               (syntax-error `("malformed lambda argument"
+                                (expected (the Integer n))
+                                (got ,annotation)))])])]
+    (flet [bind-readers (temporaries body)
+           (case temporaries
+             [(nil)
+              body]
+             [(:: (pair non-reader-id (pair type reader-id)) more-temporaries)
+              `(let [,reader-id
+                     (reader-pure (the ,type ,non-reader-id))]
+                 ,(bind-readers more-temporaries body))])]
+      (>>= (make-temporaries (syntax->list annotated-args))
+           (lambda (temporaries)
+             (let [non-reader-args
+                   (list->syntax (map fst temporaries) annotated-args)]
+               (pure `(reader
+                        (lambda (r)
+                          (lambda ,non-reader-args
+                            ,(bind-readers temporaries
+                              `(run-reader ,body r))))))))))))
+
+
 -- because the implicits are stored in a Reader and must be accessible
 -- everywhere, everything must expand to a Reader behind the scenes.
 
@@ -147,6 +207,9 @@
 (define my-+
   (reader-pure +))
 
+(define my-*
+  (reader-pure *))
+
 (define my-integer->string
   (reader-pure integer->string))
 
@@ -158,20 +221,27 @@
 
 
 (export (rename ([my-app #%app]
+                 [my-lambda lambda]
                  [my-integer-literal #%integer-literal]
                  [my-string-literal #%string-literal]
                  [my-example example]
                  [my-+ +]
+                 [my-* *]
                  [my-integer->string integer->string]
                  [my-string-append string-append]
                  [my-string-length string-length])
                 #%module
                 my-app
+                my-lambda
                 my-integer-literal
                 my-string-literal
                 my-example
                 let-implicit
+                ->
+                Integer
+                String
                 my-+
+                my-*
                 my-integer->string
                 my-string-append
                 my-string-length))
