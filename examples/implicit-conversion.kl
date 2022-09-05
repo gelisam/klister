@@ -3,6 +3,7 @@
 (import (shift "prelude.kl" 1))
 (import (shift "bool.kl" 1))
 (import "define-syntax-rule.kl")
+(import (shift "free-identifier-case.kl" 1))
 (import "list.kl")
 (import (shift "list.kl" 1))
 (import "monad.kl")
@@ -165,13 +166,18 @@
            [(:: annotation more-annotations)
             (case (open-syntax annotation)
               [(list-contents (:: the_ (:: type (:: arg (nil)))))
-               -- TODO: check that the_ is 'the
-               (>>= (make-temporary arg)
-                    (lambda (non-reader-arg)
-                      (>>= (make-temporaries more-annotations)
-                           (lambda (more-temporaries)
-                             (pure (:: (pair non-reader-arg (pair type arg))
-                                       more-temporaries))))))]
+               (free-identifier-case the_
+                 [the
+                  (>>= (make-temporary arg)
+                       (lambda (non-reader-arg)
+                         (>>= (make-temporaries more-annotations)
+                              (lambda (more-temporaries)
+                                (pure (:: (pair non-reader-arg (pair type arg))
+                                          more-temporaries))))))]
+                 [(else _)
+                  (syntax-error `("malformed lambda argument"
+                                   (expected (the Integer n)
+                                   (got ,the_ instead of ,'the))))])]
               [_
                (syntax-error `("malformed lambda argument"
                                 (expected (the Integer n))
@@ -232,7 +238,7 @@
                  [my-string-length string-length])
                 #%module
                 my-app
-                my-lambda
+                my-lambda the
                 my-integer-literal
                 my-string-literal
                 my-example
