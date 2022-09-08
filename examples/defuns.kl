@@ -7,7 +7,7 @@
 (import "pair-datatype.kl")
 (import (shift "pair-datatype.kl" 1))
 
--- (defun2
+-- (defuns
 --   [even? (n)
 --    (if (= n 0) true (odd? (- n 1)))]
 --   [odd? (n)
