@@ -1,0 +1,63 @@
+#lang "prelude.kl"
+
+(import "list.kl")
+(import "monad.kl")
+(import "reader.kl")
+
+
+(define once
+  (reader (lambda (r) r)))
+
+(define twice
+  (reader (lambda (r) (* 2 r))))
+
+(define thrice
+  (reader (lambda (r) (* 3 r))))
+
+(define four-times
+  (reader-idiom + twice twice))
+
+(define five-times
+  (reader-idiom + twice thrice))
+
+(define six-times
+  (reader-idiom + thrice thrice))
+
+(example
+  (map (lambda (n-times)
+         (run-reader n-times 10))
+       (list once twice thrice four-times five-times six-times)))
+
+
+(defun n-times (n)
+  (case (= 0 n)
+    [(true)
+     (reader-pure 0)]
+    [(false)
+     (reader-idiom + once (n-times (- n 1)))]))
+
+(define itself-times
+  (reader-do
+    (<- r ask)
+    (n-times r)))
+
+(example
+  (map (lambda (n-times)
+         (run-reader n-times 10))
+       (list (n-times 7) (n-times 8) (n-times 9) itself-times)))
+
+
+(define describe
+  (reader-do
+    (<- s ask)
+    (local string-length
+           (reader-do
+             (<- n ask)
+             (return reader-applicative
+                     (string-append "the string \""
+                                    (string-append s
+                                                   (string-append "\" has length "
+                                                                  (integer->string n)))))))))
+
+(example
+  (run-reader describe "foo"))

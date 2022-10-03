@@ -1,0 +1,63 @@
+#lang "prelude.kl"
+
+(import "monad.kl")
+
+
+(datatype (Reader R A)
+  (reader (-> R A)))
+
+(defun run-reader (reader-a r)
+  (case reader-a
+    [(reader r2a)
+     (r2a r)]))
+
+(define ask
+  (reader (lambda (r)
+            r)))
+
+(defun local (r2s reader-s-a)
+  (reader (lambda (r)
+            (let [s (r2s r)]
+              (run-reader reader-s-a s)))))
+
+
+(defun reader-map (a2b reader-a)
+  (reader (lambda (r)
+            (a2b (run-reader reader-a r)))))
+
+(defun reader-pure (a)
+  (reader (lambda (_) a)))
+
+(defun reader-ap (readerF readerA)
+  (reader
+    (lambda (r)
+      ((run-reader readerF r)
+       (run-reader readerA r)))))
+
+(defun reader-bind (reader-a a-to-reader-b)
+  (reader (lambda (r)
+            (let [a (run-reader reader-a r)]
+              (let [reader-b (a-to-reader-b a)]
+                (let [b (run-reader reader-b r)]
+                  b))))))
+
+
+(define reader-functor
+  (functor reader-map))
+
+(define reader-applicative
+  (applicative reader-functor reader-pure reader-ap))
+
+(define-idiom reader-idiom reader-applicative)
+
+(define reader-monad
+  (monad reader-applicative reader-bind))
+
+(define-do reader-do reader-monad)
+
+
+(export
+  Reader reader run-reader ask local
+  reader-functor reader-map
+  reader-applicative reader-idiom reader-pure reader-ap
+  reader-monad reader-do reader-bind)
