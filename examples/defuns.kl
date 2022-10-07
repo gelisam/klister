@@ -180,6 +180,20 @@
                                           more-defs)
                                       (snd def))])]
                             (go id))]
+                      -- (defuns '(defuns [even? (n)
+                      --                   (if (= n 0) true (odd? (- n 1)))]
+                      --                  [odd? (n)
+                      --                   (if (= n 0) false (even? (- n 1)))]))
+                      -- =>
+                      -- (group
+                      --   (defun f1/f2 (n/n)
+                      --     (flet [even? ...]
+                      --       (flet [odd? ...]
+                      --         (case n/n
+                      --           [(left n) ...]
+                      --           [(right n) ...]))))
+                      --   (defun even? ...)
+                      --   (defun odd? ...))
                       (lambda (stx)
                         (syntax-case stx
                           [(list (_))
