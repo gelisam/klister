@@ -153,10 +153,9 @@
                   -- '[(left x)
                   --   (left ((lambda (n) ...) x))]
                   (flet [mk-f1/f2-branch (def mk-nested-either)
-                         (let [first-arg (fst def)]
-                           (let [f (snd def)]
-                             `[,(mk-nested-either 'x)
-                               ,(mk-nested-either `(,f x))]))]
+                         (let [f (snd def)]
+                           `[,(mk-nested-either 'x)
+                             ,(mk-nested-either `(,f x))])]
                     -- (mk-f1/f2-branches (list (pair 'even?
                     --                                '(lambda (n) ...))
                     --                          (pair 'odd?
