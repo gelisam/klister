@@ -41,7 +41,7 @@
 
 (defun syntax->list (stx)
   (syntax-case stx
-    [() (nil)]
+    [(nil) (nil)]
     [(cons x xs) (:: x (syntax->list xs))]))
 
 (defun list->syntax (xs0 stx)
