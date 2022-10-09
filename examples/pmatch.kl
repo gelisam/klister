@@ -24,12 +24,6 @@
     (just A)))
 
 (meta
-  (defun syntax->list (stx)
-    (syntax-case stx
-      [(nil) (nil)]
-      [(cons x xs) (:: x (syntax->list xs))])))
-
-(meta
   (define else-case
      (lambda (stx)
        (syntax-case stx
@@ -44,12 +38,6 @@
             [else (pure (just 'else-x))]
             [(else other) (pure (nothing))])]
          [_ (pure (nothing))]))))
-
-(meta
-  (defun list->syntax (stx-lst stx)
-    (case stx-lst
-      [(nil) (empty-list-syntax stx)]
-      [(:: x xs) (cons-list-syntax x (list->syntax xs stx) stx)])))
 
 (define-macros
   ([pmatch

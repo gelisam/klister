@@ -7,10 +7,6 @@
 (import "n-ary-app.kl")
 (import "defun.kl")
 
-(datatype (List A)
-  (nil)
-  (:: A (List A)))
-
 (defun foldr (f base lst)
   (case lst
     [(:: x xs)
@@ -43,6 +39,21 @@
     [(nil) (nil)]
     [(:: x xs) (snoc (reverse xs) x)]))
 
+(defun syntax->list (stx)
+  (syntax-case stx
+    [() (nil)]
+    [(cons x xs) (:: x (syntax->list xs))]))
+
+(defun list->syntax (xs0 stx)
+  (case xs0
+    [(nil)
+     (empty-list-syntax stx)]
+   [(:: x xs)
+    (cons-list-syntax x
+      (list->syntax xs stx)
+      stx)]))
+
+
 (define-macros
   ([list
      (lambda (stx)
@@ -54,4 +65,25 @@
            [(cons x xs)
             (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
 
-(export List nil :: foldr map filter snoc reverse list)
+(example
+  (foldr + 0 (list 1 2 3 4)))
+
+(example
+  (map string-length (list "foo" "bar" "baz" "quux")))
+
+(example
+  (filter (< 10) (list 1 11 111 2 22 222 3 33 333)))
+
+(example
+  (snoc (list 1 2 3) 4))
+
+(example
+  (reverse (list 1 2 3)))
+
+(example
+  (syntax->list '(a b c)))
+
+(example
+  (list->syntax (list 'a 'b 'c) 'here))
+
+(export List nil :: foldr map filter snoc reverse syntax->list list->syntax list)

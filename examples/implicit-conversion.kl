@@ -1,0 +1,253 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import (shift "bool.kl" 1))
+(import "define-syntax-rule.kl")
+(import (shift "free-identifier-case.kl" 1))
+(import "list.kl")
+(import (shift "list.kl" 1))
+(import "monad.kl")
+(import "pair-datatype.kl")
+(import (shift "pair-datatype.kl" 1))
+(import (shift "quasiquote.kl" 1))
+(import "reader.kl")
+(import (shift "reader.kl" 1))
+(import (shift (only "temporaries.kl" make-temporary) 1))
+
+
+-- Our strategy to implement implicit arguments is to make every expression a
+-- (Reader Env _), where Env is a nested tuple of all the implicit functions
+-- which are in scope. Then, at every function application, if there is a type
+-- mismatch, we look through Env for a function of type (-> Actual Expected).
+
+
+-- start with (unit), the empty nested-tuple
+(define-macro (my-example body)
+  (pure `(example
+           (run-reader ,body (unit)))))
+
+-- cons another function in front for every let-implicit
+(define-macro (let-implicit reader-f body)
+  (pure `(reader-do
+           (<- r ask)
+           (let [f (run-reader ,reader-f r)]
+             (local (lambda (implicits)
+                      (pair f implicits))
+               ,body)))))
+
+-- when needed, go through the nested-tuple to find the function we need
+(define-macro (pick-from-nested-tuple)
+  (flet [type-eq? (t1 t2)
+          (type-case t1
+            [String
+             (type-case t2
+              [String (pure true)]
+              [(else _) (pure false)])]
+            [Integer
+             (type-case t2
+              [Integer (pure true)]
+              [(else _) (pure false)])]
+            [(-> t1a t1b)
+             (type-case t2
+               [(-> t2a t2b)
+                (>>= (type-eq? t1a t2a)
+                     (lambda (eq?a)
+                       (>>= (type-eq? t1b t2b)
+                            (lambda (eq?b)
+                              (pure (and eq?a eq?b))))))])])]
+    (>>= (which-problem)
+         (lambda (prob)
+           (case prob
+             [(expression t)
+              (type-case t
+                [(-> nested-tuple needed)
+                 (type-case nested-tuple
+                   [(Pair head tail)
+                    (>>= (type-eq? head needed)
+                         (lambda (eq?)
+                           (case eq?
+                             [(true)
+                              (pure '(lambda (nested-tuple)
+                                       (case nested-tuple
+                                         [(pair head _)
+                                          head])))]
+                             [(false)
+                              (pure '(lambda (nested-tuple)
+                                       (case nested-tuple
+                                         [(pair _ tail)
+                                          ((pick-from-nested-tuple) tail)])))])))])])])))))
+
+(defun reader-ap-with (r2a2b reader-b2c reader-a)
+  (reader
+    (lambda (r)
+      ((run-reader reader-b2c r)
+       (r2a2b r (run-reader reader-a r))))))
+
+-- determine whether calling pick-from-nested-tuple is needed
+(define-macro (pick-reader-ap-variant)
+  (let [type-eq?
+        (lambda (t1 t2)
+          (type-case t1
+            [String
+             (type-case t2
+              [String (pure true)]
+              [(else _) (pure false)])]
+            [Integer
+             (type-case t2
+              [Integer (pure true)]
+              [(else _) (pure false)])]))]
+    (>>= (which-problem)
+         (lambda (prob)
+            (case prob
+              [(expression t)
+               (type-case t
+                 [(-> reader-f reader-a-to-reader-b)
+                  (type-case reader-a-to-reader-b
+                    [(-> reader-a reader-b)
+                     (type-case reader-f
+                       [(Reader rF e-to-b)
+                        (type-case e-to-b
+                          [(-> e b)
+                           (type-case reader-a
+                             [(Reader rA a)
+                              -- "a" for "actual", "e" for "expected".
+                              -- If the actual type doesn't match the
+                              -- expected type, look for a conversion
+                              -- function in "r".
+                              (>>= (type-eq? a e)
+                                   (lambda (eq?)
+                                     (case eq?
+                                       [(true)
+                                        (pure 'reader-ap)]
+                                       [(false)
+                                        -- look through "r" looking for a
+                                        -- function of type (-> a e)
+                                        (pure '(reader-ap-with (pick-from-nested-tuple)))])))])])])])])])))))
+
+-- call pick-reader-ap-variant at every function application
+(define-macros
+  ([my-app (lambda (stx)
+             (flet (go (f args)
+                     (syntax-case args
+                       [(list (x))
+                        (pure `((pick-reader-ap-variant) ,f ,x))]
+                       [(cons x xs)
+                        (go `((pick-reader-ap-variant) ,f ,x) xs)]))
+               (syntax-case stx
+                 [(cons _ f-and-args)
+                  (syntax-case f-and-args
+                    [(cons f args)
+                     (go f args)])])))]))
+
+-- The lambda macro must now produce a (Reader Env (-> A B)) out of a body of
+-- type (Reader Env B) which expects the bound variable to have type (Reader Env A).
+--
+-- The arguments must be given a type annotation:
+--
+--     (lambda ([the Integer n]
+--              [the String s])
+--       (+ n s))
+--
+-- We cannot infer the type of the argument from its usage, because
+--
+--     (lambda (x) (+ x 2))
+--
+-- could just as easily be a function from Integer to Integer as it could be a
+-- function from String to Integer which uses an implicit function to convert
+-- its input String to an Integer before adding 2.
+(define-macro (my-lambda annotated-args body)
+  -- (make-temporaries (:: '(the Integer n) (nil)))
+  -- =>
+  -- (:: (pair ('non-reader-n (pair 'n 'Integer)) (nil))
+  (flet [make-temporaries (annotations)
+         (case annotations
+           [(nil)
+            (pure (nil))]
+           [(:: annotation more-annotations)
+            (case (open-syntax annotation)
+              [(list-contents (:: the_ (:: type (:: arg (nil)))))
+               (free-identifier-case the_
+                 [the
+                  (>>= (make-temporary arg)
+                       (lambda (non-reader-arg)
+                         (>>= (make-temporaries more-annotations)
+                              (lambda (more-temporaries)
+                                (pure (:: (pair non-reader-arg (pair type arg))
+                                          more-temporaries))))))]
+                 [(else _)
+                  (syntax-error `("malformed lambda argument"
+                                   (expected (the Integer n)
+                                   (got ,the_ instead of ,'the))))])]
+              [_
+               (syntax-error `("malformed lambda argument"
+                                (expected (the Integer n))
+                                (got ,annotation)))])])]
+    (flet [bind-readers (temporaries body)
+           (case temporaries
+             [(nil)
+              body]
+             [(:: (pair non-reader-id (pair type reader-id)) more-temporaries)
+              `(let [,reader-id
+                     (reader-pure (the ,type ,non-reader-id))]
+                 ,(bind-readers more-temporaries body))])]
+      (>>= (make-temporaries (syntax->list annotated-args))
+           (lambda (temporaries)
+             (let [non-reader-args
+                   (list->syntax (map fst temporaries) annotated-args)]
+               (pure `(reader
+                        (lambda (r)
+                          (lambda ,non-reader-args
+                            ,(bind-readers temporaries
+                              `(run-reader ,body r))))))))))))
+
+
+-- because the implicits are stored in a Reader and must be accessible
+-- everywhere, everything must expand to a Reader behind the scenes.
+
+(define-macro (my-integer-literal n)
+  (pure `(reader-pure (#%integer-literal ,n))))
+
+(define-macro (my-string-literal s)
+  (pure `(reader-pure (#%string-literal ,s))))
+
+(define my-+
+  (reader-pure +))
+
+(define my-*
+  (reader-pure *))
+
+(define my-integer->string
+  (reader-pure integer->string))
+
+(define my-string-append
+  (reader-pure string-append))
+
+(define my-string-length
+  (reader-pure string-length))
+
+
+(export (rename ([my-app #%app]
+                 [my-lambda lambda]
+                 [my-integer-literal #%integer-literal]
+                 [my-string-literal #%string-literal]
+                 [my-example example]
+                 [my-+ +]
+                 [my-* *]
+                 [my-integer->string integer->string]
+                 [my-string-append string-append]
+                 [my-string-length string-length])
+                #%module
+                my-app
+                my-lambda the
+                my-integer-literal
+                my-string-literal
+                my-example
+                let-implicit
+                ->
+                Integer
+                String
+                my-+
+                my-*
+                my-integer->string
+                my-string-append
+                my-string-length))

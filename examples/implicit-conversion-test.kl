@@ -1,0 +1,66 @@
+#lang "implicit-conversion.kl"
+
+-- using let-implicit 0 times
+(example
+  42)
+
+-- using let-implicit 1 time
+(example
+  (let-implicit string-length
+    (+ 1 "foo")))
+-- =>
+-- (example
+--   (let-implicit string-length
+--     (#%app +
+--            (#%integer-literal 1)
+--            (#%string-literal "foo"))))
+-- =>
+-- (my-example
+--   (let-implicit my-string-length
+--     (my-app my-+
+--             (my-integer-literal 1)
+--             (my-string-literal "foo"))))
+-- =>
+-- (example
+--   (run-reader
+--     (local (lambda (implicits)
+--              (pair string-length implicits))
+--       ((pick-reader-ap-variant) ((pick-reader-ap-variant) (reader-pure +)
+--                                                           (reader-pure 1))
+--                                 (reader-pure "foo")))
+--     (unit)))
+-- =>
+-- (example
+--   (run-reader
+--     (reader-ap-with (lambda (...) string-length)
+--                     (reader-ap (reader-pure +)
+--                                (reader-pure 1))
+--                     (reader-pure "foo"))
+--     (pair string-length (unit)))
+-- =>
+-- (example
+--   (+ 1 (string-length "foo")))
+-- =>
+-- (example
+--   (+ 1 3))
+-- =>
+-- (example
+--   4)
+
+-- using let-implicit 2 times
+(example
+  (let-implicit string-length
+    (let-implicit integer->string
+      (string-append (+ 1 "foo") "!"))))
+
+-- lambdas need a type annotation
+(example
+  (lambda ((the Integer x))
+    (+ 2 x)))
+
+-- making a lambda implicit
+(example
+  (let-implicit (lambda ((the String s))
+                  (* 10 (string-length s)))
+    (let-implicit integer->string
+      (string-append (+ 1 "foo") "!"))))

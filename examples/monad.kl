@@ -228,3 +228,10 @@
     (<- y (just "hey"))
     (return (monad->applicative maybe-monad) (f y))))
 
+
+(export
+  Functor functor fmap
+  Applicative applicative return ap idiom define-idiom
+  Monad monad monad->applicative bind do <- define-do
+  macro-functor macro-applicative macro-monad
+  Maybe nothing just maybe-functor maybe-applicative perhaps maybe-monad)
