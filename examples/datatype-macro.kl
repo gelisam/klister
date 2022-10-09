@@ -27,7 +27,7 @@
        (syntax-case stx
          [(cons _ more)
           (syntax-case more
-           [()
+           [(nil)
             (pure (replace-loc more '(nil)))]
            [(cons x xs)
             (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))

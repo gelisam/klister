@@ -105,7 +105,7 @@
       (syntax-case stx
         [(list (_ inst fun args))
          (syntax-case args
-           [() (pure fun)]
+           [(nil) (pure fun)]
            [(cons x xs)
             (pure
              (quasiquote/loc stx

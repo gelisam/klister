@@ -716,7 +716,7 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
                    schedule t rhs'
       let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
       return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [])) -> do
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "nil"))])) -> do
       rhsDest <- schedule t rhs
       return (SyntaxPatternEmpty, rhsDest)
     Syntax (Stx _ _ (Id "_")) -> do

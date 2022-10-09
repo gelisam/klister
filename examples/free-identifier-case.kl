@@ -26,7 +26,7 @@
       (syntax-case stx
         [(list (_ scrut cases))
           (syntax-case cases
-            [() (pure '(syntax-error '"Nothing matched"))]
+            [(nil) (pure '(syntax-error '"Nothing matched"))]
             [(cons c cs)
              (syntax-case c
                [(list (test val))

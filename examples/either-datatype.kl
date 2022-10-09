@@ -1,0 +1,7 @@
+#lang "prelude.kl"
+
+(datatype (Either A B)
+  (left A)
+  (right B))
+
+(export Either left right)

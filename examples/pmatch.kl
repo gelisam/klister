@@ -52,7 +52,7 @@
       (syntax-case stx
         [(list (_ scrut tgt pats))
          (syntax-case pats
-           [() (pure `(error ',scrut))]
+           [(nil) (pure `(error ',scrut))]
            [(cons c cs)
             (syntax-case c
               [(list (pat rhs))
