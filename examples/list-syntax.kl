@@ -17,7 +17,7 @@
 
 (defun map (f stx)
   (syntax-case stx
-    (() stx)
+    ((nil) stx)
     ((cons a d)
      (cons-list-syntax (f a) (map f d) stx))))
 
@@ -27,7 +27,7 @@
 --     b)
 (defun foldr (f b0 as0)
   (syntax-case as0
-    (() b0)
+    ((nil) b0)
     ((cons a as)
      (f a (foldr f b0 as)))))
 
@@ -37,7 +37,7 @@
 --     b)
 (defun foldl (f b0 as0)
   (syntax-case as0
-    (() b0)
+    ((nil) b0)
     ((cons a as)
      (foldl f (f b0 a) as))))
 
@@ -47,7 +47,7 @@
 --     (Macro b))
 (defun foldrM (f b0 as0)
   (syntax-case as0
-    (()
+    ((nil)
      (pure b0))
     ((cons a as1)
      (>>= (foldrM f b0 as1)
@@ -60,7 +60,7 @@
 --     (Macro b))
 (defun foldlM (f b0 as0)
   (syntax-case as0
-    (()
+    ((nil)
      (pure b0))
     ((cons a1 as)
      (>>= (f b0 a1)

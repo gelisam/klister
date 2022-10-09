@@ -55,7 +55,7 @@
            (syntax-case stx
              [(list (fN-name args body))
               (syntax-case args
-                [()
+                [(nil)
                  (syntax-error '"each mutually-recursive function needs at least one argument" args)]
                 [(cons first-arg more-args)
                  (pure (pair fN-name
@@ -70,7 +70,7 @@
       --         (nil)))
       (flet [parse-defs (stx)
              (syntax-case stx
-               [()
+               [(nil)
                 (pure (nil))]
                [(cons def-stx defs-stx)
                 (do (def <- (parse-def def-stx))

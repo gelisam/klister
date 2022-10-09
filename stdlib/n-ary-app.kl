@@ -25,7 +25,7 @@
          (syntax-case fun-and-args
            [[cons fun args]
             (syntax-case args
-              [() [pure fun]]
+              [(nil) [pure fun]]
               [[cons arg0 more-args]
                [pure
                 [cons-list-syntax
@@ -46,7 +46,7 @@
      (syntax-case stx
        [[list [_ args body]]
         (syntax-case args
-          [() [pure body]]
+          [(nil) [pure body]]
           [[cons arg0 more-args]
            [pure [list-syntax ['lambda
                                [list-syntax [arg0] arg0]

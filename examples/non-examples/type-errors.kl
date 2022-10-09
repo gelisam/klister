@@ -1,4 +1,4 @@
 #lang kernel
 
-(example ((lambda (x) (syntax-case x [() 'a])) 34))
+(example ((lambda (x) (syntax-case x [(nil) 'a])) 34))
 

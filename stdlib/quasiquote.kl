@@ -7,7 +7,7 @@
 (meta
   (defun map-syntax (f stx)
     (syntax-case stx
-      [() stx]
+      [(nil) stx]
       [(cons a d)
        (cons-list-syntax (f a) (map-syntax f d) stx)]
       [_ stx])))
@@ -30,7 +30,7 @@
            [[string str]
             [pure [list-syntax [[quote quote] (string-syntax str e)]
                                e]]]
-           [()
+           [(nil)
             [pure
              [list-syntax [[quote empty-list-syntax]
                            [list-syntax [[quote quote]

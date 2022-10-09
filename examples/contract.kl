@@ -39,7 +39,7 @@
                    more-contracts
                    new-body)))]
          [_ (syntax-error '"Wrong number of contracts" contracts)])]
-      [()
+      [(nil)
        (syntax-case contracts
          [(list (ret-contract))
           (pure

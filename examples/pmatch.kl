@@ -26,7 +26,7 @@
 (meta
   (defun syntax->list (stx)
     (syntax-case stx
-      [() (nil)]
+      [(nil) (nil)]
       [(cons x xs) (:: x (syntax->list xs))])))
 
 (meta
@@ -64,7 +64,7 @@
       (syntax-case stx
         [(list (_ scrut tgt pats))
          (syntax-case pats
-           [() (pure `(error ',scrut))]
+           [(nil) (pure `(error ',scrut))]
            [(cons c cs)
             (syntax-case c
               [(list (pat rhs))

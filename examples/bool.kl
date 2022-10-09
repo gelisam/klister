@@ -20,7 +20,7 @@
           (syntax-case stx
             ((cons _ args)
              (syntax-case args
-               (()
+               ((nil)
                 (pure '(true)))
                ((cons x xs)
                 (pure `(binary-and ,x
@@ -29,7 +29,7 @@
          (syntax-case stx
            ((cons _ args)
             (syntax-case args
-              (()
+              ((nil)
                (pure '(false)))
               ((cons x xs)
                (pure `(binary-or ,x
