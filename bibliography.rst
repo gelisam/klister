@@ -21,9 +21,13 @@ Type checker implementation
 
 The type checker is based on Sestoft's description in `Programming Language Concepts`_. It uses Rémy's optimization_ of generalization, where type metavariables are assigned levels to avoid scanning the context at generalization time.
 
+LVars have been used to `parallelize type checkers`_.
+
 .. _Programming Language Concepts: https://www.itu.dk/~sestoft/plc/
 
 .. _optimization: https://hal.inria.fr/inria-00077006/document
+
+.. _parallelize type checkers: https://dl.acm.org/doi/10.1145/2851141.2851142
 
 
 Related Work
