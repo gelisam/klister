@@ -11,10 +11,6 @@
 (datatype (Functor F A B)
   (functor (-> (-> A B) (-> (F A) (F B)))))
 
-(datatype (List A)
-  (nil)
-  (:: A (List A)))
-
 (defun map (f xs)
   (case xs
     [(nil) (nil)]
@@ -22,10 +18,6 @@
 
 (define list-functor
   (functor map))
-
-(datatype (Maybe A)
-  (nothing)
-  (just A))
 
 (define maybe-functor
   (functor
@@ -234,4 +226,4 @@
   Applicative applicative return ap idiom define-idiom
   Monad monad monad->applicative bind do <- define-do
   macro-functor macro-applicative macro-monad
-  Maybe nothing just maybe-functor maybe-applicative perhaps maybe-monad)
+  maybe-functor maybe-applicative perhaps maybe-monad)
