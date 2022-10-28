@@ -26,6 +26,13 @@
         [(nothing) (nothing)]
         [(just x) (just (f x))]))))
 
+(define io-functor
+  (functor
+    (lambda (f io-x)
+      (bind-IO io-x
+        (lambda (x)
+          (pure-IO (f x)))))))
+
 (define macro-functor
   (functor
     (lambda (f x)
@@ -64,6 +71,17 @@
          (case arg
            ((nothing) (nothing))
            ((just x) (just (f x)))))))))
+
+(define io-applicative
+  (applicative
+    io-functor
+    pure-IO
+    (lambda (io-f io-x)
+      (bind-IO io-f
+        (lambda (f)
+          (bind-IO io-x
+            (lambda (x)
+              (pure-IO (f x)))))))))
 
 (define return
   (lambda (inst x)
@@ -142,6 +160,11 @@
       (case m
         ((nothing) (nothing))
         ((just x) (f x))))))
+
+(define io-monad
+  (monad
+    io-applicative
+    bind-IO))
 
 (define bind
   (lambda (inst m f)
@@ -226,5 +249,6 @@
   Applicative applicative return ap idiom define-idiom
   Monad monad monad->applicative bind do <- define-do
   macro-functor macro-applicative macro-monad
+  io-functor io-applicative io-monad
   maybe-functor maybe-applicative perhaps maybe-monad
   list-functor)
