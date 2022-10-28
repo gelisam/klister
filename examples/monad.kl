@@ -226,4 +226,5 @@
   Applicative applicative return ap idiom define-idiom
   Monad monad monad->applicative bind do <- define-do
   macro-functor macro-applicative macro-monad
-  maybe-functor maybe-applicative perhaps maybe-monad)
+  maybe-functor maybe-applicative perhaps maybe-monad
+  list-functor)
