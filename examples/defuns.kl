@@ -1,0 +1,261 @@
+#lang "prelude.kl"
+(import (shift "prelude.kl" 1))
+(import (shift "do.kl" 1))
+(import "either-datatype.kl")
+(import "list.kl")
+(import (shift "list.kl" 1))
+(import "pair-datatype.kl")
+(import (shift "pair-datatype.kl" 1))
+
+-- (defuns
+--   [even? (n)
+--    (if (= n 0) true (odd? (- n 1)))]
+--   [odd? (n)
+--    (if (= n 0) false (even? (- n 1)))])
+-- =>
+-- (group
+--   (defun even?/odd? (n/n)
+--     (flet [even? (n)
+--            (case (even?/odd? (left n))
+--              [(left r)
+--               r]
+--              [_
+--               (error '"never happens: even?/odd? always returns a left when receiving a left")])]
+--       (flet [odd? (n)
+--              (case (even?/odd? (right n))
+--                [(right r)
+--                 r]
+--                [_
+--                 (error '"never happens: even?/odd? always returns a right when receiving a right")])]
+--         (case n/n
+--           [(left n)
+--            (left (if (= n 0) true (odd? (- n 1))))]
+--           [(right n)
+--            (right (if (= n 0) false (even? (- n 1))))]))))
+--   (defun even? (n)
+--     (case (even?/odd? (left n))
+--       [(left r)
+--        r]
+--       [_
+--        (error '"never happens: even?/odd? always returns a left when receiving a left")]))
+--   (defun odd? (n)
+--     (case (even?/odd? (right n))
+--       [(right r)
+--        r]
+--       [_
+--        (error '"never happens: even?/odd? always returns a right when receiving a right")])))
+(define-macros
+  ([defuns
+    -- (parse-def '[even? (n)
+    --              (if (= n 0) true (odd? (- n 1)))])
+    -- =>
+    -- (pair 'even?
+    --       '(lambda (n) (if (= n 0) true (odd? (- n 1)))))
+    (flet [parse-def (stx)
+           (syntax-case stx
+             [(list (fN-name args body))
+              (syntax-case args
+                [()
+                 (syntax-error '"each mutually-recursive function needs at least one argument" args)]
+                [(cons first-arg more-args)
+                 (pure (pair fN-name
+                             `(lambda ,args ,body)))])])]
+      -- (parse-defs '([even? (n)
+      --                (if (= n 0) true (odd? (- n 1)))]
+      --               [odd? (n)
+      --                (if (= n 0) false (even? (- n 1)))]))
+      -- =>
+      -- (:: (pair 'even? ...)
+      --     (:: (pair 'odd? ...)
+      --         (nil)))
+      (flet [parse-defs (stx)
+             (syntax-case stx
+               [()
+                (pure (nil))]
+               [(cons def-stx defs-stx)
+                (do (def <- (parse-def def-stx))
+                    (defs <- (parse-defs defs-stx))
+                    (pure (:: def defs)))])]
+        -- (mk-fN-body 'arg (lambda (x) `(left ,x)))
+        -- =>
+        -- '(case (f1/f2 (left arg))
+        --    [(left r)
+        --     r]
+        --    [_
+        --     (error '"never happens: f1/f2 always returns a value of the same shape it receives")])
+        (flet [mk-fN-body (argument-name mk-nested-either)
+               `(case (f1/f2 ,(mk-nested-either argument-name))
+                  [,(mk-nested-either 'r)
+                   r]
+                  [_
+                   (error '"never happens: f1/f2 always returns a value of the same shape it receives")])]
+          -- (mk-fN-defun 'f1 (lambda (x) `(left ,x)))
+          -- =>
+          -- '(defun f1 (x)
+          --    (case (f1/f2 (left x))
+          --      ...))
+          (flet [mk-fN-defun (fN-name mk-nested-either)
+                 `(defun ,fN-name (x)
+                    ,(mk-fN-body 'x mk-nested-either))]
+            -- (mk-defuns (list 'f1 'f2))
+            -- =>
+            -- '(group
+            --    (defun f1 (x)
+            --      (case (f1/f2 (left x))
+            --        ...))
+            --    (defun f2 (x)
+            --      (case (f1/f2 (right x))
+            --        ...)))
+            (let [mk-defuns
+                  (flet [go (mk-nested-either fN-names)
+                         (case fN-names
+                           [(:: fN-name (nil))
+                            (mk-fN-defun fN-name mk-nested-either)]
+                           [(:: fN-name more-fN-names)
+                            `(group
+                               ,(mk-fN-defun fN-name (lambda (x) (mk-nested-either `(left ,x))))
+                               ,(go (lambda (x) (mk-nested-either `(right ,x)))
+                                    more-fN-names))])]
+                    (go id))]
+              -- (mk-fN-flet 'f1 (lambda (x) `(left ,x)) 'body)
+              -- =>
+              -- (flet [f1 (x)
+              --        (case (f1/f2 (left x))
+              --          ...)]
+              --   body)
+              (flet [mk-fN-flet (fN-name mk-nested-either body)
+                     `(flet [,fN-name (x)
+                             ,(mk-fN-body 'x mk-nested-either)]
+                        ,body)]
+                -- (mk-flets (list 'f1 'f2) 'body)
+                -- =>
+                -- (flet [f1 (x)
+                --        (case (f1/f2 (left x))
+                --          ...)]
+                --   (flet [f2 (x)
+                --          (case (f1/f2 (right x))
+                --            ...)]
+                --     body))
+                (flet [mk-flets (all-fN-names body)
+                       (flet [go (mk-nested-either fN-names)
+                              (case fN-names
+                                [(:: fN-name (nil))
+                                 (mk-fN-flet fN-name mk-nested-either body)]
+                                [(:: fN-name more-fN-names)
+                                 (mk-fN-flet fN-name (lambda (x) (mk-nested-either `(left ,x)))
+                                   (go (lambda (x) (mk-nested-either `(right ,x)))
+                                       more-fN-names))])]
+                         (go id all-fN-names))]
+                  -- (mk-f1/f2-branch (pair 'even?
+                  --                        '(lambda (n) ...))
+                  --                  (lambda (x) `(left ,x)))
+                  -- =>
+                  -- '[(left x)
+                  --   (left ((lambda (n) ...) x))]
+                  (flet [mk-f1/f2-branch (def mk-nested-either)
+                         (let [f (snd def)]
+                           `[,(mk-nested-either 'x)
+                             ,(mk-nested-either `(,f x))])]
+                    -- (mk-f1/f2-branches (list (pair 'even?
+                    --                                '(lambda (n) ...))
+                    --                          (pair 'odd?
+                    --                                '(lambda (n) ...))))
+                    -- =>
+                    -- '([(left x)
+                    --    (left ((lambda (n) ...) x))]
+                    --   [(right x)
+                    --    (right ((lambda (n) ...) x))])
+                    (let [mk-f1/f2-branches
+                          (flet [go (mk-nested-either defs)
+                                 (case defs
+                                   [(:: def (nil))
+                                    (cons-list-syntax
+                                      (mk-f1/f2-branch def mk-nested-either)
+                                      '()
+                                      (snd def))]
+                                   [(:: def more-defs)
+                                    (cons-list-syntax
+                                      (mk-f1/f2-branch def (lambda (x) (mk-nested-either `(left ,x))))
+                                      (go (lambda (x) (mk-nested-either `(right ,x)))
+                                          more-defs)
+                                      (snd def))])]
+                            (go id))]
+                      -- (defuns '(defuns [even? (n)
+                      --                   (if (= n 0) true (odd? (- n 1)))]
+                      --                  [odd? (n)
+                      --                   (if (= n 0) false (even? (- n 1)))]))
+                      -- =>
+                      -- (group
+                      --   (defun f1/f2 (n/n)
+                      --     (flet [even? ...]
+                      --       (flet [odd? ...]
+                      --         (case n/n
+                      --           [(left n) ...]
+                      --           [(right n) ...]))))
+                      --   (defun even? ...)
+                      --   (defun odd? ...))
+                      (lambda (stx)
+                        (syntax-case stx
+                          [(list (_))
+                           (pure '(group))]
+                          [(cons _ defs-stx)
+                           (do (defs <- (parse-defs defs-stx))
+                               (let [fN-names (map fst defs)]
+                                 (pure `(group
+                                          (defun f1/f2 (n/n)
+                                            ,(mk-flets fN-names
+                                               (cons-list-syntax 'case
+                                                 (cons-list-syntax 'n/n
+                                                   (mk-f1/f2-branches defs)
+                                                   stx)
+                                                  stx)))
+                                          ,(mk-defuns fN-names)))))])))))))))))]))
+
+
+(defuns
+  [even? (n)
+   (if (= n 0) true (odd? (- n 1)))]
+  [odd? (n)
+   (if (= n 0) false (even? (- n 1)))])
+
+-- (list (false) (true) (false) (true) (false))
+(example (map even? (list 1 2 3 4 5)))
+
+-- (list (true) (false) (true) (false) (true))
+(example (map odd? (list 1 2 3 4 5)))
+
+
+-- exercise the edge case in which only one function is defined.
+(defuns
+  [fact (n)
+   (if (= n 0) 1 (* n (fact (- n 1))))])
+
+-- (list 1 2 6 24 120)
+(example
+  (map fact (list 1 2 3 4 5)))
+
+
+-- exercise the edge case in which zero functions are defined.
+(defuns)
+
+
+-- exercise a more complicated case, with more than two functions taking more than one argument.
+(defuns
+  [collatz (n)
+   (go n 0)]
+  [go (n steps)
+   (if (= n 1)
+       steps
+       (if (even? n)
+           (go-even n steps)
+           (go-odd n steps)))]
+  [go-even (n steps)
+   (go (/ n 2)
+       (+ steps 1))]
+  [go-odd (n steps)
+   (go (+ (* 3 n) 1)
+       (+ steps 1))])
+
+-- (list 0 1 7 2 5)
+(example
+  (map collatz (list 1 2 3 4 5)))

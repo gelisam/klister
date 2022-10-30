@@ -321,7 +321,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
 
                 _ -> assertFailure "Expected two imports, a def, a macro, a def, two examples, a macro, and an example"
           )
-        , ( "examples/defun.kl"
+        , ( "examples/defun-test.kl"
           , \_m exampleVals ->
               case exampleVals of
                 [ValueSyntax (Syntax (Stx _ _ (Id "a"))), ValueSyntax (Syntax (Stx _ _ (Id "g")))] ->
