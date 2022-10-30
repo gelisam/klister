@@ -72,6 +72,13 @@
        [pure [list-syntax ['my-lam args body] stx]]])]])]
 
 (define-macros
+  -- (flet* [name (arg more-args ...)
+  --         def]
+  --   body)
+  -- =>
+  -- (flet [name (arg)
+  --        (lambda (more-args ...) def)]
+  --   body)
   ([flet*
     (lambda (stx)
       (syntax-case stx
@@ -90,6 +97,9 @@
                       stx))])])]))]))
 
 (define-macros
+  -- (flet [...] ...)
+  -- =>
+  -- (flet* [...] ...)
   ([flet (lambda (stx)
            (syntax-case stx
              [(cons _ rest)
