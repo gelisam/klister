@@ -72,14 +72,14 @@
        [pure [list-syntax ['my-lam args body] stx]]])]])]
 
 (define-macros
-  -- (flet* [name (arg more-args ...)
-  --         def]
+  -- (my-flet [name (arg more-args ...)
+  --           def]
   --   body)
   -- =>
   -- (flet [name (arg)
   --        (lambda (more-args ...) def)]
   --   body)
-  ([flet*
+  ([my-flet
     (lambda (stx)
       (syntax-case stx
         [(list (_ fun body))
@@ -97,15 +97,6 @@
                       stx))])])]))]))
 
 (define-macros
-  -- (flet [...] ...)
-  -- =>
-  -- (flet* [...] ...)
-  ([flet (lambda (stx)
-           (syntax-case stx
-             [(cons _ rest)
-              (pure (cons-list-syntax 'flet* rest stx))]))]))
-
-(define-macros
   -- (my-arrow foo bar baz) => (-> foo (-> bar baz))
   ([my-arrow (lambda (stx)
                (syntax-case stx
@@ -120,4 +111,5 @@
                                         stx))])]))]))
 
 (export (rename ([my-arrow ->]) my-arrow))
-(export if #%app lambda flet)
+(export (rename ([my-flet flet]) my-flet))
+(export if #%app lambda)
