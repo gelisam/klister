@@ -44,7 +44,6 @@
         Syntax-Contents list-contents integer-contents string-contents identifier-contents
 
         -- primitive expression macros
-        oops
         error
         the
         let
@@ -59,7 +58,6 @@
         bound-identifier=?
         free-identifier=?
         quote
-        ident
         ident-syntax
         empty-list-syntax
         cons-list-syntax

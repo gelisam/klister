@@ -37,7 +37,6 @@ module Expander.Primitives
   , makeIntroducer
   , Expander.Primitives.log
   , whichProblem
-  , oops
   , pureMacro
   , quote
   , replaceLoc
@@ -227,9 +226,6 @@ group expandDeclForms dest outScopesDest stx = do
 
 -- Expression primitives
 type ExprPrim = Ty -> SplitCorePtr -> Syntax -> Expand ()
-
-oops :: ExprPrim
-oops _t _dest stx = throwError (InternalError $ "oops" ++ show stx)
 
 err :: ExprPrim
 err _t dest stx = do
