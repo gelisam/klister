@@ -163,7 +163,6 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
            in group (group (b <+> "=>") <> line <> pp (env <> env') body)
          | (pat, body) <- pats
          ]
-  pp _env (CoreIdentifier x) = viaShow x
   pp _env (CoreInteger s) = viaShow s
   pp env (CoreIdent x) = pp env x
   pp env (CoreEmpty e) = pp env e

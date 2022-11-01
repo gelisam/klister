@@ -130,7 +130,7 @@ miniTests =
             \                {- [[lambda [x] body] e] -} \n\
             \                [pure [list-syntax \n\
             \                        [[list-syntax \n\
-            \                           [[ident lambda] \n\
+            \                           [[ident-syntax 'lambda stx] \n\
             \                            [list-syntax [x] stx] \n\
             \                            body] \n\
             \                           stx] \n\
@@ -661,7 +661,6 @@ genCoreF subgen varGen =
         -- , CoreIdentEq _ <$> sameVars <*> sameVars
         -- , CoreSyntax Syntax
         -- , CoreCase sameVars [(Pattern, core)]
-        -- , CoreIdentifier Ident
         -- , CoreDataCase core [(ConstructorPattern, core)]
         -- , CoreIdent (ScopedIdent core)
         -- , CoreEmpty (ScopedEmpty core)

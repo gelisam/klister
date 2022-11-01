@@ -641,7 +641,6 @@ initializeKernel outputChannel = do
       , ("bound-identifier=?", Prims.identEqual Bound)
       , ("free-identifier=?", Prims.identEqual Free)
       , ("quote", Prims.quote)
-      , ("ident", Prims.ident)
       , ("ident-syntax", Prims.identSyntax)
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)
