@@ -1,0 +1,20 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+(import "list.kl")
+
+(define-macro (if-non-empty cond then else)
+  (let [it
+        (ident-syntax 'it then)]
+    (pure `(let [,it ,cond]
+             (case ,it
+               [(:: _ _)
+                ,then]
+               [(nil)
+                ,else])))))
+
+(example
+  (if-non-empty (snoc (list 1 2 3) 4)
+    (:: 0 it)
+    (list 0)))
