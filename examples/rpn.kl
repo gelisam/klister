@@ -1,0 +1,131 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+(import "list.kl")
+
+-- An example custom #lang. Programs written in this #lang look like this:
+--
+--     #lang "rpn.kl"
+--     4
+--     8
+--     +
+--     3
+--     *
+--
+-- This is a stack based language, so the above program pushes 4 and 8 onto the
+-- stack, then + pop then and pushes 12 in their place, then 3 is pushed on
+-- top, then * pops 12 and 3 and pushes 36. The overall program prints 36. If
+-- there was more than one number on the stack at the end of the program, they
+-- would all be printed on a separate line, from the bottom to the top of the
+-- stack.
+--
+-- In order to do so, we take advantage of the fact that the above program gets
+-- desugared to the following macro call:
+--
+--     (#%module 4 8 + 3 *)
+--
+-- We define a custom macro named #%module (well, we define a custom macro
+-- named my-module, which we rename to #%module in the export declaration at
+-- the end of this file) which rewrites a module in the rpn #lang to a module
+-- in the prelude #lang:
+--
+--     (prelude.#%module
+--       (prelude.run
+--         (print-stack
+--           (* (3 (+ (8 (4 empty-stack))))))))
+
+(define empty-stack
+  (nil))
+
+(defun putStrLn (str)
+  (write stdout (string-append str "\n")))
+
+(defun putIntLn (int)
+  (putStrLn (integer->string int)))
+
+(defun print-stack (stack)
+  (case stack
+    [(nil)
+     (pure-IO (unit))]
+    [(:: x xs)
+     (bind-IO
+       (print-stack xs)
+       (lambda (_)
+         (putIntLn x)))]))
+
+(define-macros
+  ([my-module
+    (lambda (stx)
+      -- (go (list '3 '*)
+      --     '(+ (8 (4 empty-stack))))
+      -- =>
+      -- (print-stack
+      --   (* (3 (+ (8 (4 empty-stack))))))
+      (flet [go (inputs compute-stack)
+             (case inputs
+               [(nil)
+                (pure `(#%module
+                         (run
+                           (print-stack ,compute-stack))))]
+               [(:: x xs)
+                (go xs `(,x ,compute-stack))])]
+        (case (open-syntax stx)
+          -- drop the first argument, which is always #%module
+          [(list-contents (:: _ xs))
+           (go xs 'empty-stack)])))]))
+
+-- In the expression
+--
+--     (print-stack
+--       (* (3 (+ (8 (4 empty-stack))))))
+--
+-- the idea is that *, +, and the numbers are intended to be functions which
+-- take the stack as input and return the modified stack.
+
+(defun add (stk)
+  (case stk
+    [(:: x1 (:: x2 xs))
+     (:: (+ x1 x2) xs)]))
+
+(defun mul (stk)
+  (case stk
+    [(:: x1 (:: x2 xs))
+     (:: (* x1 x2) xs)]))
+
+-- When a number is evaluated, either as a function or as an argument, the
+-- #%integer-literal macro is automatically called. Thus,
+--
+--     (print-stack
+--       (* (3 (+ (8 (4 empty-stack))))))
+--
+-- is automatically expanded to
+--
+--     (print-stack
+--       (* ((#%integer-literal 3)
+--           (+ ((#%integer-literal 8)
+--               ((#%integer-literal 4)
+--                empty-stack))))))
+--
+-- We can thus define a macro named #%integer-literal which pushes the number
+-- onto the stack. We need to delegate to the prelude's #%integer-literal,
+-- otherwise including an integer literal in the output will cause
+-- my-integer-literal to be called again.
+
+(define-macro (my-integer-literal n)
+  (pure `(lambda (stk)
+           (:: (#%integer-literal ,n) stk))))
+
+-- Similarly, "foo" expands to (#%string-literal "foo"), and (f x y) expands to
+-- (#%app f x y) when f is _not_ a macro. Our language does not use either
+-- syntax, so we do not export macros with those names, and this has the effect
+-- of causing an error if a user attempts to use those syntactic forms.
+
+(export (rename ([my-module #%module]
+                 [add +]
+                 [mul *]
+                 [my-integer-literal #%integer-literal])
+                my-module
+                add
+                mul
+                my-integer-literal))
