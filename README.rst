@@ -1,38 +1,204 @@
 Klister
 ------------
 
-This repository contains a partial implementation of a macro expander
-in which macros can get *stuck*. The idea is that if a macro depends
-on information that will be the result of later macro expansion or
-type checking, it can pause its execution until that information has
-become available.
+Klister [`TyDe 2020`_, `video`_] is a research-stage programming language which combines
+the core features of Racket and Haskell into a single language. It is named
+after its most distinguishing feature, "stuck macros" [`Compose NYC 2019`_], as
+"Klister" is Danish for "adhesive".
 
-For a description of one way in which stuck macros might be useful,
-please see this `talk`_.
+.. _TyDe 2020: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
+.. _video: https://www.youtube.com/watch?v=FyeWwYfqTHo&t=996s
+.. _Compose NYC 2019: https://www.youtube.com/watch?v=nUvKoG_V_U0
 
-.. _talk: https://www.youtube.com/watch?v=nUvKoG_V_U0
+::
 
+  #lang "prelude.kl"
 
-Installation
-============
+  -- do notation is not builtin syntax, it's implemented as a library!
+  (import "monad.kl")
 
-Klister is written in Haskell, and is built with HPack and Cabal. You can build
-it like so::
+  -- An effectful action whose inferred type is (-> String (IO Unit))
+  (defun putStrLn (str)
+    (write stdout (string-append str "\n")))
 
-    hpack package.yaml
-    cabal v2-build
+  -- "run" is like main, except you can have more than one.
+  (run
+    -- Klister doesn't have typeclasses yet, so "do" needs an explicit
+    -- dictionary argument.
+    (do io-monad
+      (putStrLn "hello")
+      (putStrLn "world")))
 
-You can use ``v2-install`` instead of ``v2-build`` to install the Klister
-executable and associated files to your home directory.
+You can run the above program using either stack or cabal::
 
-Usage
-=====
+    $ cabal run klister -- run examples/hello.kl
+    hello
+    world
 
-Run ``klister repl`` to be dropped into a read-eval-print loop where you can try
-out writing some Klister expressions.
+Features
+========
 
-``klister run file.kl`` will evaluate the examples and run the IO
-actions in ``file.kl``.
+Features we borrow from Racket:
+
+* `Custom syntax`_, via `hygienic macros`_ with `easy-to-override hygiene`_.
+* `Custom languages`_ (``#lang``), via macros which reinterpret terms into
+  those of an existing ``#lang``.
+* `Syntax objects`_, that is, s-expressions annotated with source locations and
+  lexical information.
+* A `module system`_ which allow imports and exports to be renamed.
+
+.. _Custom syntax: TODO: link to do-notation in examples/monad.kl
+.. _hygienic macros: TODO: write a short example demonstrating lack of capture.
+.. _easy-to-override hygiene: examples/anaphoric-if.kl
+.. _Custom languages: examples/rpn.kl
+.. _Syntax objects: TODO: link to a short example which explains that in
+   Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
+   they are introduced via ``'(...)``. Also explain that Klister does not have
+   unannotated s-expressions.
+.. _module system: TODO: write a short example demonstrating what can be
+   expressed with the import and export primitives.
+
+Features we borrow from Haskell:
+
+* Statically-typed; we check that macro implementations have type
+  ``(-> Syntax (Macro Syntax)``, and *then* that the generated code is also
+  well-typed. We thus aim for the expressivity of Template Haskell, not the
+  extra guarantees of Typed Template Haskell.
+* Purely functional; primitives with side-effects either run in the ``IO``
+  monad or in the ``Macro`` monad, as appropriate.
+* Higher-kinded types; for example `monads`_ are defined as a library.
+* `Algebraic datatypes`_.
+* `Bidirectional type inference`_; the type of an argument can specialize the
+  type of the function being called.
+* Bidirectional type inference; the type of a function can specialize the type
+  of its arguments.
+
+.. _monads: TODO: link to monad.kl's Monad definition, and add a comment there
+   highlighting the inferred type, especially the higher-kinded type variable.
+.. _Algebraic datatypes: TODO: write a small example defining and matching on
+   an algebraic type. Perhaps Either?
+.. _Bidirectional type inference: TODO: write a small example demonstrating
+   those two features.
+
+Features which make Klister special (but not *unique*; see the `bibliography`_):
+
+* `Type-providing macros`_; a macro used in an argument position can provide
+  type information about the argument, and can thus specialize the type of the
+  function being called.
+* `Type-aware macros`_; a macro used in an argument position can obtain the
+  type of the argument it needs to generate, and thus the type of a function
+  can affect what arguments are generated.
+* `Stuck macros`_; it is thus possible for multiple macros to affect what each
+  other generates. The language primitives are designed so that the order in
+  which the macros are expanded cannot affect their results, and indeed the
+  same is true for the order in which the macro expansion and type-inference
+  steps are interleaved. This makes Klister code more robust to refactoring.
+* `Problem-aware macros`_; in addition to the type, a macro can learn which
+  "problem" it needs to solve, namely whether it must generate an expression, a
+  type, a pattern, etc.
+* `Custom type-driven code generation`_, via macros which generate code from a
+  type.
+* Languages with `custom type systems`_, via macros which reinterpret types
+  into those of an existing ``#lang``, and which contribute to type inference
+  by providing type information about the code they generate. The variety of
+  type-systems which can be implemented this way is unforunately limited by
+  the core type system to which everything must be rewritten.
+* Languages with `custom implicit terms`_, via macros which generate terms of
+  an existing ``#lang`` based on a type in the new ``#lang``.
+
+.. _bibliography: bibliography.rst
+.. _Type-providing macros: TODO: write a small example demonstrating this
+   feature.
+.. _Type-aware macros: TODO: write a small example demonstrating this feature.
+.. _Stuck macros: TODO: write a small example demonstrating this feature. Maybe
+   the traverse-traverse-id example from Compose NYC 2019?
+.. _Problem-aware macros: TODO: write a small example demonstrating all the
+   different problems one can write a macro for.
+.. _Custom type-driven code generation: TODO write a small example
+   demonstrating the feature. Perhaps the traverse-traverse-id example again?
+.. _custom type systems: TODO: write an example #lang in which functions are
+   not curried, writing copious comments.
+.. _custom implicit terms: TODO: improve the comments in the
+   implicit-conversion example, then link to it.
+
+While we think Klister demonstrates some neat ideas, there are a number of
+limitations which makes Klister an impractical choice for most real-life
+projects. If you want to help make Klister a more practical language, please
+`reach out`_!
+
+.. _reach out: https://github.com/gelisam/klister/issues/new
+
+Here are the most prominent Racket features which are missing from Klister:
+
+* Klister does not have pervasive s-expressions. In Racket, ``(list 1 2 3)``
+  and ``'(1 2 3)`` construct the same value, an s-expression which satisfies
+  the ``list?`` predicate. In Klister, the former produces a value of the
+  algebraic datatype ``(List Integer)``, while the latter produces a value of
+  type ``Syntax``. This syntax can be "opened", via ``(open-syntax '(1 2 3))``,
+  to obtain the value ``(list-contents (list '1 '2 '3))`` of type
+  ``(Syntax-Contents Syntax)``. 
+* Klister does not have reader macros, and thus every ``#lang`` looks like a
+  Lisp. This also limits languages to Integer literals and String literals.
+* `local-expand`_ is planned, but not yet implemented.
+* `Syntax parameters`_ are planned, but not yet implemented.
+
+.. _local-expand: https://github.com/gelisam/klister/issues/144#issuecomment-1133964551
+.. _Syntax parameters: https://github.com/gelisam/klister/issues/105
+
+Here are the most prominent Haskell features which are missing from Klister:
+
+* `Type classes` are planned, but not yet implemented.
+* Klister is strict, not lazy. Racket has a lazy ``#lang``, so it is probably
+  possible to do the same in Klister as well.
+* `Type annotations containing foralls`_ are planned, but not yet implemented.
+  Currently, Klister only supports type ascriptions, e.g.
+  ``(+ (the Integer (* 2 3)) 1)``, for giving the type of a sub-expression.
+* Klister does not support GADTs nor type families.
+
+.. _Type classes: https://github.com/gelisam/klister/issues/167
+.. _Type annotations containing foralls: https://github.com/gelisam/klister/issues/60
+
+Here are the most prominent features which Racket and Haskell both have but
+which are missing from Klister:
+
+* Klister is missing commonly-expected datatypes like ``Map``, ``Set``, and
+  ``Double``.
+* Klister requires functions to be defined before they are used.
+* Klister does not support concurrency. It might be possible to implement a
+  ``#lang`` with a green thread scheduler.
+* Klister does not support exception-handling. ``error`` and ``syntax-error``
+  both terminate the program immediately, like ``panic!`` in Rust. It is
+  definitely possible to implement ``Either``-based error handling, and it
+  should be possible to implement a ``#lang`` in which exceptions are an
+  ambient effect.
+* Klister does not have a rich ecosystem of libraries. It does not have a
+  package repository where individual contributors can release their own
+  packages. Please upload your Klister code to the `examples`_ folder, it
+  currently contains all the Klister code which was ever written.
+* Klister does not have a rich set of IO primitives out of which you could
+  build all the libraries you need yourself. Currently, you can only print to
+  stdout.
+* A Foreign-Function-Interface (`FFI`_), to reuse Haskell's rich ecosystem of
+  libraries (and its own FFI to C), is planned but not yet implemented.
+* `Compiling modules separately`_, to speed up compilation times, is planned
+  but not yet implemented.
+* Klister does not produce binary executables.
+
+.. _examples: https://github.com/gelisam/klister/tree/main/examples
+.. _FFI: https://github.com/gelisam/klister/issues/165
+.. _Compiling modules separately: https://github.com/gelisam/klister/issues/118
+
+Guide and Reference
+===================
+
+The Klister Guide consists of the various commented examples linked from the
+above feature list, plus the extra information in the sub-sections below.
+
+The `Klister Reference`_ currently consists of a half-generated,
+half-manually-updated file giving either a type signature or a short example
+for every identifier in the "prelude.kl" language.
+
+.. _Klister Reference: examples/primitives-documentation.kl
 
 Imports
 ~~~~~~~
@@ -40,63 +206,3 @@ Imports
 The ``import`` form will search for modules in the same directory as the
 importing module, and in directories listed in the ``KLISTERPATH`` environment
 variable, a ``:``-separated list of directories.
-
-Other Resources
-===============
-
-We presented the status of Klister as of Summer 2020 at the TyDe workshop. An `abstract`_ and a `recorded talk`_ are available.
-
-.. _abstract: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
-.. _recorded talk: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros.webm
-
-Overall Design
-==============
-
-The macro expander itself is a set-of-scopes expander, based on
-`Matthew Flatt's paper`_ from POPL 2016 and described quite accessibly in
-his talk from `Strange Loop`_.
-
-.. _Matthew Flatt's paper: https://www.cs.utah.edu/plt/publications/popl16-f.pdf
-
-.. _Strange Loop: https://www.youtube.com/watch?v=Or_yKiI3Ha4
-
-Additionally, there is a module system patterned after `Racket's`_.
-
-.. _Racket's: https://www.cs.utah.edu/plt/publications/macromod.pdf
-
-This macro expander has a few differences:
-
-* Rather than performing a depth-first traversal of the input syntax,
-  expanding as it goes, our expander maintains a queue of expansion
-  tasks. Tasks indicate the expression to be expanded as well as its
-  resulting location in the final output. Dependency information is
-  tracked in order to constrain the scheduling of expansion tasks.
-
-* The core language does not coincide with the input language. Having
-  an independent core language will hopefully allow us to overcome the
-  overhead associated with recursive uses of ``local-expand``, as well
-  as enabling a second, trusted type checking pass.
-
-* Type checking and macro expansion are interleaved. Every expansion
-  step in an expression or pattern context knows what type the
-  resulting program will have.
-
-The type checker is a mostly-vanilla Hindley-Milner, based on
-Sestoft's description in `Programming Language Concepts`_, extended
-with user-definable datatypes and Racket-style phase stratification of
-bindings. It uses Rémy's optimization_ of generalization, where type
-metavariables are assigned levels to avoid scanning the context at
-generalization time.
-
-.. _Programming Language Concepts: https://www.itu.dk/~sestoft/plc/
-
-.. _optimization: https://hal.inria.fr/inria-00077006/document
-
-FAQ
-===
-
-Why "Klister"?
---------------
-
-"Klister" is Danish for "adhesive", and is also used to form words
-describing *sticky* things. And our macros get *stuck*.
