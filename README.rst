@@ -121,10 +121,9 @@ Features which make Klister special (but not *unique*; see the `bibliography`_):
 .. _custom implicit terms: TODO: improve the comments in the
    implicit-conversion example, then link to it.
 
-While we think Klister demonstrates some neat ideas, there are a number of
-limitations which makes Klister an impractical choice for most real-life
-projects. If you want to help make Klister a more practical language, please
-`reach out`_!
+While we think Klister demonstrates some neat ideas, there are some limitations
+which make Klister an impractical choice for most real-life projects. If you
+want to help make Klister a more practical language, please `reach out`_!
 
 .. _reach out: https://github.com/gelisam/klister/issues/new
 
