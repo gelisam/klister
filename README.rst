@@ -67,7 +67,13 @@ Features we borrow from Haskell:
 * Purely functional; primitives with side-effects either run in the ``IO``
   monad or in the ``Macro`` monad, as appropriate.
 * Higher-kinded types; for example `monads`_ are defined as a library.
-* `Algebraic datatypes`_.
+* `Algebraic datatypes`_. In Racket, ``(list 1 2 3)`` and ``'(1 2 3)``
+  construct the same value, an s-expression which satisfies the ``list?``
+  predicate. In Klister, the former produces a value of the algebraic datatype
+  ``(List Integer)``, while the latter produces a value of type ``Syntax``.
+  This syntax can be "opened", via ``(open-syntax '(1 2 3))``, to obtain the
+  value ``(list-contents (list '1 '2 '3))`` of type
+  ``(Syntax-Contents Syntax)``.
 * `Bidirectional type inference`_; the type of an argument can specialize the
   type of the function being called.
 * Bidirectional type inference; the type of a function can specialize the type
@@ -129,13 +135,6 @@ want to help make Klister a more practical language, please `reach out`_!
 
 Here are the most prominent Racket features which are missing from Klister:
 
-* Klister does not have pervasive s-expressions. In Racket, ``(list 1 2 3)``
-  and ``'(1 2 3)`` construct the same value, an s-expression which satisfies
-  the ``list?`` predicate. In Klister, the former produces a value of the
-  algebraic datatype ``(List Integer)``, while the latter produces a value of
-  type ``Syntax``. This syntax can be "opened", via ``(open-syntax '(1 2 3))``,
-  to obtain the value ``(list-contents (list '1 '2 '3))`` of type
-  ``(Syntax-Contents Syntax)``. 
 * Klister does not have reader macros, and thus every ``#lang`` looks like a
   Lisp. This also limits languages to Integer literals and String literals.
 * `local-expand`_ is planned, but not yet implemented.
