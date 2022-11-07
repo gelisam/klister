@@ -192,11 +192,13 @@ Guide and Reference
 The Klister Guide consists of the various commented examples linked from the
 above feature list, plus the extra information in the sub-sections below.
 
-The `Klister Reference`_ currently consists of a half-generated,
-half-manually-updated file giving either a type signature or a short example
-for every identifier in the "prelude.kl" language.
+The Klister Reference covers every identifier in the "prelude.kl" language, but
+doesn't currently say much about each. It consists of a `list of examples`
+showing how to use the macros, and a `list of type signatures` documenting how
+to use the values and functions.
 
-.. _Klister Reference: examples/primitives-documentation.kl
+.. _list of examples: examples/primitives-documentation.kl
+.. _list of type signatures: examples/primitives-documentation.golden
 
 Imports
 ~~~~~~~
