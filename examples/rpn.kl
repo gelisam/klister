@@ -4,7 +4,11 @@
 (import "define-syntax-rule.kl")
 (import "list.kl")
 
--- An example custom #lang. Programs written in this #lang look like this:
+-- An example custom #lang, inspired from [1].
+--
+-- [1] https://beautifulracket.com/stacker/
+--
+-- Programs written in this #lang look like this:
 --
 --     #lang "rpn.kl"
 --     4
