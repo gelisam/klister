@@ -23,7 +23,7 @@ after its most distinguishing feature, "stuck macros" [`Compose NYC 2019`_], as
 
   -- "run" is like main, except you can have more than one.
   (run
-    -- Klister doesn't have typeclasses yet, so "do" needs an explicit
+    -- Klister doesn't have type classes yet, so "do" needs an explicit
     -- dictionary argument.
     (do io-monad
       (putStrLn "hello")
