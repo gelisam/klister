@@ -47,7 +47,7 @@ Features we borrow from Racket:
   lexical information.
 * A `module system`_ which allow imports and exports to be renamed.
 
-.. _Custom syntax: TODO: link to do-notation in examples/monad.kl
+.. _Custom syntax: examples/lambda-case.golden
 .. _hygienic macros: TODO: write a short example demonstrating lack of capture.
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
