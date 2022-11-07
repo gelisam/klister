@@ -56,7 +56,8 @@ Features we borrow from Racket:
 .. _Syntax objects: TODO: link to a short example which explains that in
    Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
    they are introduced via ``'(...)``. Also explain that Klister does not have
-   unannotated s-expressions.
+   unannotated s-expressions. And the relationship between Syntax and
+   Syntax-Contents.
 .. _module system: TODO: write a short example demonstrating how to use the
    import and export primitives.
 .. _phase system: TODO: write a short example demonstrating macros which
@@ -73,13 +74,7 @@ Features we borrow from Haskell:
   ``Macro`` monad, while primitives with runtime side-effects (e.g. printing to
   stdout) run in the ``IO`` monad.
 * Higher-kinded types; for example `monads`_ are defined as a library.
-* `Algebraic datatypes`_. In Racket, ``(list 1 2 3)`` and ``'(1 2 3)``
-  construct the same value, an s-expression which satisfies the ``list?``
-  predicate. In Klister, the former produces a value of the algebraic datatype
-  ``(List Integer)``, while the latter produces a value of type ``Syntax``.
-  This syntax can be "opened", via ``(open-syntax '(1 2 3))``, to obtain the
-  value ``(list-contents (list '1 '2 '3))`` of type
-  ``(Syntax-Contents Syntax)``.
+* `Algebraic datatypes`_.
 * `Bidirectional type inference`_; the type of an argument can specialize the
   type of the function being called.
 * Bidirectional type inference; the type of a function can specialize the type
