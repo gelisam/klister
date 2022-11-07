@@ -68,8 +68,10 @@ Features we borrow from Haskell:
   ``(-> Syntax (Macro Syntax)``, and *then* that the generated code is also
   well-typed. We thus aim for the expressivity of Template Haskell, not the
   extra guarantees of Typed Template Haskell.
-* Purely functional; primitives with side-effects either run in the ``IO``
-  monad or in the ``Macro`` monad, as appropriate.
+* Purely functional; primitives with compile-time side-effects (e.g. comparing
+  identifiers while taking into account the current set of bindings) run in the
+  ``Macro`` monad, while primitives with runtime side-effects (e.g. printing to
+  stdout) run in the ``IO`` monad.
 * Higher-kinded types; for example `monads`_ are defined as a library.
 * `Algebraic datatypes`_. In Racket, ``(list 1 2 3)`` and ``'(1 2 3)``
   construct the same value, an s-expression which satisfies the ``list?``
