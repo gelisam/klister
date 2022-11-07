@@ -136,7 +136,7 @@ want to help make Klister a more practical language, please `reach out`_!
 
 Here are the most prominent Racket features which are missing from Klister:
 
-* Klister does not have reader macros, and thus every ``#lang`` looks like a
+* Klister does not yet support custom readers, and thus every ``#lang`` looks like a
   Lisp. This also limits languages to Integer literals and String literals.
 * `local-expand`_ is planned, but not yet implemented.
 * `Syntax parameters`_ are planned, but not yet implemented.
@@ -146,7 +146,7 @@ Here are the most prominent Racket features which are missing from Klister:
 
 Here are the most prominent Haskell features which are missing from Klister:
 
-* `Type classes` are planned, but not yet implemented.
+* `Type classes` are planned as a library, but are not yet implemented.
 * Klister is strict, not lazy. Racket has a lazy ``#lang``, so it is probably
   possible to do the same in Klister as well.
 * `Type annotations containing foralls`_ are planned, but not yet implemented.
@@ -162,7 +162,7 @@ which are missing from Klister:
 
 * Klister is missing commonly-expected datatypes like ``Map``, ``Set``, and
   ``Double``.
-* Klister requires functions to be defined before they are used.
+* Klister requires functions and datatypes to be defined before they are used.
 * Klister does not support concurrency. It might be possible to implement a
   ``#lang`` with a green thread scheduler.
 * Klister does not support exception-handling. ``error`` and ``syntax-error``
@@ -179,7 +179,7 @@ which are missing from Klister:
   stdout.
 * A Foreign-Function-Interface (`FFI`_), to reuse Haskell's rich ecosystem of
   libraries (and its own FFI to C), is planned but not yet implemented.
-* `Compiling modules separately`_, to speed up compilation times, is planned
+* `Expanding modules separately`_, to speed up expansion times, is planned
   but not yet implemented.
 * Klister does not produce binary executables.
 
