@@ -45,7 +45,9 @@ Features we borrow from Racket:
   those of an existing ``#lang``.
 * `Syntax objects`_, that is, s-expressions annotated with source locations and
   lexical information.
-* A `module system`_ which allow imports and exports to be renamed.
+* A `module system`_ which respects the `phase system`_. Thus, if Klister one
+  day supports generating binaries, those binaries will not be unnecessarily
+  clogged with dependencies which were only needed at compile-time.
 
 .. _Custom syntax: examples/lambda-case.golden
 .. _hygienic macros: TODO: write a short example demonstrating lack of capture.
@@ -55,8 +57,10 @@ Features we borrow from Racket:
    Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
    they are introduced via ``'(...)``. Also explain that Klister does not have
    unannotated s-expressions.
-.. _module system: TODO: write a short example demonstrating what can be
-   expressed with the import and export primitives.
+.. _module system: TODO: write a short example demonstrating how to use the
+   import and export primitives.
+.. _phase system: TODO: write a short example demonstrating macros which
+   generate macros. Maybe define-syntax-rules.kl?
 
 Features we borrow from Haskell:
 
