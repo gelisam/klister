@@ -1,10 +1,10 @@
 Klister
 ------------
 
-Klister [`TyDe 2020`_, `video`_] is a research-stage programming language which combines
-the core features of Racket and Haskell into a single language. It is named
-after its most distinguishing feature, "stuck macros" [`Compose NYC 2019`_], as
-"Klister" is Danish for "adhesive".
+Klister [`TyDe 2020`_, `video`_] is a is a programming language, a research
+prototype which combines features from Racket, ML, and Haskell into a single
+language. It is named after its most distinguishing feature, "stuck macros"
+[`Compose NYC 2019`_], as "Klister" is Danish for "adhesive".
 
 .. _TyDe 2020: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
 .. _video: https://www.youtube.com/watch?v=FyeWwYfqTHo&t=996s
@@ -63,9 +63,20 @@ Features we borrow from Racket:
 .. _phase system: TODO: write a short example demonstrating macros which
    generate macros. Maybe define-syntax-rules.kl?
 
+Features we borrow from ML:
+* A type system with `parametric polymorphism`_, `algebraic datatypes`_, and
+  Hindley-Milner `type inference`_.
+
+.. _parametric polymorphism: TODO: write a short example demonstrating the
+   feature, like id or fmap.
+.. _algebraic datatypes: TODO: write a small example defining and matching on
+   an algebraic type. Perhaps Either?
+.. _type inference: TODO: write a small example demonstrating that type
+   information flows in two directions.
+
 Features we borrow from Haskell:
 
-* Statically-typed; we check that macro implementations have type
+* Typed macros; we check that macro implementations have type
   ``(-> Syntax (Macro Syntax)``, and *then* that the generated code is also
   well-typed. We thus aim for the expressivity of Template Haskell, not the
   extra guarantees of Typed Template Haskell.
@@ -74,18 +85,9 @@ Features we borrow from Haskell:
   ``Macro`` monad, while primitives with runtime side-effects (e.g. printing to
   stdout) run in the ``IO`` monad.
 * Higher-kinded types; for example `monads`_ are defined as a library.
-* `Algebraic datatypes`_.
-* `Bidirectional type inference`_; the type of an argument can specialize the
-  type of the function being called.
-* Bidirectional type inference; the type of a function can specialize the type
-  of its arguments.
 
 .. _monads: TODO: link to monad.kl's Monad definition, and add a comment there
    highlighting the inferred type, especially the higher-kinded type variable.
-.. _Algebraic datatypes: TODO: write a small example defining and matching on
-   an algebraic type. Perhaps Either?
-.. _Bidirectional type inference: TODO: write a small example demonstrating
-   those two features.
 
 Features which make Klister special (but not *unique*; see the `bibliography`_):
 
