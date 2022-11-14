@@ -104,6 +104,19 @@ Features which make Klister special (but not *unique*; see the `bibliography`_):
 * `Problem-aware macros`_; in addition to the type, a macro can learn which
   "problem" it needs to solve, namely whether it must generate an expression, a
   type, a pattern, etc.
+
+.. _bibliography: bibliography.rst
+.. _Type-providing macros: TODO: write a small example demonstrating this
+   feature.
+.. _Type-aware macros: TODO: write a small example demonstrating this feature.
+.. _Stuck macros: TODO: write a small example demonstrating this feature. Maybe
+   the traverse-traverse-id example from Compose NYC 2019?
+.. _Problem-aware macros: TODO: write a small example demonstrating all the
+   different problems one can write a macro for.
+
+Cool things which can be built using the above features:
+
+* Macros communicating via types
 * `Custom type-driven code generation`_, via macros which generate code from a
   type.
 * Languages with `custom type systems`_, via macros which reinterpret types
@@ -114,14 +127,6 @@ Features which make Klister special (but not *unique*; see the `bibliography`_):
 * Languages with `custom implicit terms`_, via macros which generate terms of
   an existing ``#lang`` based on a type in the new ``#lang``.
 
-.. _bibliography: bibliography.rst
-.. _Type-providing macros: TODO: write a small example demonstrating this
-   feature.
-.. _Type-aware macros: TODO: write a small example demonstrating this feature.
-.. _Stuck macros: TODO: write a small example demonstrating this feature. Maybe
-   the traverse-traverse-id example from Compose NYC 2019?
-.. _Problem-aware macros: TODO: write a small example demonstrating all the
-   different problems one can write a macro for.
 .. _Custom type-driven code generation: TODO write a small example
    demonstrating the feature. Perhaps the traverse-traverse-id example again?
 .. _custom type systems: TODO: write an example #lang in which functions are
