@@ -91,17 +91,16 @@ Features we borrow from Haskell:
 
 Features which make Klister special (but not *unique*; see the `bibliography`_):
 
-* `Type-providing macros`_; a macro used in an argument position can provide
-  type information about the argument, and can thus specialize the type of the
-  function being called.
-* `Type-aware macros`_; a macro used in an argument position can obtain the
-  type of the argument it needs to generate, and thus the type of a function
-  can affect what arguments are generated.
-* `Stuck macros`_; it is thus possible for multiple macros to affect what each
-  other generates. The language primitives are designed so that the order in
-  which the macros are expanded cannot affect their results, and indeed the
-  same is true for the order in which the macro expansion and type-inference
-  steps are interleaved. This makes Klister code more robust to refactoring.
+* `Type-providing macros`_; a macro can provide type information about the
+  code it plans to generate.
+* `Type-aware macros`_; a macro can obtain type requirements about the code it
+  needs to generate.
+* `Stuck macros`_; the above two features make it possible for macros to
+  communicate, and thus to affect what each other generates. The language
+  primitives are designed so that the order in which the macros are expanded
+  cannot affect their results, and indeed the same is true for the order in
+  which the macro expansion and type-inference steps are interleaved. This
+  makes Klister code more robust to refactoring.
 * `Problem-aware macros`_; in addition to the type, a macro can learn which
   "problem" it needs to solve, namely whether it must generate an expression, a
   type, a pattern, etc.
