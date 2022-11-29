@@ -7,7 +7,7 @@ single language. It is named after its most distinguishing feature, "stuck
 macros" [`Compose NYC 2019`_], as "Klister" is Danish for "adhesive".
 
 .. _TyDe 2020: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
-.. _video: https://www.youtube.com/watch?v=FyeWwYfqTHo&t=996s
+.. _video: https://www.youtube.com/watch?v=FyeWwYfqTHo
 .. _Compose NYC 2019: https://www.youtube.com/watch?v=nUvKoG_V_U0
 
 ::
