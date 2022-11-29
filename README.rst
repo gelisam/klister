@@ -2,9 +2,9 @@ Klister
 ------------
 
 Klister [`TyDe 2020`_, `video`_] is a is a programming language, a research
-prototype which combines features from Racket, ML, and Haskell into a single
-language. It is named after its most distinguishing feature, "stuck macros"
-[`Compose NYC 2019`_], as "Klister" is Danish for "adhesive".
+prototype which combines features from Racket, ML, and a strict Haskell into a
+single language. It is named after its most distinguishing feature, "stuck
+macros" [`Compose NYC 2019`_], as "Klister" is Danish for "adhesive".
 
 .. _TyDe 2020: http://davidchristiansen.dk/pubs/tyde2020-predictable-macros-abstract.pdf
 .. _video: https://www.youtube.com/watch?v=FyeWwYfqTHo&t=996s
@@ -153,8 +153,6 @@ Here are the most prominent Racket features which are missing from Klister:
 Here are the most prominent Haskell features which are missing from Klister:
 
 * `Type classes` are planned as a library, but are not yet implemented.
-* Klister is strict, not lazy. Racket has a lazy ``#lang``, so it is probably
-  possible to do the same in Klister as well.
 * `Type annotations containing foralls`_ are planned, but not yet implemented.
   Currently, Klister only supports type ascriptions, e.g.
   ``(+ (the Integer (* 2 3)) 1)``, for giving the type of a sub-expression.
