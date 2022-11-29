@@ -89,7 +89,8 @@ Features we borrow from Haskell:
 .. _monads: TODO: link to monad.kl's Monad definition, and add a comment there
    highlighting the inferred type, especially the higher-kinded type variable.
 
-Features which make Klister special (but not *unique*; see the `bibliography`_):
+Features which make Klister special (but not necessarily *unique*; see the
+`bibliography`_ for languages with similar features):
 
 * `Type-providing macros`_; a macro can provide type information about the
   code it plans to generate.
