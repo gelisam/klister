@@ -101,7 +101,10 @@ Features which make Klister special (but not necessarily *unique*; see the
   primitives are designed so that the order in which the macros are expanded
   cannot affect their results, and indeed the same is true for the order in
   which the macro expansion and type-inference steps are interleaved. This
-  makes Klister code more robust to refactoring.
+  means that the order in which the type checker traverses a program and
+  generates constraints is not visible to the authors of macros, providing a
+  predictable programming model. This makes Klister code more robust to
+  refactorings which affect that order.
 * `Problem-aware macros`_; in addition to the type, a macro can learn which
   "problem" it needs to solve, namely whether it must generate an expression, a
   type, a pattern, etc.
