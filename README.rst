@@ -107,7 +107,9 @@ Features which make Klister special (but not necessarily *unique*; see the
   refactorings which affect that order.
 * `Problem-aware macros`_; in addition to the type, a macro can learn which
   "problem" it needs to solve, namely whether it must generate an expression, a
-  type, a pattern, etc.
+  type, a pattern, etc. Each problem would correspond to a form of judgment if
+  the language was formalized, e.g. a typing judgment for the `expression`
+  problem, a well-formed type judgment for the `type` problem, etc.
 
 .. _bibliography: bibliography.rst
 .. _Type-providing macros: TODO: write a small example demonstrating this
