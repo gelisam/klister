@@ -198,7 +198,7 @@ which are missing from Klister:
 
 .. _examples: https://github.com/gelisam/klister/tree/main/examples
 .. _FFI: https://github.com/gelisam/klister/issues/165
-.. _Compiling modules separately: https://github.com/gelisam/klister/issues/118
+.. _Expanding modules separately: https://github.com/gelisam/klister/issues/118
 
 Guide and Reference
 ===================
