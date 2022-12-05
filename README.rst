@@ -207,8 +207,8 @@ The Klister Guide consists of the various commented examples linked from the
 above feature list, plus the extra information in the sub-sections below.
 
 The Klister Reference covers every identifier in the "prelude.kl" language, but
-doesn't currently say much about each. It consists of a `list of examples`
-showing how to use the macros, and a `list of type signatures` documenting how
+doesn't currently say much about each. It consists of a `list of examples`_
+showing how to use the macros, and a `list of type signatures`_ documenting how
 to use the values and functions.
 
 .. _list of examples: examples/primitives-documentation.kl
