@@ -1,0 +1,268 @@
+#lang "prelude.kl"
+
+(import "pair-datatype.kl")
+
+-- This file acts as a bare minimum form of documentation for all the
+-- primitives from "prelude.kl". May we one day have nice prose explaining all
+-- of it!
+--
+-- Until then, values are listed as (example (pair "expr" expr)) so that the
+-- "primitives-documentation.golden" file lists both their name and their type
+-- signature.
+-- For types, their kind is given in a comment.
+--
+-- Macros don't have types, but sometimes behave as if they have one, in the
+-- sense that using them properly requires giving them a certain number of
+-- arguments of the right type, and doing so will result in a value of a given
+-- output type. A common example is data constructors, which are macros in Klister.
+-- In those cases, the type is given in a comment, with the arguments tupled-up
+-- to indicate the lack of currying.
+-- Otherwise, using the macro properly requires an input which matches a
+-- particular shape, so an example is given.
+
+
+-- primitive module macros
+--
+-- #%module : Macro                    (#%module
+--                                      (define x 42)
+--                                      (define y 43))
+
+-- primitive declaration macros
+--
+-- define : Macro                      (define x 42)
+-- datatype : Macro                    (datatype (List A)
+--                                       (nil)
+--                                       (:: A (List A)))
+-- define-macros : Macro               (define-macros
+--                                       ([my-macro1
+--                                         (lambda (stx)
+--                                           (pure '42))]
+--                                        [my-macro2
+--                                         (lambda (stx)
+--                                           (pure '43))]))
+-- example : Macro                     (example 42)
+-- run : Macro                         (run (write stdout "hello world!\n"))
+-- import : Macro                      (import "list.kl")
+--                                     (import (shift "prelude.kl" 1))
+--                                     (import (rename (shift "prelude.kl" 1)
+--                                               [#%module prelude-module]
+--                                               [define prelude-define]))
+-- export : Macro                      (export List nil ::)
+--                                     (export (rename ([List ConsList]
+--                                                      [:: cons])
+--                                             List nil ::))
+-- meta : Macro                        (meta
+--                                       (define x 42)
+--                                       (define y 43))
+-- group : Macro                       (group
+--                                       (define x 42)
+--                                       (define y 43))
+
+-- primitive types
+--
+-- Syntax : Type
+(example (pair "open-syntax" open-syntax))
+(example (pair "close-syntax" close-syntax))
+--
+-- -> : Type -> Type -> Type
+--
+-- Integer : Type
+(example (pair "+" +))
+(example (pair "-" -))
+(example (pair "*" *))
+(example (pair "/" /))
+(example (pair "abs" abs))
+(example (pair "negate" negate))
+(example (pair ">" >))
+(example (pair ">=" >=))
+(example (pair "<" <))
+(example (pair "<=" <=))
+(example (pair "=" =))
+(example (pair "/=" /=))
+(example (pair "integer->string" integer->string))
+--
+-- Macro : Type -> Type
+--
+-- Type : Type
+--
+-- String : Type
+(example (pair "string-append" string-append))
+(example (pair "substring" substring))
+(example (pair "string-length" string-length))
+(example (pair "string=?" string=?))
+(example (pair "string/=?" string/=?))
+(example (pair "string<?" string<?))
+(example (pair "string<=?" string<=?))
+(example (pair "string>?" string>?))
+(example (pair "string>=?" string>=?))
+(example (pair "string-upcase" string-upcase))
+(example (pair "string-downcase" string-downcase))
+(example (pair "string-titlecase" string-titlecase))
+(example (pair "string-foldcase" string-foldcase))
+--
+-- IO : Type -> Type
+(example (pair "pure-IO" pure-IO))
+(example (pair "bind-IO" bind-IO))
+
+-- primitive datatypes
+--
+-- ScopeAction : Type
+(example (flip))
+(example (add))
+(example (remove))
+--
+-- Unit : Type
+(example unit)
+--
+-- Bool : Type
+(example true)
+(example false)
+--
+-- Problem : Type
+(example (module))
+(example (declaration))
+(example (type))
+-- expression : Type -> Problem
+(example (pattern))
+(example (type-pattern))
+--
+-- Maybe : Type -> Type
+(example nothing)
+-- just : A -> Maybe A
+--
+-- List : Type -> Type
+(example (nil))
+-- :: : (A, List A) -> List A
+--
+-- Syntax-Contents : Type -> Type
+-- list-contents : List A -> Syntax-Contents A
+-- integer-contents : Integer -> Syntax-Contents A
+-- string-contents : String -> Syntax-Contents A
+-- identifier-contents : String -> Syntax-Contents A
+
+-- primitive expression macros
+--
+-- error : Syntax -> A
+-- the : ((A : Type), A) -> A
+-- let : Macro                         (let [x 42]
+--                                       (+ x x))
+-- flet : Macro                        (flet [fact (n)
+--                                            (if (= n 0)
+--                                                1
+--                                                (* n (fact (- n 1))))]
+--                                       (fact 10))
+-- lambda : Macro                      (lambda (x) (+ x 1))
+-- #%app : Macro                       (#%app + 2 2)
+-- #%integer-literal : Integer -> Integer
+-- #%string-literal : String -> String
+-- pure : A -> Macro A
+-- >>= : (Macro A, A -> Macro B) -> Macro B
+-- syntax-error : Syntax -> Macro A
+-- bound-identifier=? : (Syntax, Syntax) -> Macro Bool
+-- free-identifier=? : (Syntax, Syntax) -> Macro Bool
+-- quote : Macro                       '(+ 2 2)
+-- ident-syntax : Macro                (ident-syntax 'bar 'loc)
+-- empty-list-syntax : Syntax -> Syntax
+-- cons-list-syntax : Macro            (cons-list-syntax '1 '(2 3 4) 'loc)
+-- list-syntax : Macro                 (list-syntax ('1 '2 '3 '4) 'loc))
+-- integer-syntax : (Integer, Syntax) -> Syntax
+-- string-syntax : (String, Syntax) -> Syntax
+-- replace-loc : (Syntax, Syntax) -> Syntax
+-- syntax-case : Macro                 (syntax-case 'bar
+--                                       [(ident x)
+--                                        (list 'foo x 'baz)])
+--                                     (syntax-case '2
+--                                       [(integer x)
+--                                        (list 1 x 3)])
+--                                     (syntax-case '"bar"
+--                                       [(string x)
+--                                        (list "foo" x "baz")])
+--                                     (syntax-case '(2 3 5)
+--                                       [(list (x y z))
+--                                        (list '1 x y '4 z '6)])
+--                                     (syntax-case '(2 4 5)
+--                                       [(cons x xs)
+--                                        (cons-list-syntax '1
+--                                          (cons-list-syntax x
+--                                            (cons-list-syntax '3
+--                                              xs
+--                                              'loc)
+--                                            'loc)
+--                                          'loc)])
+--                                     (syntax-case '(1 2 3 4)
+--                                       [()
+--                                        'zero]
+--                                       [(list (_))
+--                                        'one]
+--                                       [(list (_ _))
+--                                        'two]
+--                                       [_
+--                                        'more])
+-- let-syntax : Macro                  (let-syntax [my-macro
+--                                                  (lambda (stx)
+--                                                    (pure '2))]
+--                                        (+ (my-macro a b c) 2))
+-- log : Syntax -> Macro Unit
+(example (make-introducer))
+(example (which-problem))
+-- case : Macro                        (case (list 1 2 3)
+--                                       [(nil)
+--                                        (nothing)]
+--                                       [(:: x _)
+--                                        (just x)])
+--                                     (case (list 1 2 3)
+--                                       [(list x _ _)
+--                                        x])
+-- type-case : Macro                   (>>= (which-problem)
+--                                       (lambda (problem)
+--                                         (case problem
+--                                           [(expression tp)
+--                                            (type-case tp
+--                                              [String
+--                                               (pure "string")]
+--                                              [(-> A B)
+--                                               (pure "arrow")])])))
+
+-- primitive patterns
+--
+-- else : Pattern                      (case (list 1 2 3 4)
+--                                       [(nil)
+--                                        (nil)]
+--                                       [(list x)
+--                                        (list x)]
+--                                       [(list x y)
+--                                        (list x y)]
+--                                       [(else x)
+--                                        x])
+
+-- primitive universal macros
+--
+-- with-unknown-type : Macro           (with-unknown-type [A]
+--                                       (the (-> A A)
+--                                            (lambda (x) x)))
+
+-- non-primitive declaration macros
+--
+-- defun : Macro                       (defun fact (n)
+--                                       (if (= n 0)
+--                                           1
+--                                           (* n (fact (- n 1)))))
+
+-- non-primitive expression macros
+--
+-- unquote : Macro                     `(1 2 3 ,(integer-syntax (+ 2 2) 'loc))
+-- quasiquote : Macro                  `(1 2 3 4)
+-- quasiquote/loc : Macro              (quasiquote/loc 'loc (1 2 3 4))
+
+-- non-primitive expressions
+--
+-- if : Macro                          (if true 1 0)
+(example (pair "id" id))
+(example (pair "const" const))
+(example (pair "compose" compose))
+
+-- IO primitives
+--
+-- Output-Port : Type
+(example (pair "stdout" stdout))
+(example (pair "write" write))

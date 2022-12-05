@@ -1,0 +1,50 @@
+(pair "open-syntax" #<closure>) : (Pair String (Syntax → (Syntax-Contents Syntax)))
+(pair "close-syntax" #<closure>) : (Pair String (Syntax → (Syntax → ((Syntax-Contents Syntax) → Syntax))))
+(pair "+" #<closure>) : (Pair String (Integer → (Integer → Integer)))
+(pair "-" #<closure>) : (Pair String (Integer → (Integer → Integer)))
+(pair "*" #<closure>) : (Pair String (Integer → (Integer → Integer)))
+(pair "/" #<closure>) : (Pair String (Integer → (Integer → Integer)))
+(pair "abs" #<closure>) : (Pair String (Integer → Integer))
+(pair "negate" #<closure>) : (Pair String (Integer → Integer))
+(pair ">" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair ">=" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair "<" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair "<=" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair "=" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair "/=" #<closure>) : (Pair String (Integer → (Integer → Bool)))
+(pair "integer->string" #<closure>) : (Pair String (Integer → String))
+(pair "string-append" #<closure>) : (Pair String (String → (String → String)))
+(pair "substring" #<closure>) : (Pair String (Integer → (Integer → (String → (Maybe String)))))
+(pair "string-length" #<closure>) : (Pair String (String → Integer))
+(pair "string=?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string/=?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string<?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string<=?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string>?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string>=?" #<closure>) : (Pair String (String → (String → Bool)))
+(pair "string-upcase" #<closure>) : (Pair String (String → String))
+(pair "string-downcase" #<closure>) : (Pair String (String → String))
+(pair "string-titlecase" #<closure>) : (Pair String (String → String))
+(pair "string-foldcase" #<closure>) : (Pair String (String → String))
+(pair "pure-IO" #<closure>) : ∀(α : *). (Pair String (α → (IO α)))
+(pair "bind-IO" #<closure>) : ∀(α : *) (β : *). (Pair String ((IO α) → ((α → (IO β)) → (IO β))))
+(flip) : ScopeAction
+(add) : ScopeAction
+(remove) : ScopeAction
+(unit) : Unit
+(true) : Bool
+(false) : Bool
+(module) : Problem
+(declaration) : Problem
+(type) : Problem
+(pattern) : Problem
+(type-pattern) : Problem
+(nothing) : ∀(α : *). (Maybe α)
+(nil) : ∀(α : *). (List α)
+make-introducer : (Macro (ScopeAction → (Syntax → Syntax)))
+which-problem : (Macro Problem)
+(pair "id" #<closure>) : ∀(α : *). (Pair String (α → α))
+(pair "const" #<closure>) : ∀(α : *) (β : *). (Pair String (α → (β → α)))
+(pair "compose" #<closure>) : ∀(α : *) (β : *) (γ : *). (Pair String ((α → β) → ((γ → α) → (γ → β))))
+(pair "stdout" #<output port>) : (Pair String Output-Port)
+(pair "write" #<closure>) : (Pair String (Output-Port → (String → (IO Unit))))
