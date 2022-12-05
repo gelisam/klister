@@ -136,7 +136,7 @@ Cool things which can be built using the above features:
 * Languages with `custom implicit terms`_, via macros which generate terms of
   an existing ``#lang`` based on a type in the new ``#lang``.
 
-.. _Custom type-driven code generation: TODO write a small example
+.. _Custom type-driven code generation: TODO: write a small example
    demonstrating the feature. Perhaps the traverse-traverse-id example again?
 .. _custom type systems: TODO: write an example #lang in which functions are
    not curried, writing copious comments.
@@ -161,7 +161,7 @@ Here are the most prominent Racket features which are missing from Klister:
 
 Here are the most prominent Haskell features which are missing from Klister:
 
-* `Type classes` are planned as a library, but are not yet implemented.
+* `Type classes`_ are planned as a library, but are not yet implemented.
 * `Type annotations containing foralls`_ are planned, but not yet implemented.
   Currently, Klister only supports type ascriptions, e.g.
   ``(+ (the Integer (* 2 3)) 1)``, for giving the type of a sub-expression.
