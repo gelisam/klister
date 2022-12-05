@@ -548,25 +548,26 @@ initializeKernel outputChannel = do
                , tFun [tSchemaVar 0 []] (tIO (tSchemaVar 1 []))
                ]
                (tIO (tSchemaVar 1 []))
-        , ValueClosure $ HO $ \(ValueIOAction m) ->
-            ValueClosure $ HO $ \(ValueClosure f) ->
-            ValueIOAction $ do
-            v <- m
-            case f of
-              HO fun -> do
-                let ValueIOAction io = fun v
-                io
-              FO clos -> do
-                let env = view closureEnv clos
-                    var = view closureVar clos
-                    ident = view closureIdent clos
-                    body = view closureBody clos
-                out <- runExceptT $ flip runReaderT env $ runEval $
-                  withExtendedEnv ident var v $
-                  eval body
-                case out of
-                  Left err -> error (T.unpack (pretty err))
-                  Right done -> pure done
+        , ValueClosure $ HO $ \(ValueIOAction mx) -> do
+            ValueClosure $ HO $ \(ValueClosure f) -> do
+              ValueIOAction $ do
+                vx <- mx
+                vioy <- case f of
+                  HO fun -> do
+                    pure (fun vx)
+                  FO clos -> do
+                    let env = view closureEnv clos
+                        var = view closureVar clos
+                        ident = view closureIdent clos
+                        body = view closureBody clos
+                    out <- runExceptT $ flip runReaderT env $ runEval $
+                      withExtendedEnv ident var vx $
+                        eval body
+                    case out of
+                      Left err -> error (T.unpack (pretty err))
+                      Right vioy -> pure vioy
+                let ValueIOAction my = vioy
+                my
         )
       , ( "stdout"
         , Scheme [] $ tOutputPort

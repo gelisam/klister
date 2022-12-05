@@ -1,0 +1,16 @@
+#lang "prelude.kl"
+
+-- do notation is not builtin syntax, it's implemented as a library!
+(import "monad.kl")
+
+-- (-> String (IO Unit))
+(defun putStrLn (str)
+  (write stdout (string-append str "\n")))
+
+-- "run" is like main, except you can have more than one.
+(run
+  -- Klister doesn't have type classes yet, so "do" needs an explicit
+  -- dictionary argument.
+  (do io-monad
+    (putStrLn "hello")
+    (putStrLn "world")))
