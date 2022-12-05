@@ -18,7 +18,7 @@
 --     *
 --
 -- This is a stack based language, so the above program pushes 4 and 8 onto the
--- stack, then + pops then and pushes 12 in their place, then 3 is pushed on
+-- stack, then + pops them and pushes 12 in their place, then 3 is pushed on
 -- top, then * pops 12 and 3 and pushes 36. The overall program prints 36. If
 -- there was more than one number on the stack at the end of the program, they
 -- would all be printed on a separate line, from the bottom to the top of the
