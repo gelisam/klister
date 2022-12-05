@@ -77,10 +77,12 @@ Features we borrow from ML:
 
 Features we borrow from Haskell:
 
-* Typed macros; we check that macro implementations have type
-  ``(-> Syntax (Macro Syntax)``, and *then* that the generated code is also
-  well-typed. We thus aim for the expressivity of Template Haskell, not the
-  extra guarantees of Typed Template Haskell.
+* Monadic macros; our macros have type ``(-> Syntax (Macro Syntax))``, where
+  ``Macro Syntax`` is similar to ``Q Exp`` in TemplateHaskell. Note that this
+  type implies that a macro is allowed to generate ill-typed code; this error
+  is caught where the macro is called, not where the macro is defined. We thus
+  aim for the expressivity of Template Haskell, not the extra guarantees of
+  Typed Template Haskell.
 * Purely functional; primitives with compile-time side-effects (e.g. comparing
   identifiers while taking into account the current set of bindings) run in the
   ``Macro`` monad, while primitives with runtime side-effects (e.g. printing to
