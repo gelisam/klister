@@ -49,7 +49,7 @@ Features we borrow from Racket:
   day supports generating binaries, those binaries will not be unnecessarily
   clogged with dependencies which were only needed at compile-time.
 
-.. _Custom syntax: examples/lambda-case.golden
+.. _Custom syntax: examples/lambda-case.kl
 .. _hygienic macros: TODO: write a short example demonstrating lack of capture.
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
