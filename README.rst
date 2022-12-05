@@ -64,6 +64,7 @@ Features we borrow from Racket:
    generate macros. Maybe define-syntax-rules.kl?
 
 Features we borrow from ML:
+
 * A type system with `parametric polymorphism`_, `algebraic datatypes`_, and
   Hindley-Milner `type inference`_.
 
