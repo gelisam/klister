@@ -1,23 +1,23 @@
 #lang "prelude.kl"
 
-[import [shift "prelude.kl" 1]]
-[import [shift "quasiquote.kl" 1]]
+(import (shift "prelude.kl" 1))
+(import (shift "quasiquote.kl" 1))
 
-[define fun [lambda (x y) x]]
+(define fun (lambda (x y) x))
 
-[define-macros ([should-not-be-captured [lambda (stx) [pure [quote fun]]]])]
+(define-macros ([should-not-be-captured (lambda (stx) (pure (quote fun)))]))
 
-[define fun [lambda (x y) y]]
+(define fun (lambda (x y) y))
 
-[example (fun 'a 'b)]
-[example ((should-not-be-captured) 'a 'b)]
+(example (fun 'a 'b))
+(example ((should-not-be-captured) 'a 'b))
 
-[define-macros
+(define-macros
   ([should-not-capture
-    [lambda (stx)
+    (lambda (stx)
       (syntax-case stx
-        [[list [_ body]]
-         [pure `(lambda (fun) ,body)]]
-        [_ (syntax-error '"bad syntax" stx)])]])]
+        [(list (_ body))
+         (pure `(lambda (fun) ,body))]
+        [_ (syntax-error '"bad syntax" stx)]))]))
 
-[example ([should-not-capture fun] [lambda (x y) x] 'a 'b)]
+(example ((should-not-capture fun) (lambda (x y) x) 'a 'b))
