@@ -40,7 +40,7 @@ Features
 
 Features we borrow from Racket:
 
-* `Custom syntax`_, via `hygienic macros`_ with `easy-to-override hygiene`_.
+* `Custom syntax`_, via hygienic macros with `easy-to-override hygiene`_.
 * `Custom languages`_ (``#lang``), via macros which reinterpret terms into
   those of an existing ``#lang``.
 * `Syntax objects`_, that is, s-expressions annotated with source locations and
@@ -50,7 +50,6 @@ Features we borrow from Racket:
   clogged with dependencies which were only needed at compile-time.
 
 .. _Custom syntax: examples/lambda-case.kl
-.. _hygienic macros: TODO: write a short example demonstrating lack of capture.
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
 .. _Syntax objects: TODO: link to a short example which explains that in
