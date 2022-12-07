@@ -40,17 +40,16 @@ Features
 
 Features we borrow from Racket:
 
-* `Custom syntax`_, via `hygienic macros`_ with `easy-to-override hygiene`_.
+* `Custom syntax`_, via hygienic macros with `easy-to-override hygiene`_.
 * `Custom languages`_ (``#lang``), via macros which reinterpret terms into
   those of an existing ``#lang``.
 * `Syntax objects`_, that is, s-expressions annotated with source locations and
   lexical information.
-* A `module system`_ which respects the `phase system`_. Thus, if Klister one
-  day supports generating binaries, those binaries will not be unnecessarily
+* A `module system`_ which respects the phase system. Thus, if Klister one day
+  supports generating binaries, those binaries will not be unnecessarily
   clogged with dependencies which were only needed at compile-time.
 
 .. _Custom syntax: examples/lambda-case.kl
-.. _hygienic macros: TODO: write a short example demonstrating lack of capture.
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
 .. _Syntax objects: TODO: link to a short example which explains that in
@@ -58,22 +57,18 @@ Features we borrow from Racket:
    they are introduced via ``'(...)``. Also explain that Klister does not have
    unannotated s-expressions. And the relationship between Syntax and
    Syntax-Contents.
-.. _module system: TODO: write a short example demonstrating how to use the
-   import and export primitives.
-.. _phase system: TODO: write a short example demonstrating macros which
-   generate macros. Maybe define-syntax-rules.kl?
+.. _module system: TODO: write a short example demonstrating macros which
+   generate macros. Maybe define-syntax-rules.kl? Let's also take the
+   opportunity to document the meta, import, and export primitives.
 
 Features we borrow from ML:
 
-* A type system with `parametric polymorphism`_, `algebraic datatypes`_, and
+* A type system with parametric polymorphism, `algebraic datatypes`_, and
   Hindley-Milner `type inference`_.
 
-.. _parametric polymorphism: TODO: write a short example demonstrating the
-   feature, like id or fmap.
 .. _algebraic datatypes: TODO: write a small example defining and matching on
-   an algebraic type. Perhaps Either?
-.. _type inference: TODO: write a small example demonstrating that type
-   information flows in two directions.
+   an algebraic type. Perhaps Either? Let's also take the opportunity to
+   demonstrate polymorphic functions on Either.
 
 Features we borrow from Haskell:
 
