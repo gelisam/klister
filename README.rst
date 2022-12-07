@@ -50,7 +50,7 @@ Features we borrow from Racket:
   clogged with dependencies which were only needed at compile-time.
 
 .. _Custom syntax: examples/lambda-case.kl
-.. _hygienic macros: examples/hygiene.kl
+.. _hygienic macros: TODO: write a short example demonstrating lack of capture.
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
 .. _Syntax objects: TODO: link to a short example which explains that in
