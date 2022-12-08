@@ -16,10 +16,8 @@
 --       [] -> "nil"
 --       _:_ -> "cons"
 --
--- This is nice, but syntactic extensions like LambdaCase are few and far
--- between. In Klister, you can implement syntactic extensions yourself, so you
--- can have as much syntactic sugar as you want. Here is how to implement
--- lambda-case.
+-- Klister supports macros, meaning you can define this kind of syntactic
+-- extensions yourself. Here is how to implement lambda-case as a macro.
 
 (define-macros
   -- (lambda-case                                                   -- (1)
@@ -31,71 +29,57 @@
   --     [(nil) "nil"]
   --     [(:: _ _) "cons"]))
   ([lambda-case
-    (lambda (stx)                                                   -- (3)
-      (case (open-syntax stx)                                       -- (4)
-        [(list-contents (:: _ cases))                               -- (5)
-         (pure                                                      -- (6)
+    (lambda (stx)
+      (case (open-syntax stx)                                       -- (3)
+        [(list-contents (:: _ cases))
+         (pure
            `(lambda (x)
-              ,(close-syntax stx stx                                -- (7)
+              ,(close-syntax stx stx                                -- (4)
                  (list-contents (:: 'case (:: 'x cases))))))]))]))
 
-(example                                                            -- (8)
+(example                                                            -- (5)
   (let [f (lambda-case
             [(nil) "nil"]
             [(:: _ _) "cons"])]
     (f (list 1 2 3))))
 
--- We define a "macro" named "lambda-case". We want lambda-case to receive a
--- list of cases, as in the example input at (1), and to behave like a lambda
--- which calls "case" on that list of cases, as in the example output at (2).
--- We say that the input code _expands_ to the output code.
+-- A macro is implemented as a function of type (-> Syntax (Macro Syntax)).
+-- Macro is a monad, but we don't make use of its effects in this example, so
+-- what matters is that we receive a Syntax and produces a Syntax. In the
+-- example at (5), we receive (1) and produce (2).
 --
--- A macro is implemented as a function of type (-> Syntax (Macro Syntax)), the
--- lambda at (3). The input Syntax, given below, includes the "lambda-case"
--- symbol in the head position.
+-- Syntax object will be covered in more details in a different example. For
+-- now, it suffices to know that we can split a Syntax into a (List Syntax)
+-- using the open-syntax function and matching on the list-contents
+-- constructor, as in (3), and we can combine a (List Syntax) back into a
+-- Syntax by wrapping the (List Syntax) in that same list-contents constructor
+-- and using the close-syntax function, as in (4).
 --
---     '(lambda-case
---        [(nil) "nil"]
---        [(:: _ _) "cons"])
---
--- The Syntax above wraps a list of three smaller syntax objects:
+-- In our running example, splitting (1) results in the list
 --
 --     (list 'lambda-case
 --           '[(nil) "nil"]
 --           '[(:: _ _) "cons"])
 --
--- One line (4), we "open" the syntax object in order to forget its source
--- location and lexical information, and match on the list within. On line (5),
--- we drop the "lambda-case" from the function position and keep the list of
--- cases for later.
+-- So the pattern (:: _ cases) drops 'lambda-case and keeps the list of cases.
 --
--- We don't need any of the Macro monad's side effects, so on line (6), we
--- are already ready to construct and return a Syntax. As a reminder, here is
--- our target output again.
---
---     '(lambda (x)
---        (case x
---          [(nil) "nil"]
---          [(:: _ _) "cons"]))
---
--- One line (7), we want to construct the following syntax object.
---
---     '(case x
---        [(nil) "nil"]
---        [(:: _ _) "cons"])
---
--- The Syntax above wraps a list of four smaller syntax objects:
+-- This list of cases is then used to construct the longer list
 --
 --     (list 'case
 --           'x
 --           '[(nil) "nil"]
 --           '[(:: _ _) "cons"])
 --
--- Which we must then "close", by attaching to this list the source location
--- and lexical information from some other Syntax object.
+-- Which gets combined into
 --
--- Finally, on line (8), we exercise our macro using an example. The output of
--- the example can be seen by running this file:
+--     '(case x
+--        [(nil) "nil"]
+--        [(:: _ _) "cons"])
+--
+-- Which gets spliced into a bigger syntax object in order to produce the
+-- desired output, (2).
+--
+-- You can see the result of running the example at (5) by running this file:
 --
 --     $ cabal run klister -- run examples/lambda-case.kl
 --     Example at lambda-case.kl:42.1-97.1:
