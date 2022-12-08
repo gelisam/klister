@@ -45,7 +45,7 @@
 
 -- A macro is implemented as a function of type (-> Syntax (Macro Syntax)).
 -- Macro is a monad, but we don't make use of its effects in this example, so
--- what matters is that we receive a Syntax and produces a Syntax. In the
+-- what matters is that we receive a Syntax and produce a Syntax. In the
 -- example at (5), we receive (1) and produce (2).
 --
 -- Syntax object will be covered in more details in a different example. For
