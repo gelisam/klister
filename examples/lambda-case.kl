@@ -48,7 +48,7 @@
 -- what matters is that we receive a Syntax and produce a Syntax. In the
 -- example at (5), we receive (1) and produce (2).
 --
--- Syntax object will be covered in more details in a different example. For
+-- Syntax objects will be covered in more details in a different example. For
 -- now, it suffices to know that we can split a Syntax into a (List Syntax)
 -- using the open-syntax function and matching on the list-contents
 -- constructor, as in (3), and we can combine a (List Syntax) back into a
