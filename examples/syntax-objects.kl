@@ -1,0 +1,52 @@
+#lang "prelude.kl"
+
+(import "list.kl")
+
+
+-- An s-expression such as (foo (bar "baz" 42) (quux)) is a tree whose leaves
+-- are identifiers, 
+
+(datatype (Datum)
+  (datum (Syntax-Contents (Datum))))
+
+-- A syntax object is an opaque tree annotated with source locations and some
+-- information about which variables are in scope at that location.
+--
+-- (datatype (Syntax)
+--   (syntax SrcLoc ScopeSet (Syntax-Contents Syntax)))
+--
+-- (datatype (Syntax-Contents A)
+--   (list-contents (List A))
+--   (integer-contents Integer)
+--   (string-contents String)
+--   (identifier-contents String))
+
+(datatype (Either A B)
+  (left A)
+  (right B))
+
+-- In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
+-- the former has type Syntax while the latter has type (List Integer).
+--
+-- (Remember to look at "syntax-object.golden" to see the result of the
+-- following examples, including their inferred type!)
+
+-- Those two expressions are equivalent (except for a detail we will cover in a
+-- moment)
+(example '(1 2 3))
+(example
+  (close-syntax 'here 'here
+    (list-contents (list '1 '2 '3))))
+
+-- These two expressions are equivalent.
+(example (list 1 2 3))
+(example (:: 1 (:: 2 (:: 3 (nil)))))
+
+--
+
+
+-- TODO: link to a short example which explains that in
+-- Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
+-- they are introduced via ``'(...)``. Also explain that Klister does not have
+-- unannotated s-expressions. And the relationship between Syntax and
+-- Syntax-Contents.

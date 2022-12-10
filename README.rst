@@ -52,11 +52,7 @@ Features we borrow from Racket:
 .. _Custom syntax: examples/lambda-case.kl
 .. _easy-to-override hygiene: examples/anaphoric-if.kl
 .. _Custom languages: examples/rpn.kl
-.. _Syntax objects: TODO: link to a short example which explains that in
-   Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
-   they are introduced via ``'(...)``. Also explain that Klister does not have
-   unannotated s-expressions. And the relationship between Syntax and
-   Syntax-Contents.
+.. _Syntax objects: examples/syntax-objects.kl
 .. _module system: TODO: write a short example demonstrating macros which
    generate macros. Maybe define-syntax-rules.kl? Let's also take the
    opportunity to document the meta, import, and export primitives.
