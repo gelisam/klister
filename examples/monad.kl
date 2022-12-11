@@ -19,20 +19,18 @@
 (define list-functor
   (functor map))
 
-(defun syntax-contents-map (f x)
-  (error "oops"))
-  --(case x
-  --  [(list-contents xs)
-  --   (list-contents (map (syntax-contents-map f) xs))]
-  --  [(integer-contents n)
-  --   (integer-contents n)]
-  --  [(string-contents s)
-  --   (string-contents s)]
-  --  [(identifier-contents s)
-  --   (identifier-contents s)]))
-
 (define syntax-contents-functor
-  (functor syntax-contents-map))
+  [functor
+    (lambda (f x)
+      (case x
+        [(list-contents xs)
+         (list-contents (map f xs))]
+        [(integer-contents n)
+         (integer-contents n)]
+        [(string-contents s)
+         (string-contents s)]
+        [(identifier-contents s)
+         (identifier-contents s)]))])
 
 (define maybe-functor
   (functor
