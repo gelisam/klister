@@ -1,19 +1,15 @@
 #lang "prelude.kl"
 
+(import (shift "prelude.kl" 2))
+(import (shift "prelude.kl" 1))
+(import (shift "define-syntax-rule.kl" 1))
+(import "define-syntax-rule.kl")
 (import "list.kl")
+(import "monad.kl")
 
 
 -- An s-expression such as (foo (bar "baz" 42) (quux)) is a tree whose leaves
--- are identifiers, 
-
-(datatype (Datum)
-  (datum (Syntax-Contents (Datum))))
-
--- A syntax object is an opaque tree annotated with source locations and some
--- information about which variables are in scope at that location.
---
--- (datatype (Syntax)
---   (syntax SrcLoc ScopeSet (Syntax-Contents Syntax)))
+-- are integers, strings, and identifiers:
 --
 -- (datatype (Syntax-Contents A)
 --   (list-contents (List A))
@@ -21,11 +17,114 @@
 --   (string-contents String)
 --   (identifier-contents String))
 
-(datatype (Either A B)
-  (left A)
-  (right B))
+(datatype (SExpr)
+  (sexpr (Syntax-Contents (SExpr))))
 
--- In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
+(define example1
+  (sexpr
+    (list-contents
+      (list
+        (sexpr (identifier-contents "foo"))
+        (sexpr
+          (list-contents
+            (list
+              (sexpr (identifier-contents "bar"))
+              (sexpr (string-contents "baz"))
+              (sexpr (integer-contents 42)))))
+        (sexpr
+          (list-contents
+            (list
+              (sexpr (identifier-contents "quux")))))))))
+(example example1)
+
+ TODO: It is worth noting several important differences between the above
+ datatype and the Racket equivalent, called a "datum". First, because in
+ Racket a datum is used both to represent quoted code and as a generic data
+ structure, a datum  can contain any value at the leaves, even functions and
+ handles, whereas (SExpr) can only represent code. Statically typed. Second,
+ the quote syntax.. Racket provides the shorthand '(foo (bar "baz" 42)
+ (quux)). We reserve the quote syntax for syntax objects. #'(...) in Racket.
+
+
+ A syntax object such as '(foo (bar "baz" 42) (quux)) is an s-expression
+ whose nodes are annotated with source locations and some information about
+ which variables are in scope at that location. Here's what Syntax would look
+ like if it was defined as a datatype:
+
+ (datatype (Syntax)
+   (syntax SrcLoc ScopeSet (Syntax-Contents (Syntax))))
+
+ The real Syntax type is opaque, so there is no way to extract the SrcLoc and
+ ScopeSet fields from a Syntax. There is a way to extract the
+ (Syntax-Contents Syntax) field though:
+
+(example
+  (open-syntax
+    '(foo (bar "baz" 42) (quux))))
+
+
+ To construct a Syntax, we need one Syntax from which to borrow the SrcLoc,
+ one Syntax from which to borrow the ScopeSet, and a (Syntax-Contents Syntax).
+
+(example
+  (close-syntax 'here 'here
+    (list-contents
+      (list
+        'foo
+        '(bar "baz" 42)
+        '(quux)))))
+
+(defun close-sexpr (src-loc scope x)
+  (case x of
+    [(sexpr syntax-contents-sexpr)
+     (let [syntax-contents-syntax
+           (fmap syntax-contents-functor
+                 (close-sexpr src-loc scope)
+                 syntax-contents-sexpr)]
+       (close-syntax src-loc syntax-contents-syntax))]))
+
+(example (close-sexpr 'here 'here example1))
+
+
+(defun set-src-loc (new-src-loc stx)
+  (close-syntax new-src-loc stx
+    (open-syntax stx)))
+
+(define syntax1 'here)
+(define syntax2 'there)
+
+(example syntax1)
+(example syntax2)
+(example (set-src-loc syntax1 syntax2))
+
+-- Remember to look at "syntax-object.golden" to see the output of the above examples, as the output includes the SrcLoc. Notice that the first and third examples have the same SrcLoc.
+
+
+-- The effect of replacing the ScopeSet is only visible when the Syntax is returned from a macro and interpreted as code which binds and looks up variables.
+
+-- meta makes the definitions it contains available inside example2's body, as opposed to the default of making them available to the code example2 generates.
+(meta
+  (define-macro (new-scope)
+    (pure ''scope))
+  (defun set-scope (new-scope-set stx)
+    (close-syntax stx new-scope-set
+      (open-syntax stx))))
+
+(define-macro (example2)
+  (let [scope1 (new-scope)]
+    (let [scope2 (new-scope)]
+      (pure
+        `(let [,(new-scope scope1 'x) 1]
+           (let [,(new-scope scope1 'x) 2]
+             (list
+               x
+               ,(new-scope scope1 'x)
+               ,(new-scope scope2 'x))))))))
+
+(example (example2))
+
+
+-- TODO: In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
 -- the former has type Syntax while the latter has type (List Integer).
 --
 -- (Remember to look at "syntax-object.golden" to see the result of the
