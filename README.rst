@@ -64,7 +64,7 @@ Features we borrow from Racket:
 Features we borrow from ML:
 
 * A type system with parametric polymorphism, `algebraic datatypes`_, and
-  Hindley-Milner `type inference`_.
+  Hindley-Milner type inference.
 
 .. _algebraic datatypes: TODO: write a small example defining and matching on
    an algebraic type. Perhaps Either? Let's also take the opportunity to
