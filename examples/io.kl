@@ -1,7 +1,12 @@
 #lang "prelude.kl"
 
+(defun putStrLn (s)
+  (write stdout (string-append s "\n")))
+
 (example (the Output-Port stdout))
 
 (example (bind-IO (pure-IO 5) (lambda (x) (pure-IO (+ x 3)))))
 
-(run (write stdout "hello world!\n"))
+(run (putStrLn "hello world!"))
+
+(export putStrLn)
