@@ -3,7 +3,9 @@
 (import (shift "prelude.kl" 2))
 (import (shift "prelude.kl" 1))
 (import (shift "define-syntax-rule.kl" 1))
+(import (shift "list.kl" 1))
 (import "define-syntax-rule.kl")
+(import "io.kl")
 (import "list.kl")
 (import "monad.kl")
 
@@ -20,51 +22,63 @@
 (datatype (SExpr)
   (sexpr (Syntax-Contents (SExpr))))
 
-(define example1
-  (sexpr
-    (list-contents
-      (list
-        (sexpr (identifier-contents "foo"))
-        (sexpr
-          (list-contents
-            (list
-              (sexpr (identifier-contents "bar"))
-              (sexpr (string-contents "baz"))
-              (sexpr (integer-contents 42)))))
-        (sexpr
-          (list-contents
-            (list
-              (sexpr (identifier-contents "quux")))))))))
-(example example1)
+(define example-sexpr
+  (sexpr (list-contents
+           (list
+             (sexpr (identifier-contents "foo"))
+             (sexpr (list-contents
+                      (list
+                        (sexpr (identifier-contents "bar"))
+                        (sexpr (string-contents "baz"))
+                        (sexpr (integer-contents 42)))))
+             (sexpr (list-contents
+                      (list
+                        (sexpr (identifier-contents "quux")))))))))
+(example example-sexpr)
 
- TODO: It is worth noting several important differences between the above
- datatype and the Racket equivalent, called a "datum". First, because in
- Racket a datum is used both to represent quoted code and as a generic data
- structure, a datum  can contain any value at the leaves, even functions and
- handles, whereas (SExpr) can only represent code. Statically typed. Second,
- the quote syntax.. Racket provides the shorthand '(foo (bar "baz" 42)
- (quux)). We reserve the quote syntax for syntax objects. #'(...) in Racket.
+-- That is quite a mouthful! This is why Racket, where (SExpr) is called
+-- "datum", supports '(foo (bar "baz" 42) (quux)) as a much more succinct
+-- notation for constructing lists and datums. This notation is also recognized
+-- in Klister, but it means something slightly different:
+--
+-- notation for <row> in <col> |      Racket |                    Klister
+-- ----------------------------+-------------+---------------------------
+--                List Integer |    '(1 2 3) | (:: 1 (:: 2 (:: 3 (nil))))
+--         (SExpr) aka "datum" |  '(foo bar) |          no builtin syntax
+--  Syntax aka "syntax object" | #'(foo bar) |                 '(foo bar)
 
+-- A syntax object such as '(foo (bar "baz" 42) (quux)) is an s-expression
+-- whose nodes are annotated with source locations and some information about
+-- which variables are in scope at that location. Here's what Syntax would look
+-- like if it was defined as a datatype:
+--
+-- (datatype (Syntax)
+--   (syntax SrcLoc ScopeSet (Syntax-Contents (Syntax))))
 
- A syntax object such as '(foo (bar "baz" 42) (quux)) is an s-expression
- whose nodes are annotated with source locations and some information about
- which variables are in scope at that location. Here's what Syntax would look
- like if it was defined as a datatype:
-
- (datatype (Syntax)
-   (syntax SrcLoc ScopeSet (Syntax-Contents (Syntax))))
-
- The real Syntax type is opaque, so there is no way to extract the SrcLoc and
- ScopeSet fields from a Syntax. There is a way to extract the
- (Syntax-Contents Syntax) field though:
+-- The real Syntax type is opaque, so there is no way to extract the SrcLoc and
+-- ScopeSet fields from a Syntax. There is a way to extract the
+-- (Syntax-Contents Syntax) field though:
 
 (example
   (open-syntax
     '(foo (bar "baz" 42) (quux))))
 
+(defun syntax->sexpr (stx)
+  (let [sc-syntax
+        (the (Syntax-Contents Syntax)
+             (open-syntax stx))]
+    (let [sc-sexpr
+          (the (Syntax-Contents (SExpr))
+               (fmap syntax-contents-functor
+                     syntax->sexpr
+                     sc-syntax))]
+      (sexpr sc-sexpr))))
+(example
+  (syntax->sexpr
+    '(foo (bar "baz" 42) (quux))))
 
- To construct a Syntax, we need one Syntax from which to borrow the SrcLoc,
- one Syntax from which to borrow the ScopeSet, and a (Syntax-Contents Syntax).
+-- To construct a Syntax, we need one Syntax from which to borrow the SrcLoc,
+-- one Syntax from which to borrow the ScopeSet, and a (Syntax-Contents Syntax).
 
 (example
   (close-syntax 'here 'here
@@ -75,16 +89,19 @@
         '(quux)))))
 
 (defun close-sexpr (src-loc scope x)
-  (case x of
-    [(sexpr syntax-contents-sexpr)
-     (let [syntax-contents-syntax
+  (case x
+    [(sexpr sc-sexpr)
+     (let [sc-syntax
            (fmap syntax-contents-functor
                  (close-sexpr src-loc scope)
-                 syntax-contents-sexpr)]
-       (close-syntax src-loc syntax-contents-syntax))]))
+                 sc-sexpr)]
+       (close-syntax src-loc scope
+         sc-syntax))]))
+(example (close-sexpr 'here 'here example-sexpr))
 
-(example (close-sexpr 'here 'here example1))
 
+-- TODO
+-- Let's now look at how to change the source location.
 
 (defun set-src-loc (new-src-loc stx)
   (close-syntax new-src-loc stx
@@ -100,52 +117,163 @@
 -- Remember to look at "syntax-object.golden" to see the output of the above examples, as the output includes the SrcLoc. Notice that the first and third examples have the same SrcLoc.
 
 
+-- TODO
+-- Let's now look at how to change the scope information.
+
 -- The effect of replacing the ScopeSet is only visible when the Syntax is returned from a macro and interpreted as code which binds and looks up variables.
 
--- meta makes the definitions it contains available inside example2's body, as opposed to the default of making them available to the code example2 generates.
-(meta
-  (define-macro (new-scope)
-    (pure ''scope))
-  (defun set-scope (new-scope-set stx)
-    (close-syntax stx new-scope-set
-      (open-syntax stx))))
+(define-macros
+  (-- (applyIO list
+   --   (putStrLn "foo")
+   --   (putStrLn "bar")
+   --   (putStrLn "baz"))
+   -- =>
+   -- (do io-monad
+   --   (<- x (putStrLn "foo"))
+   --   (<- y (putStrLn "bar"))
+   --   (<- z (putStrLn "baz"))
+   --   (pure-IO (list x y z)))
+   [applyIO
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: macro actions)))
+         (pure (close-syntax stx stx
+                 (list-contents
+                   (:: 'applyIO-aux
+                     (:: `(,macro)
+                       actions)))))]))]
+   -- (applyIO-aux
+   --   (list x)
+   --   (putStrLn "bar")
+   --   (putStrLn "baz"))
+   -- =>
+   -- (do io-monad
+   --   (<- y (putStrLn "bar"))
+   --   (<- z (putStrLn "baz"))
+   --   (pure-IO (list x y z)))
+   [applyIO-aux
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: final-expr actions)))
+         (case actions
+           [(nil)
+            (pure `(pure-IO ,final-expr))]
+           [(:: action more-actions)
+            (pure `(bind-IO ,action
+                     (lambda (x)
+                       ,(close-syntax stx stx
+                          (list-contents
+                            (:: 'applyIO-aux
+                              (:: (close-syntax final-expr final-expr
+                                    (case (open-syntax final-expr)
+                                      [(list-contents xs)
+                                       (list-contents (snoc xs 'x))]))
+                                more-actions)))))))])]))]))
 
-(define-macro (example2)
-  (let [scope1 (new-scope)]
-    (let [scope2 (new-scope)]
-      (pure
-        `(let [,(new-scope scope1 'x) 1]
-           (let [,(new-scope scope1 'x) 2]
-             (list
-               x
-               ,(new-scope scope1 'x)
-               ,(new-scope scope2 'x))))))))
+(run
+  (bind-IO (applyIO list
+             (pure-IO "foo")
+             (pure-IO "bar")
+             (pure-IO "baz"))
+    (lambda (xs)
+      (case xs
+        [(list x y z)
+         (do io-monad
+           (putStrLn x)
+           (putStrLn y)
+           (putStrLn z))]))))
 
-(example (example2))
-
-
--- TODO: In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
--- the former has type Syntax while the latter has type (List Integer).
+---- (twice-arg (+ 2 2)
+----            (list 1 2 3)
+----            5 6)
+---- =>
+---- (let [x (+ 2 2)]
+----   (list 1 2 3 x x 5 6))
+--(define-macros
+--  ([twice-arg
+--    (lambda (stx)
+--      (case (open-syntax stx)
+--        [(list-contents (:: _ (:: arg (:: pre post-list))))
+--         (case (open-syntax pre)
+--           [(list-contents pre-list)
+--            (pure `(let [x ,arg]
+--                     ,(close-syntax stx stx
+--                        (list-contents
+--                          (list-append pre-list
+--                            (:: 'x (:: 'x post-list)))))))])]))]))
 --
--- (Remember to look at "syntax-object.golden" to see the result of the
--- following examples, including their inferred type!)
+--(example
+--  (twice-arg (+ 2 2)
+--             (list 1 2 3)
+--             5 6))
 
--- Those two expressions are equivalent (except for a detail we will cover in a
--- moment)
-(example '(1 2 3))
-(example
-  (close-syntax 'here 'here
-    (list-contents (list '1 '2 '3))))
+-- (twice-arg 3 (twice-arg 2 (twice-arg 1 (list)))))
+-- =>
+-- (let [z 3]
+--   (twice-arg 2 (twice-arg 1 (list)) z z))
+-- =>
+-- (let [z 3]
+--   (let [y 2]
+--     ((twice-arg 1 (list)) y x z z)))
+-- =>
+-- (let [z 3]
+--   (let [y 2]
+--     (let [x 1]
+--       (list x x y y z z))))
+--(example
+--  (twice-arg 3 (twice-arg 2 (twice-arg 1 (list)))))
 
--- These two expressions are equivalent.
-(example (list 1 2 3))
-(example (:: 1 (:: 2 (:: 3 (nil)))))
-
+---- meta makes the definitions it contains available inside example2's body, as opposed to the default of making them available to the code example2 generates.
+--(meta
+--  (defun set-scope (new-scope stx)
+--    (close-syntax stx new-scope
+--      (open-syntax stx))))
 --
+--(define-syntax-rule (example2 scope1 scope2 scope3)
+--  "hello")
+--
+--(define-syntax-rule (let2 scope1 body)
+--  (let1 scope1 here body))
+--
+--(example (let2 here ignored))
 
 
--- TODO: link to a short example which explains that in
--- Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
--- they are introduced via ``'(...)``. Also explain that Klister does not have
--- unannotated s-expressions. And the relationship between Syntax and
--- Syntax-Contents.
+--(define-macro (example2 scope1)
+--  (let [scope2 'here]
+--    (pure
+--      `(let [,(set-scope scope1 'x) 1]  -- {not-macro, x1}
+--         (let [,(set-scope scope2 'x) 2]  -- {macro, x1, x2}
+--           (let [x 3]
+--             (list
+--               ,(set-scope scope1 'x)  -- {not-macro, x1{0}, x2{0}}
+--               ,(set-scope scope2 'x)  -- {macro, x1{0}, x2{0}}
+--               x)))))))  -- {x1, x2}
+--
+--(example (example2 there))
+
+
+---- TODO: In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
+---- the former has type Syntax while the latter has type (List Integer).
+----
+---- (Remember to look at "syntax-object.golden" to see the result of the
+---- following examples, including their inferred type!)
+--
+---- Those two expressions are equivalent (except for a detail we will cover in a
+---- moment)
+--(example '(1 2 3))
+--(example
+--  (close-syntax 'here 'here
+--    (list-contents (list '1 '2 '3))))
+--
+---- These two expressions are equivalent.
+--(example (list 1 2 3))
+--(example (:: 1 (:: 2 (:: 3 (nil)))))
+--
+----
+--
+--
+---- TODO: link to a short example which explains that in
+---- Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
+---- they are introduced via ``'(...)``. Also explain that Klister does not have
+---- unannotated s-expressions. And the relationship between Syntax and
+---- Syntax-Contents.
