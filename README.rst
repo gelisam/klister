@@ -195,7 +195,8 @@ Guide and Reference
 ===================
 
 The Klister Guide consists of the various commented examples linked from the
-above feature list, plus the extra information in the sub-sections below.
+above feature list, which are intended to be read in order, plus the extra
+information in the sub-sections below.
 
 The Klister Reference covers every identifier in the "prelude.kl" language, but
 doesn't currently say much about each. It consists of a `list of examples`_

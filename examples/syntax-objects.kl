@@ -10,6 +10,10 @@
 (import "monad.kl")
 
 
+-------------------------- What is a syntax object? ---------------------------
+
+-- Let's start with a related, but simpler concept: an s-expression.
+--
 -- An s-expression such as (foo (bar "baz" 42) (quux)) is a tree whose leaves
 -- are integers, strings, and identifiers:
 --
@@ -41,11 +45,12 @@
 -- notation for constructing lists and datums. This notation is also recognized
 -- in Klister, but it means something slightly different:
 --
--- notation for <row> in <col> |      Racket |                    Klister
--- ----------------------------+-------------+---------------------------
---                List Integer |    '(1 2 3) | (:: 1 (:: 2 (:: 3 (nil))))
---         (SExpr) aka "datum" |  '(foo bar) |          no builtin syntax
---  Syntax aka "syntax object" | #'(foo bar) |                 '(foo bar)
+-- notation for <row> in <col> |       Racket |                    Klister
+-- ----------------------------+--------------+---------------------------
+--                List Integer |  '(1 2 3) or | (:: 1 (:: 2 (:: 3 (nil))))
+--                             | (list 1 2 3) |            or (list 1 2 3)
+--         (SExpr) aka "datum" |   '(foo bar) |          no builtin syntax
+--  Syntax aka "syntax object" |  #'(foo bar) |                 '(foo bar)
 
 -- A syntax object such as '(foo (bar "baz" 42) (quux)) is an s-expression
 -- whose nodes are annotated with source locations and some information about
@@ -53,11 +58,96 @@
 -- like if it was defined as a datatype:
 --
 -- (datatype (Syntax)
---   (syntax SrcLoc ScopeSet (Syntax-Contents (Syntax))))
+--   (mk-syntax Loc Scope (Syntax-Contents (Syntax))))
 
--- The real Syntax type is opaque, so there is no way to extract the SrcLoc and
--- ScopeSet fields from a Syntax. There is a way to extract the
--- (Syntax-Contents Syntax) field though:
+-- The real Syntax type is opaque, so the way to construct and inspect a value
+-- of type Syntax is via primitive functions and macros, not by calling and
+-- pattern-matching on the mk-syntax constructor.
+--
+-- Also, in reality there are no types called Loc and Scope, they are internal
+-- fields which cannot be separated from the Syntax to which they are attached.
+-- It is nevertheless useful to define type synonyms Loc and Scope representing
+-- a Syntax whose only field we care about is their source location or their
+-- scoping information, as there are a few primitive functions which treat
+-- Syntax that way.
+
+-- Macro are also expanded when they occur inside types, so in Klister, a type
+-- synonym is just another macro.
+(define-syntax-rule (Loc) Syntax)
+(define-syntax-rule (Scope) Syntax)
+
+(example
+  (the (-> Syntax (Syntax-Contents Syntax))
+       open-syntax))
+(example
+  (the (-> (Loc) (Scope) (Syntax-Contents Syntax) Syntax)
+       close-syntax))
+(example
+  (the (Macro (ScopeAction → (Syntax → Syntax)))
+       make-introducer))
+
+
+--------------------------- Creating syntax objects ---------------------------
+
+-- Klister supports the usual quote and quasiquote macros, with the usual
+-- syntactic sugar, except that quasiquote does not yet support
+-- unquote-splicing.
+
+(example
+  '(foo (bar "baz" 42) (quux)))
+(example
+  (quote (foo (bar "baz" 42) (quux))))
+
+(example
+  (let [stx1 '"baz"]
+    (let [stx2 '(quux)]
+      `(foo (bar ,stx1 42) ,stx2))))
+(example
+  (let [stx1 '"baz"]
+    (let [stx2 '(quux)]
+      (quasiquote (foo (bar (unquote stx1) 42) (unquote stx2))))))
+
+--(example
+--  (let [stx '("baz" 42)]
+--    `(foo (bar ,@stx) (quux))))
+--(example
+--  (let [stx '("baz" 42)]
+--    (quasiquote (foo (bar (unquote-splicing stx)) (quux)))))
+
+-- There is also a lower-level function, close-syntax, which acts a lot like
+-- the mk-syntax constructor in that it allows you to construct a Syntax from
+-- its three fields. Since Klister doesn't provide any way to obtain or
+-- construct a value of type Loc nor a value of type Scope, close-syntax takes
+-- one Syntax from which it to borrow the Loc, one Syntax from which to borrow
+-- the Scope, and a (Syntax-Contents Syntax).
+
+(example
+  (close-syntax 'here 'here
+    (list-contents
+      (list
+        'foo
+        '(bar "baz" 42)
+        '(quux)))))
+
+(defun sexpr->syntax (loc scope x)
+  (case x
+    [(sexpr sc-sexpr)
+     (let [sc-syntax
+           (fmap syntax-contents-functor
+                 (sexpr->syntax loc scope)
+                 sc-sexpr)]
+       (close-syntax loc scope
+         sc-syntax))]))
+(example (sexpr->syntax 'here 'here example-sexpr))
+
+
+------------------------ Modifing the Syntax-Contents -------------------------
+
+-- The open-syntax function extracts the (Syntax-Contents Syntax) field. This
+-- strips the annotations from the root of the tree, but the child nodes have
+-- type Syntax so they still have their annotations.
+
+-- TODO
 
 (example
   (open-syntax
@@ -77,34 +167,14 @@
   (syntax->sexpr
     '(foo (bar "baz" 42) (quux))))
 
--- To construct a Syntax, we need one Syntax from which to borrow the SrcLoc,
--- one Syntax from which to borrow the ScopeSet, and a (Syntax-Contents Syntax).
 
-(example
-  (close-syntax 'here 'here
-    (list-contents
-      (list
-        'foo
-        '(bar "baz" 42)
-        '(quux)))))
+------------------------ Modifying the source location ------------------------
 
-(defun close-sexpr (src-loc scope x)
-  (case x
-    [(sexpr sc-sexpr)
-     (let [sc-syntax
-           (fmap syntax-contents-functor
-                 (close-sexpr src-loc scope)
-                 sc-sexpr)]
-       (close-syntax src-loc scope
-         sc-syntax))]))
-(example (close-sexpr 'here 'here example-sexpr))
+-- The asymmetry between open-syntax and close-syntax means it is not possible
+-- to extract the source location, but it is possible to overwrite it.
 
-
--- TODO
--- Let's now look at how to change the source location.
-
-(defun set-src-loc (new-src-loc stx)
-  (close-syntax new-src-loc stx
+(defun replace-loc (new-loc stx)
+  (close-syntax new-loc stx
     (open-syntax stx)))
 
 (define syntax1 'here)
@@ -112,15 +182,18 @@
 
 (example syntax1)
 (example syntax2)
-(example (set-src-loc syntax1 syntax2))
+(example (replace-loc syntax1 syntax2))
 
--- Remember to look at "syntax-object.golden" to see the output of the above examples, as the output includes the SrcLoc. Notice that the first and third examples have the same SrcLoc.
+-- Remember to look at "syntax-object.golden" to see the output of the above
+-- examples, as the output includes the source location. Notice that the first
+-- and third examples have the same location.
 
 
+----------------------- Modifying the scope information -----------------------
 -- TODO
 -- Let's now look at how to change the scope information.
 
--- The effect of replacing the ScopeSet is only visible when the Syntax is returned from a macro and interpreted as code which binds and looks up variables.
+-- The effect of replacing the Scope is only visible when the Syntax is returned from a macro and interpreted as code which binds and looks up variables.
 
 (define-macros
   (-- (applyIO list
@@ -225,7 +298,7 @@
 
 ---- meta makes the definitions it contains available inside example2's body, as opposed to the default of making them available to the code example2 generates.
 --(meta
---  (defun set-scope (new-scope stx)
+--  (defun replace-scope (new-scope stx)
 --    (close-syntax stx new-scope
 --      (open-syntax stx))))
 --
@@ -241,12 +314,12 @@
 --(define-macro (example2 scope1)
 --  (let [scope2 'here]
 --    (pure
---      `(let [,(set-scope scope1 'x) 1]  -- {not-macro, x1}
---         (let [,(set-scope scope2 'x) 2]  -- {macro, x1, x2}
+--      `(let [,(replace-scope scope1 'x) 1]  -- {not-macro, x1}
+--         (let [,(replace-scope scope2 'x) 2]  -- {macro, x1, x2}
 --           (let [x 3]
 --             (list
---               ,(set-scope scope1 'x)  -- {not-macro, x1{0}, x2{0}}
---               ,(set-scope scope2 'x)  -- {macro, x1{0}, x2{0}}
+--               ,(replace-scope scope1 'x)  -- {not-macro, x1{0}, x2{0}}
+--               ,(replace-scope scope2 'x)  -- {macro, x1{0}, x2{0}}
 --               x)))))))  -- {x1, x2}
 --
 --(example (example2 there))
