@@ -83,7 +83,7 @@
   (the (-> (Loc) (Scope) (Syntax-Contents Syntax) Syntax)
        close-syntax))
 (example
-  (the (Macro (ScopeAction → (Syntax → Syntax)))
+  (the (Macro (ScopeAction → (Scope → Scope)))
        make-introducer))
 
 
