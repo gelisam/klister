@@ -69,12 +69,17 @@
 -- It is nevertheless useful to define type synonyms Loc and Scope representing
 -- a Syntax whose only field we care about is their source location or their
 -- scoping information, as there are a few primitive functions which treat
--- Syntax that way.
+-- Syntax values that way.
 
--- Macro are also expanded when they occur inside types, so in Klister, a type
+-- Macros are also expanded when they occur inside types, so in Klister, a type
 -- synonym is just another macro.
 (define-syntax-rule (Loc) Syntax)
 (define-syntax-rule (Scope) Syntax)
+
+(define syntax->loc id)
+(define syntax->scope id)
+
+-- Here are the primitives which use Syntax values that way.
 
 (example
   (the (-> Syntax (Syntax-Contents Syntax))
@@ -83,110 +88,176 @@
   (the (-> (Loc) (Scope) (Syntax-Contents Syntax) Syntax)
        close-syntax))
 (example
-  (the (Macro (ScopeAction → (Scope → Scope)))
-       make-introducer))
+  (the (Macro (-> (ScopeAction) (Scope) (Scope)))
+       (make-introducer)))
 
+-- The open-syntax and close-syntax macros are sufficient to set all three fields.
 
---------------------------- Creating syntax objects ---------------------------
-
--- Klister supports the usual quote and quasiquote macros, with the usual
--- syntactic sugar, except that quasiquote does not yet support
--- unquote-splicing.
-
-(example
-  '(foo (bar "baz" 42) (quux)))
-(example
-  (quote (foo (bar "baz" 42) (quux))))
-
-(example
-  (let [stx1 '"baz"]
-    (let [stx2 '(quux)]
-      `(foo (bar ,stx1 42) ,stx2))))
-(example
-  (let [stx1 '"baz"]
-    (let [stx2 '(quux)]
-      (quasiquote (foo (bar (unquote stx1) 42) (unquote stx2))))))
-
---(example
---  (let [stx '("baz" 42)]
---    `(foo (bar ,@stx) (quux))))
---(example
---  (let [stx '("baz" 42)]
---    (quasiquote (foo (bar (unquote-splicing stx)) (quux)))))
-
--- There is also a lower-level function, close-syntax, which acts a lot like
--- the mk-syntax constructor in that it allows you to construct a Syntax from
--- its three fields. Since Klister doesn't provide any way to obtain or
--- construct a value of type Loc nor a value of type Scope, close-syntax takes
--- one Syntax from which it to borrow the Loc, one Syntax from which to borrow
--- the Scope, and a (Syntax-Contents Syntax).
-
-(example
-  (close-syntax 'here 'here
-    (list-contents
-      (list
-        'foo
-        '(bar "baz" 42)
-        '(quux)))))
-
-(defun sexpr->syntax (loc scope x)
-  (case x
-    [(sexpr sc-sexpr)
-     (let [sc-syntax
-           (fmap syntax-contents-functor
-                 (sexpr->syntax loc scope)
-                 sc-sexpr)]
-       (close-syntax loc scope
-         sc-syntax))]))
-(example (sexpr->syntax 'here 'here example-sexpr))
-
-
------------------------- Modifing the Syntax-Contents -------------------------
-
--- The open-syntax function extracts the (Syntax-Contents Syntax) field. This
--- strips the annotations from the root of the tree, but the child nodes have
--- type Syntax so they still have their annotations.
-
--- TODO
-
-(example
-  (open-syntax
-    '(foo (bar "baz" 42) (quux))))
-
-(defun syntax->sexpr (stx)
-  (let [sc-syntax
-        (the (Syntax-Contents Syntax)
-             (open-syntax stx))]
-    (let [sc-sexpr
-          (the (Syntax-Contents (SExpr))
-               (fmap syntax-contents-functor
-                     syntax->sexpr
-                     sc-syntax))]
-      (sexpr sc-sexpr))))
-(example
-  (syntax->sexpr
-    '(foo (bar "baz" 42) (quux))))
-
-
------------------------- Modifying the source location ------------------------
-
--- The asymmetry between open-syntax and close-syntax means it is not possible
--- to extract the source location, but it is possible to overwrite it.
+(define syntax->contents open-syntax)
 
 (defun replace-loc (new-loc stx)
-  (close-syntax new-loc stx
-    (open-syntax stx)))
+  (close-syntax
+    new-loc
+    (syntax->scope stx)
+    (syntax->contents stx)))
+
+(defun replace-scope (new-scope stx)
+  (close-syntax
+    (syntax->loc stx)
+    new-scope
+    (syntax->contents stx)))
+
+(defun replace-contents (new-contents stx)
+  (close-syntax
+    (syntax->loc stx)
+    (syntax->scope stx)
+    new-contents))
 
 (define syntax1 'here)
 (define syntax2 'there)
 
 (example syntax1)
 (example syntax2)
-(example (replace-loc syntax1 syntax2))
+(example (replace-loc (syntax->loc syntax1)
+                      syntax2))
+(example (replace-scope (syntax->scope syntax1)
+                        syntax2))
+(example (replace-contents (syntax->contents syntax1)
+                           syntax2))
 
 -- Remember to look at "syntax-object.golden" to see the output of the above
 -- examples, as the output includes the source location. Notice that the first
--- and third examples have the same location.
+-- and third examples have the same location, and that the first and last
+-- examples have the same contents, the identifier "here".
+--
+-- There isn't much to notice in the output of the syntax->scope example,
+-- because the effect of replacing the Scope is only visible when the Syntax is
+-- returned from a macro and interpreted as code which binds or looks up
+-- variables. The details are complicated enough to warrant a separate section.
+
+
+----------------------- Modifying the scope information -----------------------
+
+
+
+
+-- TODO: get rid of most of those sections
+-- DELETE --------------------------- Creating syntax objects ---------------------------
+-- DELETE 
+-- DELETE -- Klister supports the usual quote and quasiquote macros, with the usual
+-- DELETE -- syntactic sugar, except that quasiquote does not yet support
+-- DELETE -- unquote-splicing.
+-- DELETE 
+-- DELETE (example
+-- DELETE   '(foo (bar "baz" 42) (quux)))
+-- DELETE (example
+-- DELETE   (quote (foo (bar "baz" 42) (quux))))
+-- DELETE 
+-- DELETE (example
+-- DELETE   (let [stx1 '"baz"]
+-- DELETE     (let [stx2 '(quux)]
+-- DELETE       `(foo (bar ,stx1 42) ,stx2))))
+-- DELETE (example
+-- DELETE   (let [stx1 '"baz"]
+-- DELETE     (let [stx2 '(quux)]
+-- DELETE       (quasiquote (foo (bar (unquote stx1) 42) (unquote stx2))))))
+-- DELETE 
+-- DELETE --(example
+-- DELETE --  (let [stx '("baz" 42)]
+-- DELETE --    `(foo (bar ,@stx)
+-- DELETE --          (quux))))
+-- DELETE --(example
+-- DELETE --  (let [stx '("baz" 42)]
+-- DELETE --    (quasiquote (foo (bar (unquote-splicing stx))
+-- DELETE --                     (quux)))))
+-- DELETE 
+-- DELETE -- There is also a lower-level function, close-syntax, which constructs a
+-- DELETE -- Syntax from its three fields. That is, it adds an annotation to a leaf or to
+-- DELETE -- a list of already-annotated Syntax values.
+-- DELETE 
+-- DELETE (example
+-- DELETE   (close-syntax 'here 'here
+-- DELETE     (list-contents
+-- DELETE       (list
+-- DELETE         'foo
+-- DELETE         '(bar "baz" 42)
+-- DELETE         '(quux)))))
+-- DELETE 
+-- DELETE (defun sexpr->syntax (loc scope x)
+-- DELETE   (case x
+-- DELETE     [(sexpr sc-sexpr)
+-- DELETE      (let [sc-syntax
+-- DELETE            (the (Syntax-Contents Syntax)
+-- DELETE                 (fmap syntax-contents-functor
+-- DELETE                       (sexpr->syntax loc scope)
+-- DELETE                       sc-sexpr))]
+-- DELETE        (close-syntax loc scope
+-- DELETE          sc-syntax))]))
+-- DELETE (example (sexpr->syntax 'here 'here example-sexpr))
+-- DELETE 
+-- DELETE 
+-- DELETE ------------------------- Matching on syntax objects --------------------------
+-- DELETE 
+-- DELETE -- The open-syntax function extracts the (Syntax-Contents Syntax) field. This
+-- DELETE -- strips the annotations from the root of the tree, but the child nodes have
+-- DELETE -- type Syntax so they still have their annotations.
+-- DELETE 
+-- DELETE (example
+-- DELETE   (open-syntax
+-- DELETE     '(foo (bar "baz" 42) (quux))))
+-- DELETE 
+-- DELETE (defun syntax->sexpr (stx)
+-- DELETE   (let [sc-syntax
+-- DELETE         (the (Syntax-Contents Syntax)
+-- DELETE              (open-syntax stx))]
+-- DELETE     (let [sc-sexpr
+-- DELETE           (the (Syntax-Contents (SExpr))
+-- DELETE                (fmap syntax-contents-functor
+-- DELETE                      syntax->sexpr
+-- DELETE                      sc-syntax))]
+-- DELETE       (sexpr sc-sexpr))))
+-- DELETE (example
+-- DELETE   (syntax->sexpr
+-- DELETE     '(foo (bar "baz" 42) (quux))))
+-- DELETE 
+-- DELETE --  It can also be used as a poor man's
+-- DELETE -- unquote-splicing, by appending the lists instead of
+-- DELETE (example
+-- DELETE   (let [stx '("baz" 42)]
+-- DELETE     `(foo ,(close-syntax 'here 'here
+-- DELETE              (list-contents
+-- DELETE                (case (open-syntax stx)
+-- DELETE                  [(list-contents xs)
+-- DELETE                   (:: 'bar xs)])))
+-- DELETE           (quux))))
+-- DELETE 
+-- DELETE -- TODO
+-- DELETE 
+-- DELETE (example
+-- DELETE   (open-syntax
+-- DELETE     '(foo (bar "baz" 42) (quux))))
+-- DELETE 
+-- DELETE 
+-- DELETE ------------------------ Modifying the source location ------------------------
+-- DELETE 
+-- DELETE -- The asymmetry between open-syntax and close-syntax means it is not possible
+-- DELETE -- to extract the source location, but it is possible to overwrite it.
+-- DELETE 
+-- DELETE (defun replace-loc (new-loc stx)
+-- DELETE   (close-syntax new-loc stx
+-- DELETE     (open-syntax stx)))
+-- DELETE 
+-- DELETE (define syntax1 'here)
+-- DELETE (define syntax2 'there)
+-- DELETE 
+-- DELETE (example syntax1)
+-- DELETE (example syntax2)
+-- DELETE (example (replace-loc syntax1 syntax2))
+-- DELETE 
+-- DELETE -- TODO: earlier?
+-- DELETE -- Remember to look at "syntax-object.golden" to see the output of the above
+-- DELETE -- examples, as the output includes the source location. Notice that the first
+-- DELETE -- and third examples have the same location.
 
 
 ----------------------- Modifying the scope information -----------------------
