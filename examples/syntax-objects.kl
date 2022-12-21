@@ -143,83 +143,127 @@
 
 ----------------------- Modifying the scope information -----------------------
 
--- By default, inner bindings shadow outer bindings of the same identifier.
 
-(define-syntax-rule (example1)
-  (let [x 1]
-    (let [x 2]
-      (let [x 3]
-        (list x x x x)))))
-(example (example1))
-
--- The make-introducer Macro action makes it possible to override this default
--- behavior by marking a bound variable in such a way that it becomes invisible
--- to all use sites except those which are also marked.
-
--- meta is called define-for-syntax in Racket, it makes the definitions it
--- contains available in macro definitions instead of in the code they
--- generate.
-(meta
-  (define make-mark-applier
-    (do macro-monad
-      (<- introducer (make-introducer))
-      (pure (introducer (add))))))
-
-(define-macro (example2)
-  (do macro-monad
-    (<- apply-markA make-mark-applier)
-    (<- apply-markB make-mark-applier)
-    (pure `(let [x 1]
-             (let [,(apply-markA 'x) 2]
-               (let [,(apply-markB 'x) 3]
-                 (list x
-                       ,(apply-markA 'x)
-                       ,(apply-markB 'x)
-                       ,(apply-markA (apply-markB 'x)))))))))
-(example (example2))
-
--- The generated code is still
+--(meta
+--  (defun mapMacro (f xs)
+--    (case xs
+--      [(nil)
+--       (pure (nil))]
+--      [(:: x xs)
+--       (>>= (f x)
+--         (lambda (y)
+--           (>>= (mapMacro f xs)
+--             (lambda (ys)
+--               (pure (:: y ys))))))])))
 --
--- (let [x 1]         -- (1)
---   (let [x 2]       -- (2)
---     (let [x 3]     -- (3)
---       (list x      -- (4)
---             x      -- (5)
---             x      -- (6)
---             x))))  -- (7)
---
--- But this time,
--- * The x at (4) doesn't have any marks, so (2) and (3) are invisible to it,
---   and it resolves to (1).
--- * The x at (5) has the A mark, so it sees both (1) and (2), and it resolves
---   to (2).
--- * The x at (6) has the B mark, so it sees both (1) and (3), and it resolves
---   to (3).
--- * The x at (7) has both marks, so it sees all three bindings, and it
---   resolves to (3).
+---- the ScopeSet approach considers this a bad macro :(
+--(define-macro (m body)
+--  (flet [go (stx)
+--         (case (open-syntax stx)
+--           [(list-contents stxs)
+--            (case stxs
+--              [(:: head tail)
+--               (>>= (free-identifier=? head 'list)
+--                 (lambda (is-list)
+--                   (case is-list
+--                     [(true)
+--                      (pure
+--                        (close-syntax stx stx
+--                          (list-contents
+--                            (snoc (:: head tail) 'x))))]
+--                     [(false)
+--                      (>>= (mapMacro go stxs)
+--                        (lambda (stxs)
+--                          (pure
+--                            (close-syntax stx stx
+--                              (list-contents stxs)))))])))])]
+--           [_
+--            (pure stx)])]
+--    (>>= (go body)
+--      (lambda (body)
+--        (pure `(let [x 1] ,body))))))
+----  (let [x 1]
+----    (let [y e1]
+----      (list e2 ... x)))
+--(example
+--  (m (let [x 2]
+--       (list x))))
 
--- TODO
-
--- First, in order to allow our macros to use syntax->scope, we need to
--- redefine it in a meta-definitions section (meta is called begin-for-syntax
--- in Racket).
-
-(meta
-  (define syntax->loc id)
-  (define syntax->scope id)
-  (define syntax->contents open-syntax)
-
-  (defun replace-scope (new-scope stx)
-    (close-syntax
-      (syntax->loc stx)
-      new-scope
-      (syntax->contents stx))))
-
--- In order to reduce the duplication, those definitions could be placed in a
--- separate module, say "syntax-scope.kl", and imported twice at different phases:
---
--- (import (shift "syntax-scope.kl" 1))
--- (import "syntax-scope.kl")
+-- DELETE -- By default, inner bindings shadow outer bindings of the same identifier.
+-- DELETE
+-- DELETE (define-syntax-rule (example1)
+-- DELETE   (let [x 1]
+-- DELETE     (let [x 2]
+-- DELETE       (let [x 3]
+-- DELETE         (list x x x x)))))
+-- DELETE (example (example1))
+-- DELETE
+-- DELETE -- The make-introducer Macro action makes it possible to override this default
+-- DELETE -- behavior by marking a bound variable in such a way that it becomes invisible
+-- DELETE -- to all use sites except those which are also marked.
+-- DELETE
+-- DELETE -- meta is called define-for-syntax in Racket, it makes the definitions it
+-- DELETE -- contains available in macro definitions instead of in the code they
+-- DELETE -- generate.
+-- DELETE (meta
+-- DELETE   (define make-mark-applier
+-- DELETE     (do macro-monad
+-- DELETE       (<- introducer (make-introducer))
+-- DELETE       (pure (introducer (add))))))
+-- DELETE
+-- DELETE (define-macro (example2)
+-- DELETE   (do macro-monad
+-- DELETE     (<- apply-markA make-mark-applier)
+-- DELETE     (<- apply-markB make-mark-applier)
+-- DELETE     (pure `(let [x 1]
+-- DELETE              (let [,(apply-markA 'x) 2]
+-- DELETE                (let [,(apply-markB 'x) 3]
+-- DELETE                  (list x
+-- DELETE                        ,(apply-markA 'x)
+-- DELETE                        ,(apply-markB 'x)
+-- DELETE                        ,(apply-markA (apply-markB 'x)))))))))
+-- DELETE (example (example2))
+-- DELETE
+-- DELETE -- The generated code is still
+-- DELETE --
+-- DELETE -- (let [x 1]         -- (1)
+-- DELETE --   (let [x 2]       -- (2)
+-- DELETE --     (let [x 3]     -- (3)
+-- DELETE --       (list x      -- (4)
+-- DELETE --             x      -- (5)
+-- DELETE --             x      -- (6)
+-- DELETE --             x))))  -- (7)
+-- DELETE --
+-- DELETE -- But this time,
+-- DELETE -- * The x at (4) doesn't have any marks, so (2) and (3) are invisible to it,
+-- DELETE --   and it resolves to (1).
+-- DELETE -- * The x at (5) has the A mark, so it sees both (1) and (2), and it resolves
+-- DELETE --   to (2).
+-- DELETE -- * The x at (6) has the B mark, so it sees both (1) and (3), and it resolves
+-- DELETE --   to (3).
+-- DELETE -- * The x at (7) has both marks, so it sees all three bindings, and it
+-- DELETE --   resolves to (3).
+-- DELETE
+-- DELETE -- First, in order to allow our macros to use syntax->scope, we need to
+-- DELETE -- redefine it in a meta-definitions section (meta is called begin-for-syntax
+-- DELETE -- in Racket).
+-- DELETE
+-- DELETE (meta
+-- DELETE   (define syntax->loc id)
+-- DELETE   (define syntax->scope id)
+-- DELETE   (define syntax->contents open-syntax)
+-- DELETE
+-- DELETE   (defun replace-scope (new-scope stx)
+-- DELETE     (close-syntax
+-- DELETE       (syntax->loc stx)
+-- DELETE       new-scope
+-- DELETE       (syntax->contents stx))))
+-- DELETE
+-- DELETE -- In order to reduce the duplication, those definitions could be placed in a
+-- DELETE -- separate module, say "syntax-scope.kl", and imported twice at different phases:
+-- DELETE --
+-- DELETE -- (import (shift "syntax-scope.kl" 1))
+-- DELETE -- (import "syntax-scope.kl")
 
 -- DELETE In order to manipulate the scope information effectively, it is important to
 -- DELETE understand the difference between Syntax values which have been written by
@@ -245,16 +289,16 @@
 
 -- TODO: get rid of most of those sections
 -- DELETE --------------------------- Creating syntax objects ---------------------------
--- DELETE 
+-- DELETE
 -- DELETE -- Klister supports the usual quote and quasiquote macros, with the usual
 -- DELETE -- syntactic sugar, except that quasiquote does not yet support
 -- DELETE -- unquote-splicing.
--- DELETE 
+-- DELETE
 -- DELETE (example
 -- DELETE   '(foo (bar "baz" 42) (quux)))
 -- DELETE (example
 -- DELETE   (quote (foo (bar "baz" 42) (quux))))
--- DELETE 
+-- DELETE
 -- DELETE (example
 -- DELETE   (let [stx1 '"baz"]
 -- DELETE     (let [stx2 '(quux)]
@@ -263,7 +307,7 @@
 -- DELETE   (let [stx1 '"baz"]
 -- DELETE     (let [stx2 '(quux)]
 -- DELETE       (quasiquote (foo (bar (unquote stx1) 42) (unquote stx2))))))
--- DELETE 
+-- DELETE
 -- DELETE --(example
 -- DELETE --  (let [stx '("baz" 42)]
 -- DELETE --    `(foo (bar ,@stx)
@@ -272,11 +316,11 @@
 -- DELETE --  (let [stx '("baz" 42)]
 -- DELETE --    (quasiquote (foo (bar (unquote-splicing stx))
 -- DELETE --                     (quux)))))
--- DELETE 
+-- DELETE
 -- DELETE -- There is also a lower-level function, close-syntax, which constructs a
 -- DELETE -- Syntax from its three fields. That is, it adds an annotation to a leaf or to
 -- DELETE -- a list of already-annotated Syntax values.
--- DELETE 
+-- DELETE
 -- DELETE (example
 -- DELETE   (close-syntax 'here 'here
 -- DELETE     (list-contents
@@ -284,7 +328,7 @@
 -- DELETE         'foo
 -- DELETE         '(bar "baz" 42)
 -- DELETE         '(quux)))))
--- DELETE 
+-- DELETE
 -- DELETE (defun sexpr->syntax (loc scope x)
 -- DELETE   (case x
 -- DELETE     [(sexpr sc-sexpr)
@@ -296,18 +340,18 @@
 -- DELETE        (close-syntax loc scope
 -- DELETE          sc-syntax))]))
 -- DELETE (example (sexpr->syntax 'here 'here example-sexpr))
--- DELETE 
--- DELETE 
+-- DELETE
+-- DELETE
 -- DELETE ------------------------- Matching on syntax objects --------------------------
--- DELETE 
+-- DELETE
 -- DELETE -- The open-syntax function extracts the (Syntax-Contents Syntax) field. This
 -- DELETE -- strips the annotations from the root of the tree, but the child nodes have
 -- DELETE -- type Syntax so they still have their annotations.
--- DELETE 
+-- DELETE
 -- DELETE (example
 -- DELETE   (open-syntax
 -- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE 
+-- DELETE
 -- DELETE (defun syntax->sexpr (stx)
 -- DELETE   (let [sc-syntax
 -- DELETE         (the (Syntax-Contents Syntax)
@@ -321,7 +365,7 @@
 -- DELETE (example
 -- DELETE   (syntax->sexpr
 -- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE 
+-- DELETE
 -- DELETE --  It can also be used as a poor man's
 -- DELETE -- unquote-splicing, by appending the lists instead of
 -- DELETE (example
@@ -332,30 +376,30 @@
 -- DELETE                  [(list-contents xs)
 -- DELETE                   (:: 'bar xs)])))
 -- DELETE           (quux))))
--- DELETE 
+-- DELETE
 -- DELETE -- TODO
--- DELETE 
+-- DELETE
 -- DELETE (example
 -- DELETE   (open-syntax
 -- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE 
--- DELETE 
+-- DELETE
+-- DELETE
 -- DELETE ------------------------ Modifying the source location ------------------------
--- DELETE 
+-- DELETE
 -- DELETE -- The asymmetry between open-syntax and close-syntax means it is not possible
 -- DELETE -- to extract the source location, but it is possible to overwrite it.
--- DELETE 
+-- DELETE
 -- DELETE (defun replace-loc (new-loc stx)
 -- DELETE   (close-syntax new-loc stx
 -- DELETE     (open-syntax stx)))
--- DELETE 
+-- DELETE
 -- DELETE (define syntax1 'here)
 -- DELETE (define syntax2 'there)
--- DELETE 
+-- DELETE
 -- DELETE (example syntax1)
 -- DELETE (example syntax2)
 -- DELETE (example (replace-loc syntax1 syntax2))
--- DELETE 
+-- DELETE
 -- DELETE -- TODO: earlier?
 -- DELETE -- Remember to look at "syntax-object.golden" to see the output of the above
 -- DELETE -- examples, as the output includes the source location. Notice that the first
