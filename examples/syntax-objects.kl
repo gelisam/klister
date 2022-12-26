@@ -143,427 +143,201 @@
 
 ----------------------- Modifying the scope information -----------------------
 
+Here is an example language which motivates many of the features in Klister's scoping system (which is a simpler version of Racket's scoping system).
 
---(meta
---  (defun mapMacro (f xs)
---    (case xs
---      [(nil)
---       (pure (nil))]
---      [(:: x xs)
---       (>>= (f x)
---         (lambda (y)
---           (>>= (mapMacro f xs)
---             (lambda (ys)
---               (pure (:: y ys))))))])))
---
----- the ScopeSet approach considers this a bad macro :(
---(define-macro (m body)
---  (flet [go (stx)
---         (case (open-syntax stx)
---           [(list-contents stxs)
---            (case stxs
---              [(:: head tail)
---               (>>= (free-identifier=? head 'list)
---                 (lambda (is-list)
---                   (case is-list
---                     [(true)
---                      (pure
---                        (close-syntax stx stx
---                          (list-contents
---                            (snoc (:: head tail) 'x))))]
---                     [(false)
---                      (>>= (mapMacro go stxs)
---                        (lambda (stxs)
---                          (pure
---                            (close-syntax stx stx
---                              (list-contents stxs)))))])))])]
---           [_
---            (pure stx)])]
---    (>>= (go body)
---      (lambda (body)
---        (pure `(let [x 1] ,body))))))
-----  (let [x 1]
-----    (let [y e1]
-----      (list e2 ... x)))
---(example
---  (m (let [x 2]
---       (list x))))
+(my-language
+  (unsafe-definitions
+    (data (Pythagorean)
+      (Pythagorean Integer Integer Integer)))
 
--- DELETE -- By default, inner bindings shadow outer bindings of the same identifier.
--- DELETE
--- DELETE (define-syntax-rule (example1)
--- DELETE   (let [x 1]
--- DELETE     (let [x 2]
--- DELETE       (let [x 3]
--- DELETE         (list x x x x)))))
--- DELETE (example (example1))
--- DELETE
--- DELETE -- The make-introducer Macro action makes it possible to override this default
--- DELETE -- behavior by marking a bound variable in such a way that it becomes invisible
--- DELETE -- to all use sites except those which are also marked.
--- DELETE
--- DELETE -- meta is called define-for-syntax in Racket, it makes the definitions it
--- DELETE -- contains available in macro definitions instead of in the code they
--- DELETE -- generate.
--- DELETE (meta
--- DELETE   (define make-mark-applier
--- DELETE     (do macro-monad
--- DELETE       (<- introducer (make-introducer))
--- DELETE       (pure (introducer (add))))))
--- DELETE
--- DELETE (define-macro (example2)
--- DELETE   (do macro-monad
--- DELETE     (<- apply-markA make-mark-applier)
--- DELETE     (<- apply-markB make-mark-applier)
--- DELETE     (pure `(let [x 1]
--- DELETE              (let [,(apply-markA 'x) 2]
--- DELETE                (let [,(apply-markB 'x) 3]
--- DELETE                  (list x
--- DELETE                        ,(apply-markA 'x)
--- DELETE                        ,(apply-markB 'x)
--- DELETE                        ,(apply-markA (apply-markB 'x)))))))))
--- DELETE (example (example2))
--- DELETE
--- DELETE -- The generated code is still
--- DELETE --
--- DELETE -- (let [x 1]         -- (1)
--- DELETE --   (let [x 2]       -- (2)
--- DELETE --     (let [x 3]     -- (3)
--- DELETE --       (list x      -- (4)
--- DELETE --             x      -- (5)
--- DELETE --             x      -- (6)
--- DELETE --             x))))  -- (7)
--- DELETE --
--- DELETE -- But this time,
--- DELETE -- * The x at (4) doesn't have any marks, so (2) and (3) are invisible to it,
--- DELETE --   and it resolves to (1).
--- DELETE -- * The x at (5) has the A mark, so it sees both (1) and (2), and it resolves
--- DELETE --   to (2).
--- DELETE -- * The x at (6) has the B mark, so it sees both (1) and (3), and it resolves
--- DELETE --   to (3).
--- DELETE -- * The x at (7) has both marks, so it sees all three bindings, and it
--- DELETE --   resolves to (3).
--- DELETE
--- DELETE -- First, in order to allow our macros to use syntax->scope, we need to
--- DELETE -- redefine it in a meta-definitions section (meta is called begin-for-syntax
--- DELETE -- in Racket).
--- DELETE
--- DELETE (meta
--- DELETE   (define syntax->loc id)
--- DELETE   (define syntax->scope id)
--- DELETE   (define syntax->contents open-syntax)
--- DELETE
--- DELETE   (defun replace-scope (new-scope stx)
--- DELETE     (close-syntax
--- DELETE       (syntax->loc stx)
--- DELETE       new-scope
--- DELETE       (syntax->contents stx))))
--- DELETE
--- DELETE -- In order to reduce the duplication, those definitions could be placed in a
--- DELETE -- separate module, say "syntax-scope.kl", and imported twice at different phases:
--- DELETE --
--- DELETE -- (import (shift "syntax-scope.kl" 1))
--- DELETE -- (import "syntax-scope.kl")
+  (trustworthy-definitions
+    (define-type-synonym Pythagorean Pythagorean)
 
--- DELETE In order to manipulate the scope information effectively, it is important to
--- DELETE understand the difference between Syntax values which have been written by
--- DELETE the programmer and Syntax values which have been generated by other macros.
--- DELETE Consider the following code:
---
--- DELETE (let [x expr]  -- (1)
--- DELETE   expr))       -- (2)
---
--- DELETE The occurrence of expr at (2) has access to one more variable than the
--- DELETE occurrence at (1), so its Scope is bigger. However, in the following code:
---
--- DELETE (my-macro
--- DELETE   (let [x expr]  -- (3)
--- DELETE     expr))       -- (4)
---
--- DELETE The implementation of my-macro will receive a Syntax in which the two
--- DELETE occurrences of expr, and indeed every node in the tree, are annotated with
--- DELETE the same Scope. This is because a macro can give a completely different
--- DELETE meaning to its input, so that code might not end up binding anything.
+    (data (Maybe a)
+      (Nothing)
+      (Just a))
 
+    (defun mk-pythagorean (x y z)
+      (case (= (+ (* x x) (* y y)) (* z z))
+        [(true)
+         (Just (Pythagorean x y a))]
+        [(false)
+         (Nothing)]))
 
+    (define pythagorean-x
+      (lambda-case
+        [(Pythagorean x _ _) x]))
+    (define pythagorean-y
+      (lambda-case
+        [(Pythagorean _ y _) y]))
+    (define pythagorean-z
+      (lambda-case
+        [(Pythagorean _ _ z) z])))
 
--- TODO: get rid of most of those sections
--- DELETE --------------------------- Creating syntax objects ---------------------------
--- DELETE
--- DELETE -- Klister supports the usual quote and quasiquote macros, with the usual
--- DELETE -- syntactic sugar, except that quasiquote does not yet support
--- DELETE -- unquote-splicing.
--- DELETE
--- DELETE (example
--- DELETE   '(foo (bar "baz" 42) (quux)))
--- DELETE (example
--- DELETE   (quote (foo (bar "baz" 42) (quux))))
--- DELETE
--- DELETE (example
--- DELETE   (let [stx1 '"baz"]
--- DELETE     (let [stx2 '(quux)]
--- DELETE       `(foo (bar ,stx1 42) ,stx2))))
--- DELETE (example
--- DELETE   (let [stx1 '"baz"]
--- DELETE     (let [stx2 '(quux)]
--- DELETE       (quasiquote (foo (bar (unquote stx1) 42) (unquote stx2))))))
--- DELETE
--- DELETE --(example
--- DELETE --  (let [stx '("baz" 42)]
--- DELETE --    `(foo (bar ,@stx)
--- DELETE --          (quux))))
--- DELETE --(example
--- DELETE --  (let [stx '("baz" 42)]
--- DELETE --    (quasiquote (foo (bar (unquote-splicing stx))
--- DELETE --                     (quux)))))
--- DELETE
--- DELETE -- There is also a lower-level function, close-syntax, which constructs a
--- DELETE -- Syntax from its three fields. That is, it adds an annotation to a leaf or to
--- DELETE -- a list of already-annotated Syntax values.
--- DELETE
--- DELETE (example
--- DELETE   (close-syntax 'here 'here
--- DELETE     (list-contents
--- DELETE       (list
--- DELETE         'foo
--- DELETE         '(bar "baz" 42)
--- DELETE         '(quux)))))
--- DELETE
--- DELETE (defun sexpr->syntax (loc scope x)
--- DELETE   (case x
--- DELETE     [(sexpr sc-sexpr)
--- DELETE      (let [sc-syntax
--- DELETE            (the (Syntax-Contents Syntax)
--- DELETE                 (fmap syntax-contents-functor
--- DELETE                       (sexpr->syntax loc scope)
--- DELETE                       sc-sexpr))]
--- DELETE        (close-syntax loc scope
--- DELETE          sc-syntax))]))
--- DELETE (example (sexpr->syntax 'here 'here example-sexpr))
--- DELETE
--- DELETE
--- DELETE ------------------------- Matching on syntax objects --------------------------
--- DELETE
--- DELETE -- The open-syntax function extracts the (Syntax-Contents Syntax) field. This
--- DELETE -- strips the annotations from the root of the tree, but the child nodes have
--- DELETE -- type Syntax so they still have their annotations.
--- DELETE
--- DELETE (example
--- DELETE   (open-syntax
--- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE
--- DELETE (defun syntax->sexpr (stx)
--- DELETE   (let [sc-syntax
--- DELETE         (the (Syntax-Contents Syntax)
--- DELETE              (open-syntax stx))]
--- DELETE     (let [sc-sexpr
--- DELETE           (the (Syntax-Contents (SExpr))
--- DELETE                (fmap syntax-contents-functor
--- DELETE                      syntax->sexpr
--- DELETE                      sc-syntax))]
--- DELETE       (sexpr sc-sexpr))))
--- DELETE (example
--- DELETE   (syntax->sexpr
--- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE
--- DELETE --  It can also be used as a poor man's
--- DELETE -- unquote-splicing, by appending the lists instead of
--- DELETE (example
--- DELETE   (let [stx '("baz" 42)]
--- DELETE     `(foo ,(close-syntax 'here 'here
--- DELETE              (list-contents
--- DELETE                (case (open-syntax stx)
--- DELETE                  [(list-contents xs)
--- DELETE                   (:: 'bar xs)])))
--- DELETE           (quux))))
--- DELETE
--- DELETE -- TODO
--- DELETE
--- DELETE (example
--- DELETE   (open-syntax
--- DELETE     '(foo (bar "baz" 42) (quux))))
--- DELETE
--- DELETE
--- DELETE ------------------------ Modifying the source location ------------------------
--- DELETE
--- DELETE -- The asymmetry between open-syntax and close-syntax means it is not possible
--- DELETE -- to extract the source location, but it is possible to overwrite it.
--- DELETE
--- DELETE (defun replace-loc (new-loc stx)
--- DELETE   (close-syntax new-loc stx
--- DELETE     (open-syntax stx)))
--- DELETE
--- DELETE (define syntax1 'here)
--- DELETE (define syntax2 'there)
--- DELETE
--- DELETE (example syntax1)
--- DELETE (example syntax2)
--- DELETE (example (replace-loc syntax1 syntax2))
--- DELETE
--- DELETE -- TODO: earlier?
--- DELETE -- Remember to look at "syntax-object.golden" to see the output of the above
--- DELETE -- examples, as the output includes the source location. Notice that the first
--- DELETE -- and third examples have the same location.
+  (safe-definitions
+    (defun pythagorean->list (p)
+      (list (pythagorean-x p) (pythagorean-y p) (pythagorean-y p)
+
+    (define my-pythagorean
+      (the (Pythagorean) (mk-pythagorean 3 4 5)))
+
+    (example (pythagorean->list my-pythagorean))))
+
+The idea is that the "unsafe" section defines the internal representation of the library, the "trustworthy" section uses this internal representation to expose an API which guarantees that only valid pythagorean triples are constructed, and finally, the "safe" section uses that API.
+
+In terms of scoping rules, this means that:
+1. "safe" code can only see the definitions from the "safe" and "trustworthy" sections.
+2. "trustworthy" code can see the definitions from the "safe", "trustworthy", and "unsafe" sections.
+3. "unsafe" code can see the definitions from the "safe", "trustworthy", and "unsafe" sections.
+
+We thus want to create three scopes called "safe", "trustworthy", and "unsafe". The primitive which creates a new scope is make-introducer; it creates a scope and returns a function which adds or removes that scope from all the nodes in Syntax tree.
+
+-- type synonym
+(define-macro (ScopeIntroducer)
+  (-> (ScopeAction) Syntax Syntax))
+
+(data (SafetyLevels)
+  (safety-levels
+    (ScopeIntroducer)  -- safe
+    (ScopeIntroducer)  -- trustworthy
+    (ScopeIntroducer)))  -- unsafe
+
+(defun make-safety-levels ()
+  (do macro-monad
+    (<- safe (make-introducer))
+    (<- trustworthy (make-introducer))
+    (<- unsafe (make-introducer))
+    (pure (safety-levels safe trustworthy unsafe))))
+
+(defun clear-safety-levels (levels stx)
+  (case levels
+    [(safety-levels safe trustworthy unsafe)
+     (safe (remove)
+       (trustworthy (remove)
+         (unsafe (remove)
+           stx)))]))
+
+When annotating binding sites, the scope annotation is the scope to which the binding is added. When annotating use sites, the scope annotation is the set of scopes which are visible at that use site.
+
+(defun annotate-safe-binding-site (levels stx)
+  (case levels
+    [(safety-levels safe _ _)
+     (safe (add)
+       (clear-safety-levels levels stx))]))
+(defun annotate-trustworthy-binding-site (levels stx)
+  (case levels
+    [(safety-levels _ trustworthy _)
+     (trustworthy (add)
+       (clear-safety-levels levels stx))]))
+(defun annotate-unsafe-binding-site (levels stx)
+  (case levels
+    [(safety-levels _ _ unsafe)
+     (unsafe (add)
+       (clear-safety-levels levels stx))]))
+
+(defun annotate-safe-use-site (levels stx)
+  (case levels
+    [(safety-levels safe trustworthy _)
+     (safe (add)
+       (trustworthy (add) stx))]))
+(defun annotate-trustworthy-use-site (levels stx)
+  (case levels
+    [(safety-levels safe trustworthy unsafe)
+     (safe (add)
+       (trustworthy (add)
+         (unsafe (add) stx)))]))
+(defun annotate-unsafe-use-site (levels stx)
+  (case levels
+    [(safety-levels safe trustworthy unsafe)
+     (safe (add)
+       (trustworthy (add)
+         (unsafe (add) stx)))]))
+
+Thus, the mk-pythagorean identifier in (defun mk-pythagorean ...) should be given the scope set {trustworthy}, while the mk-pythagorean identifier in (mk-pythagorean 3 4 5) should be given the scope {safe, trustworthy}.
+
+-- TODO: ideally, the my-language macro would create the (SafetyLevels) value, safe-definitions would call annotate-safe-use-site on its body, and
+
+once syntax parameters are supported, use that to share the SafetyLevels value with defun and friends, so we don't have to traverse the code ourselves, and so that the user can define their own macros around defun and friends.
+(defun annotate-safety-levels (stx)
+  (case (open-syntax stx)
+    [(list-contents (list my-language?(
+
+Another scoping subtelty is that this language does not follow Klister's convention of using lowercase names for data constructors, and instead follows Haskell's convention of using uppercase names. In particular, for product types like Pythagorean, the data constructor is also named Pythagorean. This language thus needs separate namespaces for types and for values.
+
+In terms of scoping rules, this means that:
+1. Type expressions can only see Type definitions.
+2. Value expressions can only see Value definitions.
+
+We thus also want to create two scopes called "type" and "value".
+
+(data (Namespaces)
+  (namespaces
+    (ScopeIntroducer)  -- type
+    (ScopeIntroducer)))  -- value
+
+(defun make-namespaces ()
+  (do macro-monad
+    (<- type (make-introducer))
+    (<- value (make-introducer))
+    (pure (namespaces type value))))
+
+(defun clear-namespaces (ns stx)
+  (case ns
+    [(namespaces type value)
+     (type (remove)
+       (value (remove)
+         stx))]))
+
+(defun annotate-type (ns stx)
+  (case ns
+    [(namespaces type _)
+     (type (add)
+       (clear-namespace ns stx))]))
+(defun annotate-value (ns stx)
+  (case ns
+    [(namespaces _ value)
+     (value (add)
+       (clear-namespace ns stx))]))
+
+TODO
+
+These two sets of scoping rules interact: we have safe types, safe values, trustworthy types,  trustworthy values,  unsafe types, and unsafe values. This explains why Klister supports attaching a _set_ of scopes to a bound variable: the mk-pythagorean binding site, for example, has the scope set {trustworthy, value}.
+
+The semantics of this set is that this bound variable is only visible to use sites which can see _both_ of those scopes. For example, a use site with the scope set {safe, trustworthy, value} can see both of those scopes (and can also see the "safe" scope). This same use site can also see
+
+That's for binding sites, but what about use sites? The use site of mk-pythagorean which is inside the safe-definitions section, for example, should look at both the bound variables with {trustworthy, value} and those with {safe, value}. The way to express this is in Klister is by attaching the set {trustworthy, safe, value} to the use site.
+
+Todo: explain why non-variables have scopes.
+
+, so there are 6 kinds of definitions (ST, SV, WT, WT, UT, UV). There are also 6 kinds of variable uses, each of which can view a subset of those 6 kinds of definitions. Oh my!
+
+    | Type (T) | Value (V)
+safe (S) | ST, WT | SV, WV
+trustworthy (W) | ST, WT, UT | SV, WV, UV
+unsafe (U) | ST, WT, UT | SV, WV, UV
+
+To make things
 
 
------------------------ Modifying the scope information -----------------------
--- TODO
--- Let's now look at how to change the scope information.
 
--- The effect of replacing the Scope is only visible when the Syntax is returned from a macro and interpreted as code which binds and looks up variables.
-
---(define-macros
---  (-- (applyIO list
---   --   (putStrLn "foo")
---   --   (putStrLn "bar")
---   --   (putStrLn "baz"))
---   -- =>
---   -- (do io-monad
---   --   (<- x (putStrLn "foo"))
---   --   (<- y (putStrLn "bar"))
---   --   (<- z (putStrLn "baz"))
---   --   (pure-IO (list x y z)))
---   [applyIO
---    (lambda (stx)
---      (case (open-syntax stx)
---        [(list-contents (:: _ (:: macro actions)))
---         (pure (close-syntax stx stx
---                 (list-contents
---                   (:: 'applyIO-aux
---                     (:: `(,macro)
---                       actions)))))]))]
---   -- (applyIO-aux
---   --   (list x)
---   --   (putStrLn "bar")
---   --   (putStrLn "baz"))
---   -- =>
---   -- (do io-monad
---   --   (<- y (putStrLn "bar"))
---   --   (<- z (putStrLn "baz"))
---   --   (pure-IO (list x y z)))
---   [applyIO-aux
---    (lambda (stx)
---      (case (open-syntax stx)
---        [(list-contents (:: _ (:: final-expr actions)))
---         (case actions
---           [(nil)
---            (pure `(pure-IO ,final-expr))]
---           [(:: action more-actions)
---            (pure `(bind-IO ,action
---                     (lambda (x)
---                       ,(close-syntax stx stx
---                          (list-contents
---                            (:: 'applyIO-aux
---                              (:: (close-syntax final-expr final-expr
---                                    (case (open-syntax final-expr)
---                                      [(list-contents xs)
---                                       (list-contents (snoc xs 'x))]))
---                                more-actions)))))))])]))]))
---
---(run
---  (bind-IO (applyIO list
---             (pure-IO "foo")
---             (pure-IO "bar")
---             (pure-IO "baz"))
---    (lambda (xs)
---      (case xs
---        [(list x y z)
---         (do io-monad
---           (putStrLn x)
---           (putStrLn y)
---           (putStrLn z))]))))
-
----- (twice-arg (+ 2 2)
-----            (list 1 2 3)
-----            5 6)
----- =>
----- (let [x (+ 2 2)]
-----   (list 1 2 3 x x 5 6))
---(define-macros
---  ([twice-arg
---    (lambda (stx)
---      (case (open-syntax stx)
---        [(list-contents (:: _ (:: arg (:: pre post-list))))
---         (case (open-syntax pre)
---           [(list-contents pre-list)
---            (pure `(let [x ,arg]
---                     ,(close-syntax stx stx
---                        (list-contents
---                          (list-append pre-list
---                            (:: 'x (:: 'x post-list)))))))])]))]))
---
---(example
---  (twice-arg (+ 2 2)
---             (list 1 2 3)
---             5 6))
-
--- (twice-arg 3 (twice-arg 2 (twice-arg 1 (list)))))
--- =>
--- (let [z 3]
---   (twice-arg 2 (twice-arg 1 (list)) z z))
--- =>
--- (let [z 3]
---   (let [y 2]
---     ((twice-arg 1 (list)) y x z z)))
--- =>
--- (let [z 3]
---   (let [y 2]
---     (let [x 1]
---       (list x x y y z z))))
---(example
---  (twice-arg 3 (twice-arg 2 (twice-arg 1 (list)))))
-
----- meta makes the definitions it contains available inside example2's body, as opposed to the default of making them available to the code example2 generates.
---(meta
---  (defun replace-scope (new-scope stx)
---    (close-syntax stx new-scope
---      (open-syntax stx))))
---
---(define-syntax-rule (example2 scope1 scope2 scope3)
---  "hello")
---
---(define-syntax-rule (let2 scope1 body)
---  (let1 scope1 here body))
---
---(example (let2 here ignored))
+Here are the scoping rules we need:
+1. Each definition binds a name which belongs to the intersection of two namespaces
 
 
---(define-macro (example2 scope1)
---  (let [scope2 'here]
---    (pure
---      `(let [,(replace-scope scope1 'x) 1]  -- {not-macro, x1}
---         (let [,(replace-scope scope2 'x) 2]  -- {macro, x1, x2}
---           (let [x 3]
---             (list
---               ,(replace-scope scope1 'x)  -- {not-macro, x1{0}, x2{0}}
---               ,(replace-scope scope2 'x)  -- {macro, x1{0}, x2{0}}
---               x)))))))  -- {x1, x2}
---
---(example (example2 there))
+safe/trustworthy/unsafe
+
+combined Scopes at use sites (safe can use safe and trustworthy), combined use at definition site (type constructor in unsafe fragment is both unsafe and a type).
+
+add: adding the relevant scopes to all use sites
+remove: replace-loc works for the first of set-safety-scopes or set-namespace, but not the second (as that would override the first). Thus, remove is useful to keep concerns separate.
 
 
----- TODO: In Racket, '(1 2 3) and (list 1 2 3) construct the same value. In Klister,
----- the former has type Syntax while the latter has type (List Integer).
-----
----- (Remember to look at "syntax-object.golden" to see the result of the
----- following examples, including their inferred type!)
---
----- Those two expressions are equivalent (except for a detail we will cover in a
----- moment)
---(example '(1 2 3))
---(example
---  (close-syntax 'here 'here
---    (list-contents (list '1 '2 '3))))
---
----- These two expressions are equivalent.
---(example (list 1 2 3))
---(example (:: 1 (:: 2 (:: 3 (nil)))))
---
-----
---
---
----- TODO: link to a short example which explains that in
----- Racket, syntax objects are introduced via ``#'(...)``, whereas in Klister
----- they are introduced via ``'(...)``. Also explain that Klister does not have
----- unannotated s-expressions. And the relationship between Syntax and
----- Syntax-Contents.
+TODO
+
+examples with two non-overlapping marks: lisp-2, separate namespace for types and data constructors.
+
+examples with toggle: explain define-macro, write helper functions with similar semantics.
+
+example with overlapping marks: magic-hash, define-unsafe
+
+example with remove: define-safe
