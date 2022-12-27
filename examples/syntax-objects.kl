@@ -59,7 +59,7 @@
 -- like if it was defined as a datatype:
 --
 -- (datatype (Syntax)
---   (mk-syntax Loc Scope (Syntax-Contents (Syntax))))
+--   (mk-syntax Loc ScopeSet (Syntax-Contents (Syntax))))
 
 
 ------------------------- Manipulating Syntax values --------------------------
@@ -68,17 +68,17 @@
 -- of type Syntax is via primitive functions and macros, not by calling and
 -- pattern-matching on the mk-syntax constructor.
 --
--- Also, in reality there are no types called Loc and Scope, they are internal
--- fields which cannot be separated from the Syntax to which they are attached.
--- It is nevertheless useful to define type synonyms Loc and Scope representing
--- a Syntax whose only field we care about is their source location or their
--- scoping information, as there are a few primitive functions which treat
--- Syntax values that way.
+-- Also, in reality there are no types called Loc and ScopeSet, they are
+-- internal fields which cannot be separated from the Syntax to which they are
+-- attached. It is nevertheless useful to define type synonyms Loc and Scope
+-- representing a Syntax whose only field we care about is their source
+-- location or their scoping information, as there are a few primitive
+-- functions which treat Syntax values that way.
 
 -- Macros are also expanded when they occur inside types, so in Klister, a type
 -- synonym is just another macro.
 (define-syntax-rule (Loc) Syntax)
-(define-syntax-rule (Scope) Syntax)
+(define-syntax-rule (ScopeSet) Syntax)
 
 (define syntax->loc id)
 (define syntax->scope id)
@@ -89,10 +89,10 @@
   (the (-> Syntax (Syntax-Contents Syntax))
        open-syntax))
 (example
-  (the (-> (Loc) (Scope) (Syntax-Contents Syntax) Syntax)
+  (the (-> (Loc) (ScopeSet) (Syntax-Contents Syntax) Syntax)
        close-syntax))
 (example
-  (the (Macro (-> (ScopeAction) (Scope) (Scope)))
+  (the (Macro (-> (ScopeAction) (ScopeSet) (ScopeSet)))
        (make-introducer)))
 
 -- The open-syntax and close-syntax primitives are sufficient to set all three
@@ -135,9 +135,9 @@
 -- and third examples have the same location, and that the first and last
 -- examples have the same contents, the identifier "here".
 --
--- There isn't much to notice in the output of the syntax->scope example,
--- because the effect of replacing the Scope is only visible when the Syntax is
--- returned from a macro and interpreted as code which binds or looks up
+-- There isn't much to notice in the output of the replace-scope example,
+-- because the effect of replacing the ScopeSet is only visible when the Syntax
+-- is returned from a macro and interpreted as code which binds or looks up
 -- variables.
 
 
@@ -326,7 +326,7 @@ Here are the scoping rules we need:
 
 safe/trustworthy/unsafe
 
-combined Scopes at use sites (safe can use safe and trustworthy), combined use at definition site (type constructor in unsafe fragment is both unsafe and a type).
+combined ScopeSets at use sites (safe can use safe and trustworthy), combined use at definition site (type constructor in unsafe fragment is both unsafe and a type).
 
 add: adding the relevant scopes to all use sites
 remove: replace-loc works for the first of set-safety-scopes or set-namespace, but not the second (as that would override the first). Thus, remove is useful to keep concerns separate.
