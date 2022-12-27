@@ -1,7 +1,7 @@
 Klister
 ------------
 
-Klister [`TyDe 2020`_, `video`_] is a is a programming language, a research
+Klister [`TyDe 2020`_, `video`_] is a programming language, a research
 prototype which combines features from Racket, ML, and a strict Haskell into a
 single language. It is named after its most distinguishing feature, "stuck
 macros" [`Compose NYC 2019`_], as "Klister" is Danish for "adhesive".
