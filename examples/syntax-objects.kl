@@ -59,7 +59,10 @@
 -- like if it was defined as a datatype:
 --
 -- (datatype (Syntax)
---   (mk-syntax Loc ScopeSet (Syntax-Contents (Syntax))))
+--   (mk-syntax
+--     Loc
+--     ScopeSet
+--     (Syntax-Contents (Syntax))))
 
 
 ------------------------- Manipulating Syntax values --------------------------
@@ -70,7 +73,7 @@
 --
 -- Also, in reality there are no types called Loc and ScopeSet, they are
 -- internal fields which cannot be separated from the Syntax to which they are
--- attached. It is nevertheless useful to define type synonyms Loc and Scope
+-- attached. It is nevertheless useful to define type synonyms Loc and ScopeSet
 -- representing a Syntax whose only field we care about is their source
 -- location or their scoping information, as there are a few primitive
 -- functions which treat Syntax values that way.
@@ -83,7 +86,7 @@
 (define syntax->loc id)
 (define syntax->scope id)
 
--- Here are the primitives which use Syntax values that way.
+-- Here are the primitives Klister provides for manipulting Syntax values.
 
 (example
   (the (-> Syntax (Syntax-Contents Syntax))
@@ -142,6 +145,7 @@
 
 
 ----------------------- Modifying the scope information -----------------------
+(TODO: name this section! it's about use sites seeing multiples scopes.)
 
 Here is an example language which motivates many of the features in Klister's scoping system (which is a simpler version of Racket's scoping system).
 
@@ -262,6 +266,10 @@ once syntax parameters are supported, use that to share the SafetyLevels value w
   (case (open-syntax stx)
     [(list-contents (list my-language?(
 
+
+----------------------- Modifying the scope information2-----------------------
+(TODO: name this section! it's about binding sites having multiples scopes.)
+
 Another scoping subtelty is that this language does not follow Klister's convention of using lowercase names for data constructors, and instead follows Haskell's convention of using uppercase names. In particular, for product types like Pythagorean, the data constructor is also named Pythagorean. This language thus needs separate namespaces for types and for values.
 
 In terms of scoping rules, this means that:
@@ -335,6 +343,11 @@ remove: replace-loc works for the first of set-safety-scopes or set-namespace, b
 TODO
 
 examples with two non-overlapping marks: lisp-2, separate namespace for types and data constructors.
+
+
+----------------------- Modifying the scope information3-----------------------
+(TODO: name this section! it's about flipping scopes.)
+
 
 examples with toggle: explain define-macro, write helper functions with similar semantics.
 
