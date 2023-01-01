@@ -544,26 +544,37 @@ arrowType = (implT, implP)
         [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
 
 macroType :: TypePrim
-macroType = unaryType (\a -> tMacro a)
+macroType = unaryType TMacro
 
 ioType :: TypePrim
-ioType = unaryType tIO
+ioType = unaryType TIO
 
-unaryType :: (forall a . a -> TyF a) -> TypePrim
+unaryType :: TypeConstructor -> TypePrim
 unaryType ctor = (implT, implP)
   where
     implT k dest stx = do
-      equateKinds stx KStar k
-      Stx _ _ (_, t) <- mustHaveEntries stx
-      tDest <- scheduleType KStar t
-      linkType dest (ctor tDest)
+      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
+      case oneOrTwoEntries of
+        Left (Identity _) -> do
+          equateKinds stx (KFun KStar KStar) k
+          linkType dest (TyF ctor [])
+        Right (_, t) -> do
+          equateKinds stx KStar k
+          tDest <- scheduleType KStar t
+          linkType dest (TyF ctor [tDest])
     implP dest stx = do
-      Stx _ _ (_, a) <- mustHaveEntries stx
-      (sc, n, x) <- prepareVar a
-      sch <- trivialScheme tType
-      linkTypePattern dest
-        (TypePattern $ ctor (n, x))
-        [(sc, n, x, sch)]
+      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
+      case oneOrTwoEntries of
+        Left (Identity _) -> do
+          linkTypePattern dest
+            (TypePattern $ TyF ctor [])
+            []
+        Right (_, a) -> do
+          (sc, n, x) <- prepareVar a
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern $ TyF ctor [(n, x)])
+            [(sc, n, x, sch)]
 
 -------------
 -- Modules --

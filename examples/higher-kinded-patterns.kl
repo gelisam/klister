@@ -1,0 +1,30 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+(import (shift "higher-kinded.kl" 1))
+(import "higher-kinded.kl")
+
+(define-macro (is-of-unit-io)
+  (>>= (which-problem)
+    (lambda (problem)
+      (case problem
+        [(expression of-unit-io-arrow-bool?)
+         (type-case of-unit-io-arrow-bool?
+           [(-> of-unit-io? bool?)
+            (type-case of-unit-io?
+              [(OfUnit io?)
+               (type-case io?
+                 [(IO)
+                  (pure '(const true))]
+                 [(else _)
+                  (pure '(const false))])]
+              [(else _)
+               (pure '(const false))])])]))))
+
+(example
+  ((is-of-unit-io)
+   (of-unit (pure-IO unit))))
+(example
+  ((is-of-unit-io)
+   (of-unit (just unit))))

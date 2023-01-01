@@ -1,0 +1,10 @@
+#lang "prelude.kl"
+
+(datatype (OfUnit F)
+  (of-unit (F Unit)))
+
+(example
+  (the (OfUnit (IO))
+       (of-unit (pure-IO unit))))
+
+(export OfUnit of-unit)
