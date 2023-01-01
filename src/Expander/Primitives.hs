@@ -406,7 +406,7 @@ listSyntax :: ExprPrim
 listSyntax t dest stx = do
   unify dest t tSyntax
   Stx _ _ (_, list, source) <- mustHaveEntries stx
-  Stx _ _ listItems <- mustHaveEntries list
+  listItems <- mustHaveShape list
   listDests <- traverse (schedule tSyntax) listItems
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreList $ ScopedList listDests sourceDest
