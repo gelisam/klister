@@ -271,7 +271,7 @@ flet t dest stx = do
   xsch <- trivialScheme xt
   Stx _ _ (_, b, body) <- mustHaveEntries stx
   Stx _ _ (f, args, def) <- mustHaveEntries b
-  Stx _ _ x <- mustHaveEntries args
+  Stx _ _ (Identity x) <- mustHaveEntries args
   (fsc, f', coreF) <- prepareVar f
   (xsc, x', coreX) <- prepareVar x
   p <- currentPhase
@@ -292,7 +292,7 @@ flet t dest stx = do
 lambda :: ExprPrim
 lambda t dest stx = do
   Stx _ _ (_, arg, body) <- mustHaveEntries stx
-  Stx _ _ theArg <- mustHaveEntries arg
+  Stx _ _ (Identity theArg) <- mustHaveEntries arg
   (sc, arg', coreArg) <- prepareVar theArg
   p <- currentPhase
   psc <- phaseRoot
@@ -467,7 +467,7 @@ letSyntax t dest stx = do
 
 makeIntroducer :: ExprPrim
 makeIntroducer t dest stx = do
-  Stx _ _ mName <- mustHaveEntries stx
+  Stx _ _ (Identity mName) <- mustHaveEntries stx
   _ <- mustBeIdent mName
   unify dest theType t
   linkExpr dest $ CoreMakeIntroducer
@@ -486,7 +486,7 @@ log t dest stx = do
 whichProblem :: ExprPrim
 whichProblem t dest stx = do
   unify dest (tMacro (primitiveDatatype "Problem" [])) t
-  Stx _ _ (_ :: Syntax) <- mustHaveEntries stx
+  Stx _ _ (Identity _) <- mustHaveEntries stx
   linkExpr dest CoreWhichProblem
 
 dataCase :: ExprPrim
@@ -594,7 +594,7 @@ makeModule expandDeclForms bodyPtr stx =
 makeLocalType :: MacroDest -> Syntax -> Expand ()
 makeLocalType dest stx = do
   Stx _ _ (_, binder, body) <- mustHaveEntries stx
-  Stx _ _ theVar <- mustHaveEntries binder
+  Stx _ _ (Identity theVar) <- mustHaveEntries binder
   (sc, n, b) <- varPrepHelper theVar
   meta <- freshMeta Nothing
   let t = TMetaVar meta

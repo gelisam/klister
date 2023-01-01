@@ -9,6 +9,7 @@
 module Expander.Syntax where
 
 import Control.Monad.Except
+import Data.Functor.Identity (Identity(Identity))
 import Data.List (nub, sort)
 import Data.Text (Text)
 import qualified Data.Text as T
@@ -100,9 +101,9 @@ instance FixedLengthList item () where
   checkLength _
     = Left [0]
 
-instance item ~ Syntax => FixedLengthList item Syntax where
+instance a ~ item => FixedLengthList item (Identity a) where
   checkLength [x]
-    = pure x
+    = pure (Identity x)
   checkLength _
     = Left [1]
 
