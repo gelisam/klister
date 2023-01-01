@@ -64,28 +64,28 @@ class FixedLengthList a where
 
 instance FixedLengthList () where
   mustHaveEntries (Syntax (Stx scs srcloc (List []))) = return (Stx scs srcloc ())
-  mustHaveEntries other = throwError (NotRightLength 0 other)
+  mustHaveEntries other = throwError (notRightLength 0 other)
 
 instance FixedLengthList Syntax where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x]))) = return (Stx scs srcloc x)
-  mustHaveEntries other = throwError (NotRightLength 1 other)
+  mustHaveEntries other = throwError (notRightLength 1 other)
 
 instance (a ~ Syntax, b ~ Syntax) => FixedLengthList (a, b) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x, y]))) = return (Stx scs srcloc (x, y))
-  mustHaveEntries other = throwError (NotRightLength 2 other)
+  mustHaveEntries other = throwError (notRightLength 2 other)
 
 instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => FixedLengthList (a, b, c) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [x, y, z]))) = return (Stx scs srcloc (x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 3 other)
+  mustHaveEntries other = throwError (notRightLength 3 other)
 
 instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax) => FixedLengthList (a, b, c, d) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 4 other)
+  mustHaveEntries other = throwError (notRightLength 4 other)
 
 instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax, e ~ Syntax) => FixedLengthList (a, b, c, d, e) where
   mustHaveEntries (Syntax (Stx scs srcloc (List [v, w, x, y, z]))) =
     return (Stx scs srcloc (v, w, x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 5 other)
+  mustHaveEntries other = throwError (notRightLength 5 other)
 
 instance (a ~ Syntax) => FixedLengthList [a] where
   mustHaveEntries (Syntax (Stx scs srcloc (List xs))) =

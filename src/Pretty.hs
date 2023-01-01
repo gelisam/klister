@@ -6,7 +6,7 @@
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pretty (Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
+module Pretty (Doc, Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
