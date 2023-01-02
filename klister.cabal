@@ -8,7 +8,7 @@ author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Géline
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 license:        BSD-3-Clause
 license-file:   LICENSE
-tested-with:    GHC==8.6.5, GHC==8.8.4, GHC==8.10.2, GHC==9.0.1
+tested-with:    GHC==8.6.5, GHC==8.8.4, GHC==8.10.2, GHC==9.0.1, GHC==9.2.5
 build-type:     Simple
 data-files:
     stdlib/builtins.kl
