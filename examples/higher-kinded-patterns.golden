@@ -1,2 +1,3 @@
-(true) : Bool
-(false) : Bool
+"OfUnit IO" : String
+"OfUnit Maybe" : String
+"OfUnit (Either Unit)" : String

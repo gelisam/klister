@@ -1,30 +1,43 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import "define-syntax-rule.kl")
+(import (shift "either-datatype.kl" 1))
 (import (shift "higher-kinded.kl" 1))
+(import "define-syntax-rule.kl")
+(import "either-datatype.kl")
 (import "higher-kinded.kl")
 
-(define-macro (is-of-unit-io)
+(define-macro (type-of)
   (>>= (which-problem)
     (lambda (problem)
       (case problem
-        [(expression of-unit-io-arrow-bool?)
-         (type-case of-unit-io-arrow-bool?
-           [(-> of-unit-io? bool?)
-            (type-case of-unit-io?
-              [(OfUnit io?)
-               (type-case io?
+        [(expression of-unit-t-arrow-string?)
+         (type-case of-unit-t-arrow-string?
+           [(-> of-unit-t? string?)
+            (type-case of-unit-t?
+              [(OfUnit type)
+               (type-case type
                  [(IO)
-                  (pure '(const true))]
+                  (pure '(const "OfUnit IO"))]
+                 [(Maybe)
+                  (pure '(const "OfUnit Maybe"))]
+                 [(Either unit?)
+                  (type-case unit?
+                    [(Unit)
+                     (pure '(const "OfUnit (Either Unit)"))]
+                    [(else _)
+                     (pure '(const "OfUnit (Either ?)"))])]
                  [(else _)
-                  (pure '(const false))])]
+                  (pure '(const "OfUnit ?"))])]
               [(else _)
-               (pure '(const false))])])]))))
+               (pure '(const "?"))])])]))))
 
 (example
-  ((is-of-unit-io)
+  ((type-of)
    (of-unit (pure-IO unit))))
 (example
-  ((is-of-unit-io)
+  ((type-of)
    (of-unit (just unit))))
+(example
+  ((type-of)
+   (of-unit (left unit))))

@@ -6,5 +6,8 @@
 (example
   (the (OfUnit (IO))
        (of-unit (pure-IO unit))))
+(example
+  (the (OfUnit (Maybe))
+       (of-unit (just unit))))
 
 (export OfUnit of-unit)

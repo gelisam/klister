@@ -1,1 +1,2 @@
 (of-unit #<IO action>) : (OfUnit IO)
+(of-unit (just (unit))) : (OfUnit Maybe)
