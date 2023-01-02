@@ -105,10 +105,17 @@
                     [(list (arg1 arg2))
                      (pure (list-syntax ('-> arg1 arg2)
                                         stx))]
+                    [(list (arg1))
+                     (pure (list-syntax ('-> arg1)
+                                        stx))]
                     [(cons arg1 args)
                      (pure (list-syntax ('-> arg1
                                           (cons-list-syntax 'my-arrow args stx))
-                                        stx))])]))]))
+                                        stx))]
+                    [()
+                     (pure '(->))])]
+                 [_
+                  (pure '(->))]))]))
 
 (export (rename ([my-arrow ->]) my-arrow))
 (export (rename ([my-flet flet]) my-flet))

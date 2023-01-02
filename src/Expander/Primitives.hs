@@ -529,19 +529,40 @@ arrowType :: TypePrim
 arrowType = (implT, implP)
   where
     implT k dest stx = do
-      equateKinds stx KStar k
-      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
-      argDest <- scheduleType KStar arg
-      retDest <- scheduleType KStar ret
-      linkType dest (tFun1 argDest retDest)
+      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
+      case oneToThreeEntries of
+        Left (Identity _) -> do
+          equateKinds stx (kFun [KStar, KStar] KStar) k
+          linkType dest $ TyF TFun []
+        Right (Left (_, arg)) -> do
+          equateKinds stx (kFun [KStar] KStar) k
+          argDest <- scheduleType KStar arg
+          linkType dest $ TyF TFun [argDest]
+        Right (Right (_, arg, ret)) -> do
+          equateKinds stx KStar k
+          argDest <- scheduleType KStar arg
+          retDest <- scheduleType KStar ret
+          linkType dest $ tFun1 argDest retDest
     implP dest stx = do
-      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
-      (sc1, n1, x1) <- prepareVar arg
-      (sc2, n2, x2) <- prepareVar ret
-      sch <- trivialScheme tType
-      linkTypePattern dest
-        (TypePattern (tFun1 (n1, x1) (n2, x2)))
-        [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
+      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
+      case oneToThreeEntries of
+        Left (Identity _) -> do
+          linkTypePattern dest
+            (TypePattern (TyF TFun []))
+            []
+        Right (Left (_, arg)) -> do
+          (sc1, n1, x1) <- prepareVar arg
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern (TyF TFun [(n1, x1)]))
+            [(sc1, n1, x1, sch)]
+        Right (Right (_, arg, ret)) -> do
+          (sc1, n1, x1) <- prepareVar arg
+          (sc2, n2, x2) <- prepareVar ret
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern (tFun1 (n1, x1) (n2, x2)))
+            [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
 
 macroType :: TypePrim
 macroType = unaryType TMacro
@@ -556,7 +577,7 @@ unaryType ctor = (implT, implP)
       Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
       case oneOrTwoEntries of
         Left (Identity _) -> do
-          equateKinds stx (KFun KStar KStar) k
+          equateKinds stx (kFun [KStar] KStar) k
           linkType dest (TyF ctor [])
         Right (_, t) -> do
           equateKinds stx KStar k

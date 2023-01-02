@@ -1,3 +1,6 @@
 "OfUnit IO" : String
 "OfUnit Maybe" : String
-"OfUnit (Either Unit)" : String
+"OfUnit (-> Unit)" : String
+"OfUnit (Pair Unit)" : String
+"OfUnitUnit (->)" : String
+"OfUnitUnit Pair" : String
