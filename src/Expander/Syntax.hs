@@ -3,7 +3,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE UndecidableInstances #-}
 
 -- | Utilities for analyzing the form of syntax in the expander monad
 module Expander.Syntax where
@@ -81,10 +80,9 @@ mustHaveEntries other = do
 class FixedLengthList item r where
   checkLength :: [item] -> Either [Natural] r
 
-instance ( FixedLengthList e1 a
-         , FixedLengthList e2 b
-         , e1 ~ e2
-         ) => FixedLengthList e1 (Either a b)
+instance ( FixedLengthList item a
+         , FixedLengthList item b
+         ) => FixedLengthList item (Either a b)
          where
   checkLength xs
     = case (checkLength xs, checkLength xs) of
