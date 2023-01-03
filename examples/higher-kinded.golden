@@ -3,4 +3,5 @@
 (of-unit (just (unit))) : (OfUnit Maybe)
 (of-unit (pair (unit) (unit))) : (OfUnit (Pair Unit))
 (of-unit-unit #<closure>) : (OfUnitUnit (→))
+(of-unit-unit #<closure>) : (OfUnitUnit (→))
 (of-unit-unit (pair (unit) (unit))) : (OfUnitUnit Pair)

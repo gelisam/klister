@@ -30,6 +30,9 @@
     (F Unit Unit)))
 
 (example
+  (the (OfUnitUnit ->)
+       (of-unit-unit id)))
+(example
   (the (OfUnitUnit (->))
        (of-unit-unit id)))
 (example
