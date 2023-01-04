@@ -1,0 +1,72 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import (shift "higher-kinded.kl" 1))
+(import (shift "pair-datatype.kl" 1))
+(import "define-syntax-rule.kl")
+(import "higher-kinded.kl")
+(import "pair-datatype.kl")
+
+-- Making sure we can pattern-match on unsaturated primitive type constructors,
+-- primitive datatypes, and user-defined datatypes.
+
+(define-macro (type-of)
+  (>>= (which-problem)
+    (lambda (problem)
+      (case problem
+        [(expression of-unit-t-arrow-string?)
+         (type-case of-unit-t-arrow-string?
+           [(-> of-unit-t? string?)
+            (type-case of-unit-t?
+              [(OfUnit type)
+               (type-case type
+                 [(IO)
+                  (pure '(const "OfUnit IO"))]
+                 [(Maybe)
+                  (pure '(const "OfUnit Maybe"))]
+                 [(-> unit?)
+                  (type-case unit?
+                    [(Unit)
+                     (pure '(const "OfUnit (-> Unit)"))]
+                    [(else _)
+                     (pure '(const "OfUnit (-> ?)"))])]
+                 [(Pair unit?)
+                  (type-case unit?
+                    [(Unit)
+                     (pure '(const "OfUnit (Pair Unit)"))]
+                    [(else _)
+                     (pure '(const "OfUnit (Pair ?)"))])]
+                 [(else _)
+                  (pure '(const "OfUnit ?"))])]
+              [(OfUnitUnit type)
+               (type-case type
+                 [(->)
+                  (pure '(const "OfUnitUnit (->)"))]
+                 [(Pair)
+                  (pure '(const "OfUnitUnit Pair"))]
+                 [(else _)
+                  (pure '(const "OfUnitUnit ?"))])]
+              [(else _)
+               (pure '(const "?"))])])]))))
+
+(example
+  ((type-of)
+   (of-unit (pure-IO unit))))
+(example
+  ((type-of)
+   (of-unit (just unit))))
+(example
+  ((type-of)
+   (of-unit (the (-> Unit Unit)
+                 id))))
+(example
+  ((type-of)
+   (of-unit (pair unit unit))))
+
+(example
+  ((type-of)
+   (of-unit-unit (the (-> Unit Unit)
+                      id))))
+(example
+  ((type-of)
+   (of-unit-unit (pair unit unit))))

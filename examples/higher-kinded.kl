@@ -1,0 +1,45 @@
+#lang "prelude.kl"
+
+(import "pair-datatype.kl")
+
+
+-- Making sure we can write down unsaturated primitive type constructors,
+-- primitive datatypes, and user-defined datatypes.
+
+(datatype (OfUnit F)
+  (of-unit (F Unit)))
+
+(example
+  (the (OfUnit (IO))
+       (of-unit (pure-IO unit))))
+(example
+  (the (OfUnit (-> Unit))
+       (of-unit id)))
+(example
+  (the (OfUnit (Maybe))
+       (of-unit (just unit))))
+(example
+  (the (OfUnit (Pair Unit))
+       (of-unit (pair unit unit))))
+
+
+-- Make sure it also works at kind * -> * -> *.
+
+(datatype (OfUnitUnit F)
+  (of-unit-unit
+    (F Unit Unit)))
+
+(example
+  (the (OfUnitUnit ->)
+       (of-unit-unit id)))
+(example
+  (the (OfUnitUnit (->))
+       (of-unit-unit id)))
+(example
+  (the (OfUnitUnit (Pair))
+       (of-unit-unit (pair unit unit))))
+
+
+(export
+  OfUnit of-unit
+  OfUnitUnit of-unit-unit)

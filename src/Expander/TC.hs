@@ -324,7 +324,7 @@ equateKinds blame kind1 kind2 =
       loc <- getBlameLoc blame
       throwError $ KindMismatch loc k1' k2'
   where
--- Rigid-rigid cases
+    -- Rigid-rigid cases
     equateKinds' KStar KStar = pure True
     equateKinds' (KFun k1 k2) (KFun k1' k2') =
       (&&) <$> equateKinds' k1 k1' <*> equateKinds' k2 k2'

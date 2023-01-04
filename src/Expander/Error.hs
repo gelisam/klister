@@ -34,7 +34,7 @@ data ExpansionErr
   | NotInteger Syntax
   | NotString Syntax
   | NotModName Syntax
-  | NotRightLength Natural Syntax
+  | NotRightLength [Natural] Syntax
   | NotVec Syntax
   | NotImportSpec Syntax
   | NotExportSpec Syntax
@@ -59,6 +59,9 @@ data ExpansionErr
   | KindMismatch (Maybe SrcLoc) Kind Kind
   | CircularImports ModuleName [ModuleName]
   deriving (Show)
+
+notRightLength :: Natural -> Syntax -> ExpansionErr
+notRightLength n = NotRightLength [n]
 
 data TypeCheckError
   = TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
@@ -115,11 +118,21 @@ instance Pretty VarInfo ExpansionErr where
     vsep [ text "Expected module name (string or `kernel'), but got"
          , pp env stx
          ]
-  pp env (NotRightLength len stx) =
+  pp env (NotRightLength lengths0 stx) =
     hang 2 $ group $
-    vsep [ text "Expected" <+> viaShow len <+> text "entries between parentheses, but got"
+    vsep [ text "Expected" <+> alts lengths0 <+> text "entries between parentheses, but got"
          , pp env stx
          ]
+    where
+      alts :: [Natural] -> Doc ann
+      alts []
+        = error "internal error: NotRightLength doesn't offer any acceptable lengths"
+      alts [len]
+        = viaShow len
+      alts [len1, len2]
+        = viaShow len1 <+> "or" <+> viaShow len2
+      alts (len:lengths)
+        = viaShow len <> "," <+> alts lengths
   pp env (NotVec stx) =
     hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
   pp env (NotImportSpec stx) =

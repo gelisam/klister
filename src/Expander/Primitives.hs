@@ -271,7 +271,7 @@ flet t dest stx = do
   xsch <- trivialScheme xt
   Stx _ _ (_, b, body) <- mustHaveEntries stx
   Stx _ _ (f, args, def) <- mustHaveEntries b
-  Stx _ _ x <- mustHaveEntries args
+  Stx _ _ (Identity x) <- mustHaveEntries args
   (fsc, f', coreF) <- prepareVar f
   (xsc, x', coreX) <- prepareVar x
   p <- currentPhase
@@ -292,7 +292,7 @@ flet t dest stx = do
 lambda :: ExprPrim
 lambda t dest stx = do
   Stx _ _ (_, arg, body) <- mustHaveEntries stx
-  Stx _ _ theArg <- mustHaveEntries arg
+  Stx _ _ (Identity theArg) <- mustHaveEntries arg
   (sc, arg', coreArg) <- prepareVar theArg
   p <- currentPhase
   psc <- phaseRoot
@@ -406,7 +406,7 @@ listSyntax :: ExprPrim
 listSyntax t dest stx = do
   unify dest t tSyntax
   Stx _ _ (_, list, source) <- mustHaveEntries stx
-  Stx _ _ listItems <- mustHaveEntries list
+  listItems <- mustHaveShape list
   listDests <- traverse (schedule tSyntax) listItems
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreList $ ScopedList listDests sourceDest
@@ -467,7 +467,7 @@ letSyntax t dest stx = do
 
 makeIntroducer :: ExprPrim
 makeIntroducer t dest stx = do
-  Stx _ _ mName <- mustHaveEntries stx
+  Stx _ _ (Identity mName) <- mustHaveEntries stx
   _ <- mustBeIdent mName
   unify dest theType t
   linkExpr dest $ CoreMakeIntroducer
@@ -486,7 +486,7 @@ log t dest stx = do
 whichProblem :: ExprPrim
 whichProblem t dest stx = do
   unify dest (tMacro (primitiveDatatype "Problem" [])) t
-  Stx _ _ (_ :: Syntax) <- mustHaveEntries stx
+  Stx _ _ (Identity _) <- mustHaveEntries stx
   linkExpr dest CoreWhichProblem
 
 dataCase :: ExprPrim
@@ -529,41 +529,73 @@ arrowType :: TypePrim
 arrowType = (implT, implP)
   where
     implT k dest stx = do
-      equateKinds stx KStar k
-      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
-      argDest <- scheduleType KStar arg
-      retDest <- scheduleType KStar ret
-      linkType dest (tFun1 argDest retDest)
+      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
+      case oneToThreeEntries of
+        Left (Identity _) -> do
+          equateKinds stx (kFun [KStar, KStar] KStar) k
+          linkType dest $ TyF TFun []
+        Right (Left (_, arg)) -> do
+          equateKinds stx (kFun [KStar] KStar) k
+          argDest <- scheduleType KStar arg
+          linkType dest $ TyF TFun [argDest]
+        Right (Right (_, arg, ret)) -> do
+          equateKinds stx KStar k
+          argDest <- scheduleType KStar arg
+          retDest <- scheduleType KStar ret
+          linkType dest $ tFun1 argDest retDest
     implP dest stx = do
-      Stx _ _ (_, arg, ret) <- mustHaveEntries stx
-      (sc1, n1, x1) <- prepareVar arg
-      (sc2, n2, x2) <- prepareVar ret
-      sch <- trivialScheme tType
-      linkTypePattern dest
-        (TypePattern (tFun1 (n1, x1) (n2, x2)))
-        [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
+      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
+      case oneToThreeEntries of
+        Left (Identity _) -> do
+          linkTypePattern dest
+            (TypePattern (TyF TFun []))
+            []
+        Right (Left (_, arg)) -> do
+          (sc1, n1, x1) <- prepareVar arg
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern (TyF TFun [(n1, x1)]))
+            [(sc1, n1, x1, sch)]
+        Right (Right (_, arg, ret)) -> do
+          (sc1, n1, x1) <- prepareVar arg
+          (sc2, n2, x2) <- prepareVar ret
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern (tFun1 (n1, x1) (n2, x2)))
+            [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
 
 macroType :: TypePrim
-macroType = unaryType (\a -> tMacro a)
+macroType = unaryType TMacro
 
 ioType :: TypePrim
-ioType = unaryType tIO
+ioType = unaryType TIO
 
-unaryType :: (forall a . a -> TyF a) -> TypePrim
+unaryType :: TypeConstructor -> TypePrim
 unaryType ctor = (implT, implP)
   where
     implT k dest stx = do
-      equateKinds stx KStar k
-      Stx _ _ (_, t) <- mustHaveEntries stx
-      tDest <- scheduleType KStar t
-      linkType dest (ctor tDest)
+      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
+      case oneOrTwoEntries of
+        Left (Identity _) -> do
+          equateKinds stx (kFun [KStar] KStar) k
+          linkType dest (TyF ctor [])
+        Right (_, t) -> do
+          equateKinds stx KStar k
+          tDest <- scheduleType KStar t
+          linkType dest (TyF ctor [tDest])
     implP dest stx = do
-      Stx _ _ (_, a) <- mustHaveEntries stx
-      (sc, n, x) <- prepareVar a
-      sch <- trivialScheme tType
-      linkTypePattern dest
-        (TypePattern $ ctor (n, x))
-        [(sc, n, x, sch)]
+      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
+      case oneOrTwoEntries of
+        Left (Identity _) -> do
+          linkTypePattern dest
+            (TypePattern $ TyF ctor [])
+            []
+        Right (_, a) -> do
+          (sc, n, x) <- prepareVar a
+          sch <- trivialScheme tType
+          linkTypePattern dest
+            (TypePattern $ TyF ctor [(n, x)])
+            [(sc, n, x, sch)]
 
 -------------
 -- Modules --
@@ -594,7 +626,7 @@ makeModule expandDeclForms bodyPtr stx =
 makeLocalType :: MacroDest -> Syntax -> Expand ()
 makeLocalType dest stx = do
   Stx _ _ (_, binder, body) <- mustHaveEntries stx
-  Stx _ _ theVar <- mustHaveEntries binder
+  Stx _ _ (Identity theVar) <- mustHaveEntries binder
   (sc, n, b) <- varPrepHelper theVar
   meta <- freshMeta Nothing
   let t = TMetaVar meta

@@ -688,22 +688,24 @@ initializeKernel outputChannel = do
                  , _datatypeName = dn
                  }
       let tyImpl =
-             \k dest stx -> do
-               equateKinds stx KStar k
-               Stx _ _ (me, args) <- mustBeCons stx
-               _ <- mustBeIdent me
-               if length args /= length argKinds
-                 then throwError $ WrongDatatypeArity stx dt
-                                     (fromIntegral $ length argKinds)
-                                     (length args)
-                 else do
-                   argDests <- traverse (uncurry scheduleType) (zip argKinds args)
-                   linkType dest $ tDatatype dt argDests
+            \k dest stx -> do
+              Stx _ _ (me, args) <- mustBeCons stx
+              _ <- mustBeIdent me
+              if length args > length argKinds
+                then throwError $ WrongDatatypeArity stx dt
+                                    (fromIntegral $ length argKinds)
+                                    (length args)
+                else do
+                  let missingArgs :: [Kind]
+                      missingArgs = drop (length args) argKinds
+                  equateKinds stx (kFun missingArgs KStar) k
+                  argDests <- traverse (uncurry scheduleType) (zip argKinds args)
+                  linkType dest $ tDatatype dt argDests
           patImpl =
             \dest stx -> do
               Stx _ _ (me, args) <- mustBeCons stx
               _ <- mustBeIdent me
-              if length args /= length argKinds
+              if length args > length argKinds
                 then throwError $ WrongDatatypeArity stx dt
                                     (fromIntegral $ length argKinds)
                                     (length args)

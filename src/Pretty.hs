@@ -6,7 +6,7 @@
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pretty (Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
+module Pretty (Doc, Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
@@ -345,6 +345,10 @@ instance Pretty VarInfo TypeConstructor where
   pp _   (TMetaVar v)   = text "META" <> viaShow v -- TODO
 
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
+  pp _ (TyF TFun []) =
+    parens (text "→")
+  pp env (TyF TFun [a]) =
+    parens (text "→" <+> pp env a)
   pp env (TyF TFun [a, b]) =
     parens $ align $ group $ vsep [pp env a <+> text "→", pp env b]
   pp env (TyF ctor args) =

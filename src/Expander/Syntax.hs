@@ -1,5 +1,6 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeFamilies #-}
 
@@ -7,8 +8,11 @@
 module Expander.Syntax where
 
 import Control.Monad.Except
+import Data.Functor.Identity (Identity(Identity))
+import Data.List (nub, sort)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Numeric.Natural
 
 import Expander.Error
 import Expander.Monad
@@ -59,38 +63,71 @@ mustBeModName (Syntax (Stx scs srcloc (Id "kernel"))) =
 mustBeModName other = throwError (NotModName other)
 
 
-class FixedLengthList a where
-  mustHaveEntries :: Syntax -> Expand (Stx a)
+mustHaveEntries
+  :: ( FixedLengthList item r
+     , item ~ Syntax
+     )
+  => Syntax -> Expand (Stx r)
+mustHaveEntries stx@(Syntax (Stx scs srcloc (List xs))) = do
+  case checkLength xs of
+    Right r -> do
+      pure (Stx scs srcloc r)
+    Left lengths -> do
+      throwError (NotRightLength lengths stx)
+mustHaveEntries other = do
+  throwError (NotList other)
 
-instance FixedLengthList () where
-  mustHaveEntries (Syntax (Stx scs srcloc (List []))) = return (Stx scs srcloc ())
-  mustHaveEntries other = throwError (NotRightLength 0 other)
+class FixedLengthList item r where
+  checkLength :: [item] -> Either [Natural] r
 
-instance FixedLengthList Syntax where
-  mustHaveEntries (Syntax (Stx scs srcloc (List [x]))) = return (Stx scs srcloc x)
-  mustHaveEntries other = throwError (NotRightLength 1 other)
+instance ( FixedLengthList item a
+         , FixedLengthList item b
+         ) => FixedLengthList item (Either a b)
+         where
+  checkLength xs
+    = case (checkLength xs, checkLength xs) of
+        (Right a, _)
+          -> pure (Left a)
+        (_, Right b)
+          -> pure (Right b)
+        (Left lengths1, Left lengths2)
+          -> Left $ nub $ sort (lengths1 ++ lengths2)
 
-instance (a ~ Syntax, b ~ Syntax) => FixedLengthList (a, b) where
-  mustHaveEntries (Syntax (Stx scs srcloc (List [x, y]))) = return (Stx scs srcloc (x, y))
-  mustHaveEntries other = throwError (NotRightLength 2 other)
+instance FixedLengthList item () where
+  checkLength []
+    = pure ()
+  checkLength _
+    = Left [0]
 
-instance (a ~ Syntax, b ~ Syntax, c ~ Syntax) => FixedLengthList (a, b, c) where
-  mustHaveEntries (Syntax (Stx scs srcloc (List [x, y, z]))) = return (Stx scs srcloc (x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 3 other)
+instance a ~ item => FixedLengthList item (Identity a) where
+  checkLength [x]
+    = pure (Identity x)
+  checkLength _
+    = Left [1]
 
-instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax) => FixedLengthList (a, b, c, d) where
-  mustHaveEntries (Syntax (Stx scs srcloc (List [w, x, y, z]))) = return (Stx scs srcloc (w, x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 4 other)
+instance (a ~ item, b ~ item) => FixedLengthList item (a, b) where
+  checkLength [x, y]
+    = return (x, y)
+  checkLength _
+    = Left [2]
 
-instance (a ~ Syntax, b ~ Syntax, c ~ Syntax, d ~ Syntax, e ~ Syntax) => FixedLengthList (a, b, c, d, e) where
-  mustHaveEntries (Syntax (Stx scs srcloc (List [v, w, x, y, z]))) =
-    return (Stx scs srcloc (v, w, x, y, z))
-  mustHaveEntries other = throwError (NotRightLength 5 other)
+instance (a ~ item, b ~ item, c ~ item) => FixedLengthList item (a, b, c) where
+  checkLength [x, y, z]
+    = pure (x, y, z)
+  checkLength _
+    = Left [3]
 
-instance (a ~ Syntax) => FixedLengthList [a] where
-  mustHaveEntries (Syntax (Stx scs srcloc (List xs))) =
-    return (Stx scs srcloc xs)
-  mustHaveEntries other = throwError (NotList other)
+instance (a ~ item, b ~ item, c ~ item, d ~ item) => FixedLengthList item (a, b, c, d) where
+  checkLength [w, x, y, z]
+    = pure (w, x, y, z)
+  checkLength _
+    = Left [4]
+
+instance (a ~ item, b ~ item, c ~ item, d ~ item, e ~ item) => FixedLengthList item (a, b, c, d, e) where
+  checkLength [v, w, x, y, z]
+    = pure (v, w, x, y, z)
+  checkLength _
+    = Left [5]
 
 
 class MustHaveShape a where
