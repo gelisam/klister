@@ -1,14 +1,14 @@
 #lang kernel
 
-(example (the Syntax (let (x 'foo) x)))
+(example (the (Syntax) (let (x 'foo) x)))
 
 (example (flet (f (x) (case x [(true) 'a] [(false) 'b])) (f (true))))
 
-(example (the Syntax (flet (f (x) 'a) (list-syntax ((f (true)) (f 4)) 'here))))
+(example (the (Syntax) (flet (f (x) 'a) (list-syntax ((f (true)) (f 4)) 'here))))
 
-(example (the Syntax (let (f (lambda (x) 'a)) (list-syntax ((f (true)) (f 4)) 'here))))
+(example (the (Syntax) (let (f (lambda (x) 'a)) (list-syntax ((f (true)) (f 4)) 'here))))
 
 (define id (lambda (x) x))
 
-(example (the Syntax (id 'foo)))
-(example (the Integer (id 45)))
+(example (the (Syntax) (id 'foo)))
+(example (the (Integer) (id 45)))

@@ -1,6 +1,6 @@
-#[lets.kl:3.31-3.34]<foo> : Syntax
+#[lets.kl:3.33-3.36]<foo> : Syntax
 #[lets.kl:5.40-5.41]<a> : Syntax
-#[lets.kl:7.72-7.76]<(a a)> : Syntax
-#[lets.kl:9.80-9.84]<(a a)> : Syntax
-#[lets.kl:13.27-13.30]<foo> : Syntax
+#[lets.kl:7.74-7.78]<(a a)> : Syntax
+#[lets.kl:9.82-9.86]<(a a)> : Syntax
+#[lets.kl:13.29-13.32]<foo> : Syntax
 45 : Integer

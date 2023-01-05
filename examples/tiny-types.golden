@@ -1,7 +1,7 @@
 (true) : Bool
 (false) : Bool
-#[tiny-types.kl:5.23-5.26]<foo> : Syntax
-pure #[tiny-types.kl:6.37-6.40]<foo> : (Macro Syntax)
+#[tiny-types.kl:5.25-5.28]<foo> : Syntax
+pure #[tiny-types.kl:6.39-6.42]<foo> : (Macro Syntax)
 #<closure> : (Bool → Bool)
 #<closure> : (Bool → Syntax)
 (free-identifier=?
