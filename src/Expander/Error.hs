@@ -55,7 +55,7 @@ data ExpansionErr
   | TypeCheckError TypeCheckError
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
-  | WrongDatatypeArity Syntax Datatype Natural Int
+  | WrongTypeArity Syntax TypeConstructor Natural Int
   | KindMismatch (Maybe SrcLoc) Kind Kind
   | CircularImports ModuleName [ModuleName]
   deriving (Show)
@@ -197,8 +197,8 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotAConstructor stx) =
     hang 2 $ group $ vsep [text "Not a constructor in", pp env stx]
-  pp env (WrongDatatypeArity stx dt arity got) =
-    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env dt
+  pp env (WrongTypeArity stx ctor arity got) =
+    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env ctor
                   , text "Wanted" <+> viaShow arity
                   , text "Got" <+> viaShow got
                   , text "In" <+> align (pp env stx)

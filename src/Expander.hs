@@ -390,14 +390,14 @@ initializeKernel outputChannel = do
   where
     typePrims :: [(Text, (Kind -> SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ()))]
     typePrims =
-      [ ("Syntax", Prims.baseType tSyntax)
-      , ("String", Prims.baseType tString)
-      , ("Integer", Prims.baseType tInteger)
-      , ("->", Prims.arrowType)
-      , ("Macro", Prims.macroType)
-      , ("IO", Prims.ioType)
-      , ("Output-Port", Prims.baseType tOutputPort)
-      , ("Type", Prims.baseType tType)
+      [ ("Syntax", Prims.baseType TSyntax)
+      , ("String", Prims.baseType TString)
+      , ("Integer", Prims.baseType TInteger)
+      , ("->", Prims.typeConstructor TFun [KStar, KStar])
+      , ("Macro", Prims.typeConstructor TMacro [KStar])
+      , ("IO", Prims.typeConstructor TIO [KStar])
+      , ("Output-Port", Prims.baseType TOutputPort)
+      , ("Type", Prims.baseType TType)
       ]
 
     funPrims :: [(Text, Scheme Ty, Value)]
@@ -687,36 +687,7 @@ initializeKernel outputChannel = do
                  { _datatypeModule = KernelName kernelName
                  , _datatypeName = dn
                  }
-      let tyImpl =
-            \k dest stx -> do
-              Stx _ _ (me, args) <- mustBeCons stx
-              _ <- mustBeIdent me
-              if length args > length argKinds
-                then throwError $ WrongDatatypeArity stx dt
-                                    (fromIntegral $ length argKinds)
-                                    (length args)
-                else do
-                  let missingArgs :: [Kind]
-                      missingArgs = drop (length args) argKinds
-                  equateKinds stx (kFun missingArgs KStar) k
-                  argDests <- traverse (uncurry scheduleType) (zip argKinds args)
-                  linkType dest $ tDatatype dt argDests
-          patImpl =
-            \dest stx -> do
-              Stx _ _ (me, args) <- mustBeCons stx
-              _ <- mustBeIdent me
-              if length args > length argKinds
-                then throwError $ WrongDatatypeArity stx dt
-                                    (fromIntegral $ length argKinds)
-                                    (length args)
-                else do
-                  varInfo <- traverse Prims.prepareVar args
-                  sch <- trivialScheme tType
-                  linkTypePattern dest
-                    (TypePattern $ tDatatype dt [(varStx, var) | (_, varStx, var) <- varInfo])
-                    [ (sc, n, x, sch)
-                    | (sc, n, x) <- varInfo
-                    ]
+      let (tyImpl, patImpl) = Prims.typeConstructor (TDatatype dt) argKinds
       let val = EPrimTypeMacro tyImpl patImpl
       b <- freshBinding
       bind b val
