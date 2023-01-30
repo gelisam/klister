@@ -628,8 +628,7 @@ initializeKernel outputChannel = do
 
     exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
     exprPrims =
-      [ ("oops", Prims.oops)
-      , ("error", Prims.err)
+      [ ("error", Prims.err)
       , ("the", Prims.the)
       , ("let", Prims.letExpr)
       , ("flet", Prims.flet)
@@ -643,7 +642,6 @@ initializeKernel outputChannel = do
       , ("bound-identifier=?", Prims.identEqual Bound)
       , ("free-identifier=?", Prims.identEqual Free)
       , ("quote", Prims.quote)
-      , ("ident", Prims.ident)
       , ("ident-syntax", Prims.identSyntax)
       , ("empty-list-syntax", Prims.emptyListSyntax)
       , ("cons-list-syntax", Prims.consListSyntax)

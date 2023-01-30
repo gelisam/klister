@@ -151,11 +151,6 @@ eval (Core (CoreSyntax syntax)) = do
 eval (Core (CoreCase loc scrutinee cases)) = do
   v <- eval scrutinee
   doCase loc v cases
-eval (Core (CoreIdentifier (Stx scopeSet srcLoc name))) = do
-  pure $ ValueSyntax
-       $ Syntax
-       $ Stx scopeSet srcLoc
-       $ Id name
 eval (Core (CoreIdent (ScopedIdent ident scope))) = do
   identSyntax <- evalAsSyntax ident
   case identSyntax of

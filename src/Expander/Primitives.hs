@@ -25,7 +25,6 @@ module Expander.Primitives
   , emptyListSyntax
   , err
   , flet
-  , ident
   , identEqual
   , identSyntax
   , lambda
@@ -37,7 +36,6 @@ module Expander.Primitives
   , makeIntroducer
   , Expander.Primitives.log
   , whichProblem
-  , oops
   , pureMacro
   , quote
   , replaceLoc
@@ -225,9 +223,6 @@ group expandDeclForms dest outScopesDest stx = do
 -- Expression primitives
 type ExprPrim = Ty -> SplitCorePtr -> Syntax -> Expand ()
 
-oops :: ExprPrim
-oops _t _dest stx = throwError (InternalError $ "oops" ++ show stx)
-
 err :: ExprPrim
 err _t dest stx = do
   Stx _ _ (_, msg) <- mustHaveEntries stx
@@ -367,13 +362,6 @@ quote t dest stx = do
   unify dest t tSyntax
   Stx _ _ (_, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
-
-ident :: ExprPrim
-ident t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, someId) <- mustHaveEntries stx
-  x@(Stx _ _ _) <- mustBeIdent someId
-  linkExpr dest $ CoreIdentifier x
 
 identSyntax :: ExprPrim
 identSyntax t dest stx = do

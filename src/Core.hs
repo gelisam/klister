@@ -161,7 +161,6 @@ data CoreF typePat pat core
   | CoreWhichProblem
   | CoreSyntax Syntax
   | CoreCase SrcLoc core [(SyntaxPattern, core)]
-  | CoreIdentifier Ident
   | CoreIdent (ScopedIdent core)
   | CoreEmpty (ScopedEmpty core)
   | CoreCons (ScopedCons core)
@@ -218,8 +217,6 @@ mapCoreF _f _g _h (CoreSyntax stx) =
   CoreSyntax stx
 mapCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc (h scrut) [(pat, h c) | (pat, c) <- cases]
-mapCoreF _f _g _h (CoreIdentifier n) =
-  CoreIdentifier n
 mapCoreF _f _g h (CoreIdent ident) =
   CoreIdent (fmap h ident)
 mapCoreF _f _g h (CoreEmpty args) =
@@ -276,8 +273,6 @@ traverseCoreF _f _g _h (CoreSyntax stx) =
   pure $ CoreSyntax stx
 traverseCoreF _f _g h (CoreCase loc scrut cases) =
   CoreCase loc <$> h scrut <*> for cases \(pat, c) -> (pat,) <$> h c
-traverseCoreF _f _g _h (CoreIdentifier n) =
-  pure $ CoreIdentifier n
 traverseCoreF _f _g h (CoreIdent ident) =
   CoreIdent <$> traverse h ident
 traverseCoreF _f _g h (CoreEmpty args) =
@@ -302,7 +297,6 @@ corePrimitiveCtor name args =
   in CoreCtor ctor args
 
 instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat core) where
-  shift i (CoreIdentifier ident) = CoreIdentifier (shift i ident)
   shift i (CoreSyntax stx) = CoreSyntax (shift i stx)
   shift i other = bimap (shift i) (shift i) other
 
@@ -356,9 +350,6 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
              (CoreCase _ scrutinee2 cases2) = do
     alphaCheck scrutinee1 scrutinee2
     alphaCheck cases1 cases2
-  alphaCheck (CoreIdentifier stx1)
-             (CoreIdentifier stx2) = do
-    alphaCheck stx1 stx2
   alphaCheck (CoreInteger i1)
              (CoreInteger i2) =
     guard $ i1 == i2
@@ -550,10 +541,6 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
    ++ shortShow scrutinee
    ++ " "
    ++ shortShow cases
-   ++ ")"
-  shortShow (CoreIdentifier stx)
-    = "(Identifier "
-   ++ shortShow stx
    ++ ")"
   shortShow (CoreIdent scopedIdent)
     = "(Ident "
