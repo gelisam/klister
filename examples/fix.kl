@@ -24,7 +24,7 @@
     length))
 
 
-(define l1 (the (Fix (ListF String)) (in (cons "hello" (in (cons "world" (in (nil))))))))
+(define l1 (the (Fix (ListF (String))) (in (cons "hello" (in (cons "world" (in (nil))))))))
 
 (example l1)
 

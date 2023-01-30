@@ -1,6 +1,4 @@
 resolver: lts-14.8
 packages:
 - .
-extra-deps:
-  - n-ary-functor-1.0
-
+extra-deps: []

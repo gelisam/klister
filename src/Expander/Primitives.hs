@@ -45,25 +45,22 @@ module Expander.Primitives
   , syntaxError
   , the
   , typeCase
-  -- * Type primitives
-  , arrowType
-  , baseType
-  , macroType
-  , ioType
-  , primitiveDatatype
   -- * Pattern primitives
   , elsePattern
   -- * Module primitives
   , makeModule
   -- * Anywhere primitives
   , makeLocalType
-  -- * Local primitives
-  , prepareVar
   -- * Primitive values
   , unaryIntegerPrim
   , binaryIntegerPrim
   , binaryIntegerPred
   , binaryStringPred
+  -- * Helpers
+  , prepareVar
+  , baseType
+  , typeConstructor
+  , primitiveDatatype
   ) where
 
 import Control.Lens hiding (List)
@@ -512,90 +509,41 @@ typeCase t dest stx = do
 type TypePrim =
   (Kind -> SplitTypePtr -> Syntax -> Expand (), TypePatternPtr -> Syntax -> Expand ())
 
-baseType :: (forall a . TyF a) -> TypePrim
-baseType ctor = (implT, implP)
+typeConstructor :: TypeConstructor -> [Kind] -> TypePrim
+typeConstructor ctor argKinds = (implT, implP)
   where
     implT k dest stx = do
-      equateKinds stx KStar k
-      _actualName <- mustBeIdent stx
-      linkType dest ctor
+      Stx _ _ (_, args) <- mustBeCons stx
+      if length args > length argKinds
+        then throwError $ WrongTypeArity stx ctor
+                            (fromIntegral $ length argKinds)
+                            (length args)
+        else do
+          let missingArgs :: [Kind]
+              missingArgs = drop (length args) argKinds
+          equateKinds stx (kFun missingArgs KStar) k
+          argDests <- traverse (uncurry scheduleType) (zip argKinds args)
+          linkType dest $ TyF ctor argDests
     implP dest stx = do
-      _actualName <- mustBeIdent stx
-      linkTypePattern dest
-        (TypePattern ctor)
-        []
-
-arrowType :: TypePrim
-arrowType = (implT, implP)
-  where
-    implT k dest stx = do
-      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
-      case oneToThreeEntries of
-        Left (Identity _) -> do
-          equateKinds stx (kFun [KStar, KStar] KStar) k
-          linkType dest $ TyF TFun []
-        Right (Left (_, arg)) -> do
-          equateKinds stx (kFun [KStar] KStar) k
-          argDest <- scheduleType KStar arg
-          linkType dest $ TyF TFun [argDest]
-        Right (Right (_, arg, ret)) -> do
-          equateKinds stx KStar k
-          argDest <- scheduleType KStar arg
-          retDest <- scheduleType KStar ret
-          linkType dest $ tFun1 argDest retDest
-    implP dest stx = do
-      Stx _ _ oneToThreeEntries <- mustHaveEntries stx
-      case oneToThreeEntries of
-        Left (Identity _) -> do
-          linkTypePattern dest
-            (TypePattern (TyF TFun []))
-            []
-        Right (Left (_, arg)) -> do
-          (sc1, n1, x1) <- prepareVar arg
+      Stx _ _ (_, args) <- mustBeCons stx
+      if length args > length argKinds
+        then throwError $ WrongTypeArity stx ctor
+                            (fromIntegral $ length argKinds)
+                            (length args)
+        else do
+          varInfo <- traverse prepareVar args
           sch <- trivialScheme tType
+          -- FIXME kind check here
           linkTypePattern dest
-            (TypePattern (TyF TFun [(n1, x1)]))
-            [(sc1, n1, x1, sch)]
-        Right (Right (_, arg, ret)) -> do
-          (sc1, n1, x1) <- prepareVar arg
-          (sc2, n2, x2) <- prepareVar ret
-          sch <- trivialScheme tType
-          linkTypePattern dest
-            (TypePattern (tFun1 (n1, x1) (n2, x2)))
-            [(sc1, n1, x1, sch), (sc2, n2, x2, sch)]
+            (TypePattern $ TyF ctor [ (varStx, var)
+                                    | (_, varStx, var) <- varInfo
+                                    ])
+            [ (sc, n, x, sch)
+            | (sc, n, x) <- varInfo
+            ]
 
-macroType :: TypePrim
-macroType = unaryType TMacro
-
-ioType :: TypePrim
-ioType = unaryType TIO
-
-unaryType :: TypeConstructor -> TypePrim
-unaryType ctor = (implT, implP)
-  where
-    implT k dest stx = do
-      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
-      case oneOrTwoEntries of
-        Left (Identity _) -> do
-          equateKinds stx (kFun [KStar] KStar) k
-          linkType dest (TyF ctor [])
-        Right (_, t) -> do
-          equateKinds stx KStar k
-          tDest <- scheduleType KStar t
-          linkType dest (TyF ctor [tDest])
-    implP dest stx = do
-      Stx _ _ oneOrTwoEntries <- mustHaveEntries stx
-      case oneOrTwoEntries of
-        Left (Identity _) -> do
-          linkTypePattern dest
-            (TypePattern $ TyF ctor [])
-            []
-        Right (_, a) -> do
-          (sc, n, x) <- prepareVar a
-          sch <- trivialScheme tType
-          linkTypePattern dest
-            (TypePattern $ TyF ctor [(n, x)])
-            [(sc, n, x, sch)]
+baseType :: TypeConstructor -> TypePrim
+baseType ctor = typeConstructor ctor []
 
 -------------
 -- Modules --
@@ -675,27 +623,8 @@ elsePattern (Right dest) stx = do
 addDatatype :: Ident -> Datatype -> [Kind] -> Expand ()
 addDatatype name dt argKinds = do
   name' <- addRootScope' name
-  let implType =
-        \k dest stx -> do
-          Stx _ _ (me, args) <- mustBeCons stx
-          _ <- mustBeIdent me
-          argDests <- traverse (uncurry scheduleType) (zip argKinds args)
-          let appKind = kFun (drop (length args) argKinds) KStar
-          equateKinds stx k appKind
-          linkType dest $ tDatatype dt argDests
-      implPat =
-        \dest stx -> do
-          Stx _ _ (me, args) <- mustBeCons stx
-          _ <- mustBeIdent me
-          patVarInfo <- traverse prepareVar args
-          sch <- trivialScheme tType
-          -- FIXME kind check here
-          linkTypePattern dest
-            (TypePattern $ tDatatype dt [(n, x) | (_, n, x) <- patVarInfo])
-            [ (sc, n, x, sch)
-            | (sc, n, x) <- patVarInfo
-            ]
-  let val = EPrimTypeMacro implType implPat
+  let (tyImpl, patImpl) = typeConstructor (TDatatype dt) argKinds
+  let val = EPrimTypeMacro tyImpl patImpl
   b <- freshBinding
   addDefinedBinding name' b
   bind b val
