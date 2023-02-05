@@ -790,20 +790,20 @@ addModuleScope :: HasScopes a => a -> Expand a
 addModuleScope stx = do
   mn <- view (expanderLocal . expanderModuleName) <$> ask
   sc <- moduleScope mn
-  return $ addScope' stx sc
+  return $ addScope' sc stx
 
 -- | Add the current phase's root scope at the current phase
 addRootScope :: HasScopes a => a -> Expand a
 addRootScope stx = do
   p <- currentPhase
   rsc <- phaseRoot
-  return (addScope p stx rsc)
+  return (addScope p rsc stx)
 
 -- | Add the current phase's root scope at all phases (for binding occurrences)
 addRootScope' :: HasScopes a => a -> Expand a
 addRootScope' stx = do
   rsc <- phaseRoot
-  return (addScope' stx rsc)
+  return (addScope' rsc stx)
 
 -- | Schedule an expression expansion task, returning the pointer to
 -- which it will be written.
