@@ -72,7 +72,7 @@ operationTests :: TestTree
 operationTests =
   testGroup "Core operations"
   [ testCase "Shifting core expressions" $
-    let sc = Scope 42 "Test suite"
+    let sc = Scope 42 "Test suite" False
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
         expr = Core (CoreApp (Core (CoreInteger 2))
@@ -573,7 +573,7 @@ genPhase =
   in more <$> Gen.int range256 <*> pure runtime
 
 genScope :: MonadGen m => m Scope
-genScope = Scope <$> Gen.int range1024 <*> Gen.text range16 Gen.lower
+genScope = Scope <$> Gen.int range1024 <*> Gen.text range16 Gen.lower <*> Gen.bool
 
 genSetScope :: MonadGen m => m (Set Scope)
 genSetScope = Gen.set range32 genScope
