@@ -18,7 +18,9 @@ module Syntax where
 
 import Control.Lens hiding (List)
 import Data.Data (Data)
+import Data.Set (Set)
 import Data.Text (Text)
+import qualified Data.Set as Set
 import qualified Data.Text as T
 
 import Alpha
@@ -132,6 +134,9 @@ addScopes scopeSet
                (\p a sc -> addScope p sc a)
                a0
                scopeSet
+
+removeUseSiteScopes :: HasScopes a => a -> a
+removeUseSiteScopes = mapScopes ScopeSet.deleteUseSiteScopes
 
 stxLoc :: Syntax -> SrcLoc
 stxLoc (Syntax (Stx _ srcloc _)) = srcloc

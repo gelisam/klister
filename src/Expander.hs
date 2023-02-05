@@ -226,7 +226,7 @@ visit modName = do
               getState
   unless visitedp $ do
     let m' = shift i m -- Shift the syntax literals in the module source code
-    sc <- freshScope $ T.pack $ "For module-phase " ++ shortShow modName ++ "-" ++ shortShow p
+    sc <- freshScope' $ T.pack $ "For module-phase " ++ shortShow modName ++ "-" ++ shortShow p
     let m'' = over ScopeSet.allScopeSets (ScopeSet.insertUniversally sc) m'
     evalResults <- inPhase p $ evalMod m''
     modifyState $
@@ -771,7 +771,7 @@ primImportModule dest outScopesDest importStx = do
   Stx scs loc (_, toImport) <- mustHaveEntries importStx
   spec <- importSpec toImport
   modExports <- getImports spec
-  sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
+  sc <- freshScope' $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
   flip forExports_ modExports $ \p x b -> inPhase p do
     imported <- addModuleScope =<< addRootScope' (addScope' sc (Stx scs loc x))
     addImportBinding imported b
@@ -1285,8 +1285,8 @@ expandOneForm prob stx
           forkAwaitingMacro b transformerName sourceIdent mdest prob stx
         EUserMacro transformerName -> do
           p <- currentPhase
-          macroScope <- freshScope $ T.pack $ "Identifiers introduced by macro " ++ shortShow ident
-          useSiteScope <- freshScope $ T.pack $ "Identifiers passed to macro " ++ shortShow ident
+          macroScope <- freshScope' $ T.pack $ "Identifiers introduced by macro " ++ shortShow ident
+          useSiteScope <- freshUseSiteScope $ T.pack $ "Identifiers passed to macro " ++ shortShow ident
           let stx' = addScope p macroScope    -- flipped below
                    $ addScope p useSiteScope  -- not flipped
                    $ stx
@@ -1437,7 +1437,7 @@ interpretMacroAction prob =
       liftIO $ prettyPrint stx >> putStrLn ""
       pure $ Done $ primitiveCtor "unit" []
     MacroActionIntroducer -> do
-      sc <- freshScope "User introduction scope"
+      sc <- freshScope' "User introduction scope"
       pure $ Done $
         ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
         ValueSyntax

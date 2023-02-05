@@ -33,6 +33,8 @@ module Expander.Monad
   , freshConstructor
   , freshDatatype
   , freshScope
+  , freshScope'
+  , freshUseSiteScope
   , freshVar
   , freshMacroVar
   , getDeclGroup
@@ -356,11 +358,17 @@ modifyState f = do
   st <- view expanderState <$> expanderContext
   liftIO (modifyIORef st f)
 
-freshScope :: Text -> Expand Scope
-freshScope why = do
+freshScope :: Bool -> Text -> Expand Scope
+freshScope isUseSiteScope why = do
   n <- view expanderNextScopeNum <$> getState
   modifyState $ over expanderNextScopeNum $ (+ 1)
-  return (Scope n why)
+  return (Scope n why isUseSiteScope)
+
+freshScope' :: Text -> Expand Scope
+freshScope' = freshScope False
+
+freshUseSiteScope :: Text -> Expand Scope
+freshUseSiteScope = freshScope True
 
 freshBinding :: Expand Binding
 freshBinding = Binding <$> liftIO newUnique
@@ -393,7 +401,7 @@ moduleScope' mn = do
   case Map.lookup mn mods of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope $ T.pack $ "Module root for " ++ shortShow mn
+      sc <- freshScope' $ T.pack $ "Module root for " ++ shortShow mn
       modifyState $ set (expanderModuleRoots . at mn) (Just sc)
       return sc
 
@@ -405,7 +413,7 @@ phaseRoot = do
   case Map.lookup p roots of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope $ T.pack $ "Root for phase " ++ shortShow p
+      sc <- freshScope' $ T.pack $ "Root for phase " ++ shortShow p
       modifyState $ set (expanderPhaseRoots . at p) (Just sc)
       return sc
 

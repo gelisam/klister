@@ -23,6 +23,7 @@ module ScopeSet (
   , insertUniversally
   , deleteAtPhase
   , deleteUniversally
+  , deleteUseSiteScopes
   , flipUniversally
   , allScopeSets
   ) where
@@ -107,6 +108,18 @@ deleteUniversally sc = set (phaseScopes . each . at sc)
                            Nothing
                      . set (universalScopes . at sc)
                            Nothing
+
+deleteUseSiteScopes :: ScopeSet -> ScopeSet
+deleteUseSiteScopes = removeFromSpecific . removeFromUniversal
+  where
+    removeFromSpecific :: ScopeSet -> ScopeSet
+    removeFromSpecific = over universalScopes removeFromSet
+
+    removeFromUniversal :: ScopeSet -> ScopeSet
+    removeFromUniversal = over (phaseScopes . each) removeFromSet
+
+    removeFromSet :: Set Scope -> Set Scope
+    removeFromSet = Set.filter (not . scopeIsUseSite)
 
 flipUniversally :: Scope -> ScopeSet -> ScopeSet
 flipUniversally sc = over (phaseScopes . each . at sc) flipper .
