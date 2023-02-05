@@ -9,6 +9,10 @@
 -- (lambda (x)
 --   (let [,misc-id 'other]
 --     x))
+-- =>
+-- (lambda (x{m1,lambda1})
+--   (let [x{m1-use,lambda1,let1} 'other]
+--     x{m1,lambda1,let1}))  -- unambiguous: only {m1,lambda1} is a subset
 (define-macros
   ([m1 (lambda (stx)
      (case (open-syntax stx)
@@ -32,42 +36,57 @@
   (m1 x))
 
 
--- (define ,misc-id (lambda (x) x))
-(define-macros
-  ([define-identity (lambda (stx)
-     (case (open-syntax stx)
-       [(list-contents (:: _ (:: misc-id (nil))))
-        (pure (((close-syntax 'stx) 'stx)
-               (list-contents (:: 'define
-                                (:: misc-id
-                                  (:: '(lambda (x) x)
-                                    (nil)))))))]))]))
-(define-identity f)
-(example (f 5))
+---- (define ,misc-id (lambda (x) x))
+---- =>
+---- (define x{define-identity-use,define1})
+--(define-macros
+--  ([define-identity (lambda (stx)
+--     (case (open-syntax stx)
+--       [(list-contents (:: _ (:: misc-id (nil))))
+--        (pure (((close-syntax 'stx) 'stx)
+--               (list-contents (:: 'define
+--                                (:: misc-id
+--                                  (:: '(lambda (x) x)
+--                                    (nil)))))))]))]))
+--(define-identity f)
+--(example (f 5))  -- not in scope: {define-identity-use,define1} is not a subset of {define1}
 
--- (group
---   (define ,misc-id 5)
---   (example x))
-(define-macros
-  ([define-five (lambda (stx)
-     (case (open-syntax stx)
-       [(list-contents (:: _ (:: misc-id (nil))))
-        (pure (((close-syntax 'stx) 'stx)
-               (list-contents (:: 'group
-                                (:: (((close-syntax 'stx) 'stx)
-                                     (list-contents (:: 'define
-                                                      (:: misc-id
-                                                        (:: '5
-                                                          (nil))))))
-                                  (:: '(example x)
-                                    (nil)))))))]))]))
-(define-five x)
-(example x)
+---- (group
+----   (define ,misc-id 5)
+----   (example x))
+---- =>
+---- (group
+----   (define x{define-five-use,define1} 5)
+----   (example x{define-five,define1}))  -- not in scope:
+----                                      -- {define-five-use,define1} is not a
+----                                      -- subset of {define-five,define1}
+--(define-macros
+--  ([define-five (lambda (stx)
+--     (case (open-syntax stx)
+--       [(list-contents (:: _ (:: misc-id (nil))))
+--        (pure (((close-syntax 'stx) 'stx)
+--               (list-contents (:: 'group
+--                                (:: (((close-syntax 'stx) 'stx)
+--                                     (list-contents (:: 'define
+--                                                      (:: misc-id
+--                                                        (:: '5
+--                                                          (nil))))))
+--                                  (:: '(example x)
+--                                    (nil)))))))]))]))
+--(define-five x)
+--(example x)  -- not in scope: {define-five-use,define1} is not a subset of {define1}
 
 -- (group
 --   (define x "defined six")
 --   (define ,misc-id 6)
 --   (example x))
+-- =>
+-- (group
+--   (define x{define-six,define1} "defined six")
+--   (define x{define-six-use,define1,define2} 6)
+--   (example x{define-six,define1,define2}))  -- unambiguous: only
+--                                             -- {define-six,define1} is a
+--                                             -- subset
 (define-macros
   ([define-six (lambda (stx)
      (case (open-syntax stx)
@@ -83,4 +102,5 @@
                                     (:: '(example x)
                                       (nil))))))))]))]))
 (define-six x)
-(example x)
+(example x)  -- not in scope: neither {define-six,define1} nor
+             -- {define-six-use,define1,define2} is a subset of {define1,define2}
