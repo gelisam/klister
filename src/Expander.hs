@@ -1284,14 +1284,18 @@ expandOneForm prob stx
         EIncompleteMacro transformerName sourceIdent mdest ->
           forkAwaitingMacro b transformerName sourceIdent mdest prob stx
         EUserMacro transformerName -> do
-          stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
           p <- currentPhase
+          macroScope <- freshScope $ T.pack $ "Identifiers introduced by macro " ++ shortShow ident
+          useSiteScope <- freshScope $ T.pack $ "Identifiers passed to macro " ++ shortShow ident
+          let stx' = addScope p macroScope    -- flipped below
+                   $ addScope p useSiteScope  -- not flipped
+                   $ stx
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
             Just (ValueClosure macroImpl) -> do
               macroVal <- inEarlierPhase $ expandEval $
                           apply macroImpl $
-                          ValueSyntax $ addScope p stepScope stx
+                          ValueSyntax stx'
               case macroVal of
                 ValueMacroAction act -> do
                   res <- interpretMacroAction prob act
@@ -1301,7 +1305,7 @@ expandOneForm prob stx
                     Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
-                          forkExpandSyntax prob (flipScope p stepScope expansionResult)
+                          forkExpandSyntax prob (flipScope p macroScope expansionResult)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
