@@ -84,15 +84,39 @@ Eventually the `Syntax` gets simplified into a core language which we can evalua
 
 `Core` expressions consist of function applications, pattern-matching, and constructors for the language's primitive types. Those primitive types include functions, booleans, signals, reified `Syntax` objects, and "macro actions". A macro action is a monadic block performing zero or more side-effects. These side-effects do not occur during evaluation, but rather during expansion, so we'll cover macro actions in more details in the `Expanding` section.
 
-TODO: what happened to strings? `Syntax` supports booleans, strings, and signals, but of those, `Core` only supports booleans and signals. Maybe we're instead supposed to manipulate a reified `Syntax` object holding a string?
+### `Ident` vs `Binding` vs `Var` vs `MacroVar`
 
-### `Core` variables: `Var`
+    -- The following definitions are simplified for ease of exposition.
 
-    newtype Var = Var Unique
+    data    Ident    = Ident   ScopeSet SrcLoc Text
+    newtype Binding  = Binding Unique
+    newtype Var      = Var     Unique
+    newtype MacroVar = MacroVar Unique
 
-In a core expression, variables don't have names, they have been translated into a form which avoids accidental capture.
+    newtype BindingTable = BindingTable (Map Ident Binding)
+    newtype ExpansionEnv = ExpansionEnv (Map Binding EValue)
+    data EValue
+      = ...
+      | ELambdaMacro
+      | EVarMacro Var
+      | EDefineMacrosMacro
+      | EUserMacro MacroVar
+    data Core
+      = ...
+      | CoreLam Var Core
+      | CoreVar Var
 
-TODO: how does this relate to scope sets?
+`Ident` is the representation of identifiers inside a `Syntax` object.
+
+Depending on the code into which it is spliced, an `Ident` may be unbound, ambiguous, or it may resolve to a `Binding` and a corresponding `EValue`. Simpler languages can afford to have identifiers resolve to values directly, but in Klister, `free-identifier=?` can determine whether two `Ident`s resolve to the same binding site, so it is important to be able to distinguish two binding sites which happen to bind their `Ident` to the same `EValue`.
+
+The `E` in `EValue` stands for "expansion-time", not "evaluation-time". This means that when expanding an identifier-headed expression, the expander resolve that identifier to an `EValue`, and that tells the expander which macro to call. For example, the kernel's `lambda` resolves to `ELambdaMacro`.
+
+In a core expression, variables don't have names, they use unique `Var`s to avoid accidental capture. Thus, `ELambdaMacro` expands to the partial core expression `CoreLam <var>`, with a fresh `Var`.
+
+This core expression is partial because the body is missing. The body may contain more macro calls, and thus needs to be expanded. It must be expanded in an extended `ExpansionEnv` in which the variable bound by the lambda resolves to (a fresh `Binding` and a corresponding) `EVarMacro <var>`, which in turn expands to `CoreVar <var>`.
+
+Finally, `define-macros` is similar to `lambda` in that it binds a variable which may be used later on. The variable bound by `define-macros` resolves to (a fresh `Binding` and a corresponding) `EUserMacro <macro-var>`, with a fresh `MacroVar`.
 
 ### `SplitCore` and `PartialCore`
 
