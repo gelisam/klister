@@ -1,0 +1,86 @@
+#lang kernel
+(import (shift kernel 1))
+
+-- The examples in this file are very verbose because they use the kernel
+-- language, not the prelude language. This is necessary because those example
+-- demonstrate the behaviour of various implementations of use-site scopes, and
+-- some of those implementations break the prelude language.
+
+-- (lambda (x)
+--   (let [,misc-id 'other]
+--     x))
+(define-macros
+  ([m1 (lambda (stx)
+     (case (open-syntax stx)
+       [(list-contents (:: _ (:: misc-id (nil))))
+        (pure (((close-syntax 'stx) 'stx)
+               (list-contents (:: 'lambda
+                                (:: (((close-syntax 'stx) 'stx)
+                                     (list-contents (:: 'x
+                                                      (nil))))
+                                  (:: (((close-syntax 'stx) 'stx)
+                                       (list-contents (:: 'let
+                                                        (:: (((close-syntax 'stx) 'stx)
+                                                             (list-contents (:: misc-id
+                                                                              (:: ''other
+                                                                                (nil)))))
+                                                          (:: 'x
+                                                            (nil))))))
+                                    (nil)))))))
+       ]))]))
+(example
+  (m1 x))
+
+
+-- (define ,misc-id (lambda (x) x))
+(define-macros
+  ([define-identity (lambda (stx)
+     (case (open-syntax stx)
+       [(list-contents (:: _ (:: misc-id (nil))))
+        (pure (((close-syntax 'stx) 'stx)
+               (list-contents (:: 'define
+                                (:: misc-id
+                                  (:: '(lambda (x) x)
+                                    (nil)))))))]))]))
+(define-identity f)
+(example (f 5))
+
+-- (group
+--   (define ,misc-id 5)
+--   (example x))
+(define-macros
+  ([define-five (lambda (stx)
+     (case (open-syntax stx)
+       [(list-contents (:: _ (:: misc-id (nil))))
+        (pure (((close-syntax 'stx) 'stx)
+               (list-contents (:: 'group
+                                (:: (((close-syntax 'stx) 'stx)
+                                     (list-contents (:: 'define
+                                                      (:: misc-id
+                                                        (:: '5
+                                                          (nil))))))
+                                  (:: '(example x)
+                                    (nil)))))))]))]))
+(define-five x)
+(example x)
+
+-- (group
+--   (define x "defined six")
+--   (define ,misc-id 6)
+--   (example x))
+(define-macros
+  ([define-six (lambda (stx)
+     (case (open-syntax stx)
+       [(list-contents (:: _ (:: misc-id (nil))))
+        (pure (((close-syntax 'stx) 'stx)
+               (list-contents (:: 'group
+                                (:: '(define x "defined six")
+                                  (:: (((close-syntax 'stx) 'stx)
+                                       (list-contents (:: 'define
+                                                        (:: misc-id
+                                                          (:: '6
+                                                            (nil))))))
+                                    (:: '(example x)
+                                      (nil))))))))]))]))
+(define-six x)
+(example x)
