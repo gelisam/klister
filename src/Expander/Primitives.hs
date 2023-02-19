@@ -107,7 +107,7 @@ define dest outScopesDest stx = do
   p <- currentPhase
   Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
   sc <- freshScope' $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
-  x <- addScope' sc <$> mustBeIdent varStx
+  x <- addScope' sc <$> mustBeIdent (removeUseSiteScopes varStx)
   b <- freshBinding
   addDefinedBinding x b
   var <- freshVar
