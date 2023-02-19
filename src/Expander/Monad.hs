@@ -780,7 +780,7 @@ bind b v =
 addBinding :: Ident -> Binding -> BindingInfo SrcLoc -> Expand ()
 addBinding (Stx scs _ name) b info = do
   modifyState $ over (expanderCurrentBindingTable . at name) $
-    (Just . ((scs, b, info) :) . fromMaybe [])
+    (Just . ((ScopeSet.deleteUseSiteScopes scs, b, info) :) . fromMaybe [])
 
 addImportBinding :: Ident -> Binding -> Expand ()
 addImportBinding x@(Stx _ loc _) b =
