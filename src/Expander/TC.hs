@@ -253,7 +253,7 @@ unifyWithBlame blame depth t1 t2 = do
             (Ty (TyF (TMetaVar ptr2) (take (argCount2 - argCount) args2)))
 
     -- Flex-rigid
-    unifyTyFs expected@(TyF (TMetaVar ptr1) args1) received@(TyF ctor2 args2)
+    unifyTyFs shouldBe@(TyF (TMetaVar ptr1) args1) received@(TyF ctor2 args2)
       | null args1 =
         linkVar ptr1 t2
       | length args1 <= length args2 = do
@@ -261,9 +261,9 @@ unifyWithBlame blame depth t1 t2 = do
             zip args1 (drop (length args2 - length args1) args2)
           let args2' = take (length args2 - length args1) args2
           unifyWithBlame blame (depth + 1) (Ty $ TyF (TMetaVar ptr1) []) (Ty $ TyF ctor2 args2')
-      | otherwise = liftIO (putStrLn "hey") >> mismatch expected received
+      | otherwise = mismatch shouldBe received
 
-    unifyTyFs expected@(TyF ctor1 args1) received@(TyF (TMetaVar ptr2) args2)
+    unifyTyFs shouldBe@(TyF ctor1 args1) received@(TyF (TMetaVar ptr2) args2)
       | null args2 = do
           linkVar ptr2 t1
       | length args2 <= length args1 = do
@@ -271,20 +271,20 @@ unifyWithBlame blame depth t1 t2 = do
             zip (drop (length args1 - length args2) args1) args2
           let args1' = take (length args1 - length args2) args1
           unifyWithBlame blame (depth + 1) (Ty $ TyF ctor1 args1') (Ty $ TyF (TMetaVar ptr2) [])
-      | otherwise = mismatch expected received
+      | otherwise = mismatch shouldBe received
 
 
-    unifyTyFs expected@(TyF ctor1 args1) received@(TyF ctor2 args2)
+    unifyTyFs shouldBe@(TyF ctor1 args1) received@(TyF ctor2 args2)
       -- Rigid-rigid
       | ctor1 == ctor2 && length args1 == length args2 =
           for_ (zip args1 args2) $ \(arg1, arg2) ->
             unifyWithBlame blame (depth + 1) arg1 arg2
-      | otherwise = mismatch expected received
+      | otherwise = mismatch shouldBe received
 
-    mismatch expected received = do
+    mismatch shouldBe received = do
         let (here, outerExpected, outerReceived) = blame
         loc <- getBlameLoc here
-        e' <- normAll $ Ty expected
+        e' <- normAll $ Ty shouldBe
         r' <- normAll $ Ty received
         if depth == 0
           then throwError $ TypeCheckError $ TypeMismatch loc e' r' Nothing

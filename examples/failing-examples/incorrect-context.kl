@@ -1,0 +1,5 @@
+#lang "prelude.kl"
+
+-- Expected to fail. Define should only work in a declaration context. But
+-- example expects an expression
+(example (define x 5))

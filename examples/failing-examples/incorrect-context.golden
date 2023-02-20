@@ -1,0 +1,4 @@
+#[incorrect-context.kl:5.10-5.22]<(define x 5)>:
+  Used in a position expecting an expression
+  but is valid in a position expecting a top-level declaration or example
+ExitFailure 1
