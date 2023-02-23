@@ -9,6 +9,10 @@
 -- (lambda (x)
 --   (let [,misc-id 'other]
 --     x))
+-- =>
+-- (lambda (x{m1,lambda1})
+--   (let [x{post-define1,lambda1,let1} 'other]
+--     x{m1,lambda1,let1))  -- unambiguous: only {m1,lambda1} is a subset
 (define-macros
   ([m1 (lambda (stx)
      (case (open-syntax stx)
@@ -33,6 +37,8 @@
 
 
 -- (define ,misc-id (lambda (x) x))
+-- =>
+-- (define f{post-define1,define1} (lambda (x) (x)))
 (define-macros
   ([define-identity (lambda (stx)
      (case (open-syntax stx)
@@ -43,11 +49,15 @@
                                   (:: '(lambda (x) x)
                                     (nil)))))))]))]))
 (define-identity f)
-(example (f 5))
+(example (f 5))  -- in scope: {post-define1,define1} in a subset of {post-define1,define1}
 
 -- (group
 --   (define ,misc-id 5)
 --   (example x))
+-- =>
+-- (group
+--   (define x{post-define1,define1} 5)
+--   (example x{define1}))  -- no x in scope: {post-define1,define1} is not a subset of {define1}
 (define-macros
   ([define-five (lambda (stx)
      (case (open-syntax stx)
@@ -68,6 +78,11 @@
 --   (define x "defined six")
 --   (define ,misc-id 6)
 --   (example x))
+-- =>
+-- (group
+--   (define x{define1} "defined six")
+--   (define x{post-define1,define1} 6)
+--   (example x{define1}))  -- unambiguous: only {define1} is a subset
 (define-macros
   ([define-six (lambda (stx)
      (case (open-syntax stx)
