@@ -106,8 +106,8 @@ define :: DeclPrim
 define dest outScopesDest stx = do
   p <- currentPhase
   Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
-  sc <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
-  x <- addScope' sc <$> mustBeIdent varStx
+  postDefineScope <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
+  x <- addScope' postDefineScope <$> mustBeIdent varStx
   b <- freshBinding
   addDefinedBinding x b
   var <- freshVar
@@ -123,7 +123,7 @@ define dest outScopesDest stx = do
   modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
     Env.insert var x schPtr
   forkGeneralizeType exprDest t schPtr
-  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
+  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase postDefineScope p)
 
 datatype :: DeclPrim
 datatype dest outScopesDest stx = do
@@ -171,7 +171,12 @@ defineMacros dest outScopesDest stx = do
   Stx _ _ (_, macroList) <- mustHaveEntries stx
   Stx _ _ macroDefs <- mustBeList macroList
   p <- currentPhase
+  -- 'sc' allows the newly-defined macros to generate code containing calls to
+  -- any of the other newly-defined macros, while 'postDefineScope' allows the
+  -- code which follows the @define-macros@ call to refer to the newly-defined
+  -- macros.
   sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
+  postDefineScope <- freshScope $ T.pack $ "For macro-definition at " ++ shortShow (stxLoc stx)
   macros <- for macroDefs $ \def -> do
     Stx _ _ (mname, mdef) <- mustHaveEntries def
     theName <- addScope' sc <$> mustBeIdent mname
@@ -184,7 +189,10 @@ defineMacros dest outScopesDest stx = do
     bind b $ EIncompleteMacro v theName macroDest
     return (theName, v, macroDest)
   linkOneDecl dest $ DefineMacros macros
-  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
+  linkDeclOutputScopes outScopesDest ( ScopeSet.insertAtPhase p sc
+                                     $ ScopeSet.insertAtPhase p postDefineScope
+                                     $ ScopeSet.empty
+                                     )
 
 example :: DeclPrim
 example dest outScopesDest stx = do
