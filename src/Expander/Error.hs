@@ -1,6 +1,14 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE OverloadedStrings #-}
-module Expander.Error where
+{-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings     #-}
+module Expander.Error
+  ( ExpansionErr(..)
+  , SyntacticCategory(..)
+  , TypeCheckError(..)
+  , Tenon, tenon, Mortise, mortise
+  , notRightLength
+  ) where
 
 import Control.Lens
 import Numeric.Natural
@@ -49,8 +57,8 @@ data ExpansionErr
   | NotExported Ident Phase
   | ReaderError Text
   | WrongSyntacticCategory Syntax
-      SyntacticCategory  -- actual
-      SyntacticCategory  -- expected
+      (Tenon SyntacticCategory)
+      (Mortise SyntacticCategory)
   | NotValidType Syntax
   | TypeCheckError TypeCheckError
   | WrongArgCount Syntax Constructor Int Int
@@ -59,6 +67,24 @@ data ExpansionErr
   | KindMismatch (Maybe SrcLoc) Kind Kind
   | CircularImports ModuleName [ModuleName]
   deriving (Show)
+
+-- | A newtype to add a type level witness that differentiates between a
+-- @Mortise@ (a hole in woodworking) and a @Tenon@ tongue that fill the hole.
+newtype Mortise a = Mortise { unMortise :: a }
+  deriving newtype Show
+
+-- | A newtype to add a type level witness that differentiates between a @Tenon@
+-- tongue which fills a @Mortise@ hole.
+newtype Tenon a = Tenon { unTenon :: a }
+  deriving newtype Show
+
+-- | helper function to construct a @Mortise@
+mortise :: a -> Mortise a
+mortise = Mortise
+
+-- | helper function to construct a @Tenon@
+tenon :: a -> Tenon a
+tenon = Tenon
 
 notRightLength :: Natural -> Syntax -> ExpansionErr
 notRightLength n = NotRightLength [n]
@@ -172,16 +198,16 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
-  pp env (WrongSyntacticCategory stx actual expected) =
+  pp env (WrongSyntacticCategory stx is shouldBe) =
     hang 2 $ group $
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
                           vsep [ text "Used in a position expecting"
-                               , pp env expected
+                               , pp env (unMortise shouldBe)
                                ]
                         , group $ hang 2 $
                           vsep [ text "but is valid in a position expecting"
-                               , pp env actual
+                               , pp env (unTenon is)
                                ]
                         ]
          ]
@@ -213,13 +239,13 @@ instance Pretty VarInfo ExpansionErr where
                   , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
 
 instance Pretty VarInfo TypeCheckError where
-  pp env (TypeMismatch loc expected got specifically) =
+  pp env (TypeMismatch loc shouldBe got specifically) =
     group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
                                          , maybe (text "unknown location") (pp env) loc <> text "."
                                          ]
                  , group $ vsep $
                    [ group $ hang 2 $ vsep [ text "Expected"
-                                           , pp env expected
+                                           , pp env shouldBe
                                            ]
                    , group $ hang 2 $ vsep [ text "but got"
                                            , pp env got

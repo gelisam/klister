@@ -42,16 +42,16 @@ mkGoldenTests = do
                    $ allKlisterFiles
   return $ testGroup "Golden tests"
     [ testCase testName $ do
-        actual <- execWriterT $ runExamples klisterFile
+        actual' <- execWriterT $ runExamples klisterFile
         firstRun <- not <$> doesFileExist goldenFile
         when firstRun $ do
           putStrLn $ "first run: creating " ++ goldenFile
-          Text.writeFile goldenFile actual
-        expected <- Text.readFile goldenFile
-        when (actual /= expected) $ do
+          Text.writeFile goldenFile actual'
+        expected' <- Text.readFile goldenFile
+        when (actual' /= expected') $ do
           assertFailure . Text.unpack
-                        $ "expected:\n" <> expected
-                       <> "\ngot:\n" <> actual
+                        $ "expected:\n" <> expected'
+                       <> "\ngot:\n" <> actual'
     | klisterFile <- klisterFiles
     , let testName = takeBaseName klisterFile
     , let goldenFile = replaceExtension klisterFile ".golden"
