@@ -106,8 +106,8 @@ define :: DeclPrim
 define dest outScopesDest stx = do
   p <- currentPhase
   Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
-  sc <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
-  x <- flip addScope' sc <$> mustBeIdent varStx
+  postDefineScope <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
+  x <- addScope' postDefineScope <$> mustBeIdent varStx
   b <- freshBinding
   addDefinedBinding x b
   var <- freshVar
@@ -123,7 +123,7 @@ define dest outScopesDest stx = do
   modifyState $ over (expanderDefTypes . at ph . non Env.empty) $
     Env.insert var x schPtr
   forkGeneralizeType exprDest t schPtr
-  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
+  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase postDefineScope p)
 
 datatype :: DeclPrim
 datatype dest outScopesDest stx = do
@@ -134,7 +134,7 @@ datatype dest outScopesDest stx = do
     prepareTypeVar i a
   sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
   let typeScopes = map (view _1) typeArgs ++ [sc]
-  realName <- mustBeIdent (addScope' name sc)
+  realName <- mustBeIdent (addScope' sc name)
   p <- currentPhase
   d <- freshDatatype realName
   let argKinds = map (view _3) typeArgs
@@ -144,7 +144,7 @@ datatype dest outScopesDest stx = do
     Stx _ _ (cn, ctorArgs) <- mustBeCons spec
     realCN <- mustBeIdent cn
     ctor <- freshConstructor realCN
-    let ctorArgs' = [ foldr (flip (addScope p)) t typeScopes
+    let ctorArgs' = [ foldr (addScope p) t typeScopes
                     | t <- ctorArgs
                     ]
     argTypes <- traverse (scheduleType KStar) ctorArgs'
@@ -171,20 +171,28 @@ defineMacros dest outScopesDest stx = do
   Stx _ _ (_, macroList) <- mustHaveEntries stx
   Stx _ _ macroDefs <- mustBeList macroList
   p <- currentPhase
+  -- 'sc' allows the newly-defined macros to generate code containing calls to
+  -- any of the other newly-defined macros, while 'postDefineScope' allows the
+  -- code which follows the @define-macros@ call to refer to the newly-defined
+  -- macros.
   sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
+  postDefineScope <- freshScope $ T.pack $ "For macro-definition at " ++ shortShow (stxLoc stx)
   macros <- for macroDefs $ \def -> do
     Stx _ _ (mname, mdef) <- mustHaveEntries def
-    theName <- flip addScope' sc <$> mustBeIdent mname
+    theName <- addScope' sc <$> mustBeIdent mname
     b <- freshBinding
     addDefinedBinding theName b
     macroDest <- inEarlierPhase $
                    schedule (tFun1 tSyntax (tMacro tSyntax))
-                     (addScope p mdef sc)
+                     (addScope p sc mdef)
     v <- freshMacroVar
     bind b $ EIncompleteMacro v theName macroDest
     return (theName, v, macroDest)
   linkOneDecl dest $ DefineMacros macros
-  linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase sc p)
+  linkDeclOutputScopes outScopesDest ( ScopeSet.insertAtPhase p sc
+                                     $ ScopeSet.insertAtPhase p postDefineScope
+                                     $ ScopeSet.empty
+                                     )
 
 example :: DeclPrim
 example dest outScopesDest stx = do
@@ -251,7 +259,9 @@ letExpr t dest stx = do
   sch <- liftIO $ newSchemePtr
   forkGeneralizeType defDest xTy sch
   bodyDest <- withLocalVarType x' coreX sch $
-                schedule t $ addScope p (addScope p body sc) psc
+                schedule t $
+                addScope p psc $
+                addScope p sc body
   linkExpr dest $ CoreLet x' coreX defDest bodyDest
 
 flet :: ExprPrim
@@ -272,13 +282,16 @@ flet t dest stx = do
              withLocalVarType f' coreF fsch $
              withLocalVarType x' coreX xsch $
              schedule rt $
-             addScope p (addScope p (addScope p def fsc) xsc) psc
+             addScope p psc $
+             addScope p xsc $
+             addScope p fsc def
   unify dest ft (tFun1 xt rt)
   sch <- liftIO newSchemePtr
   forkGeneralizeType defDest ft sch
   bodyDest <- withLocalVarType f' coreF sch $
               schedule t $
-              addScope p (addScope p body fsc) psc
+              addScope p psc $
+              addScope p fsc body
   linkExpr dest $ CoreLetFun f' coreF x' coreX defDest bodyDest
 
 lambda :: ExprPrim
@@ -294,7 +307,9 @@ lambda t dest stx = do
   sch <- trivialScheme argT
   bodyDest <-
     withLocalVarType arg' coreArg sch $
-      schedule retT $ addScope p (addScope p body sc) psc
+      schedule retT $
+      addScope p psc $
+      addScope p sc body
   linkExpr dest $ CoreLam arg' coreArg bodyDest
 
 app :: ExprPrim
@@ -440,15 +455,15 @@ letSyntax t dest stx = do
   -- added to the correct phase in potential use sites.
   -- This prevents the body of the macro (in an earlier
   -- phase) from being able to refer to the macro itself.
-  let m' = addScope' m sc
+  let m' = addScope' sc m
   b <- freshBinding
   addLocalBinding m' b
   v <- freshMacroVar
   macroDest <- inEarlierPhase $ do
     psc <- phaseRoot
     schedule (tFun1 tSyntax (tMacro tSyntax))
-      (addScope (prior p) mdef psc)
-  forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p body sc)
+      (addScope (prior p) psc mdef)
+  forkAwaitingMacro b v m' macroDest (ExprDest t dest) (addScope p sc body)
 
 makeIntroducer :: ExprPrim
 makeIntroducer t dest stx = do
@@ -579,7 +594,7 @@ makeLocalType dest stx = do
   addLocalBinding n b
   bind b $ EPrimTypeMacro tyImpl patImpl
 
-  forkExpandSyntax dest (addScope p body sc)
+  forkExpandSyntax dest (addScope p sc body)
 
 --------------
 -- Patterns --
@@ -627,14 +642,14 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "ident")),
                            patVar])) -> do
       (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p rhs sc
+      let rhs' = addScope p sc rhs
       rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
       let patOut = SyntaxPatternIdentifier x' var
       return (patOut, rhsDest)
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "integer")),
                            patVar])) -> do
       (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p rhs sc
+      let rhs' = addScope p sc rhs
       strSch <- trivialScheme tInteger
       rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
       let patOut = SyntaxPatternInteger x' var
@@ -642,7 +657,7 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "string")),
                            patVar])) -> do
       (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p rhs sc
+      let rhs' = addScope p sc rhs
       strSch <- trivialScheme tString
       rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
       let patOut = SyntaxPatternString x' var
@@ -650,7 +665,7 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
                            Syntax (Stx _ _ (List vars))])) -> do
       varInfo <- traverse prepareVar vars
-      let rhs' = foldr (flip (addScope p)) rhs [sc | (sc, _, _) <- varInfo]
+      let rhs' = foldr (addScope p) rhs [sc | (sc, _, _) <- varInfo]
       rhsDest <- withLocalVarTypes [(var, vIdent, sch) | (_, vIdent, var) <- varInfo] $
                    schedule t rhs'
       let patOut = SyntaxPatternList [(vIdent, var) | (_, vIdent, var) <- varInfo]
@@ -660,7 +675,7 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
                            cdr])) -> do
       (sc, car', carVar) <- prepareVar car
       (sc', cdr', cdrVar) <- prepareVar cdr
-      let rhs' = addScope p (addScope p rhs sc) sc'
+      let rhs' = addScope p sc' $ addScope p sc rhs
       rhsDest <- withLocalVarTypes [(carVar, car', sch), (cdrVar, cdr', sch)] $
                    schedule t rhs'
       let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
@@ -710,7 +725,7 @@ varPrepHelper varStx = do
   x <- mustBeIdent varStx
   p <- currentPhase
   psc <- phaseRoot
-  let x' = addScope' (addScope p x sc) psc
+  let x' = addScope' psc $ addScope p sc x
   b <- freshBinding
   addLocalBinding x' b
   return (sc, x', b)

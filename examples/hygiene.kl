@@ -2,6 +2,9 @@
 
 (import (shift "prelude.kl" 1))
 (import (shift "quasiquote.kl" 1))
+(import (shift "list.kl" 1))
+(import "define-syntax-rule.kl")
+
 
 (define fun (lambda (x y) x))
 
@@ -21,3 +24,29 @@
         [_ (syntax-error '"bad syntax" stx)]))]))
 
 (example ((should-not-capture fun) (lambda (x y) x) 'a 'b))
+
+-- In Racket, the following code demonstrates the need for "use-site scopes",
+-- as without them, the x introduced by ,misc-id would cause an accidental
+-- capture. In this file, this same code demonstrates that Klister doesn't need
+-- use-site scopes (because Klister's definition contexts are not recursive;
+-- see issue #187).
+(define-macros
+  ([should-be-id
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (list _ misc-id))
+         (pure `(lambda (x)
+                  (let [,misc-id 'other]
+                    x)))]))]))
+(example
+  ((should-be-id x) 5))
+
+-- The following example demonstrates that we can have two (define x ...)
+-- declarations with overlapping scopes without any accidental captures.
+(define-syntax-rule (define-six misc-id)
+  (group
+    (define x "defined six")
+    (define misc-id 6)
+    (example x)))
+(define-six x)
+(example x)

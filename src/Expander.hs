@@ -773,7 +773,7 @@ primImportModule dest outScopesDest importStx = do
   modExports <- getImports spec
   sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
   flip forExports_ modExports $ \p x b -> inPhase p do
-    imported <- addModuleScope =<< addRootScope' (addScope' (Stx scs loc x) sc)
+    imported <- addModuleScope =<< addRootScope' (addScope' sc (Stx scs loc x))
     addImportBinding imported b
   linkOneDecl dest (Import spec)
   linkDeclOutputScopes outScopesDest (ScopeSet.singleUniversalScope sc)
@@ -967,7 +967,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Nothing ->
           stillStuck tid task
         Just newScopeSet ->
-          expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes stx newScopeSet)
+          expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes newScopeSet stx)
     InterpretMacroAction dest act outerKont ->
       interpretMacroAction dest act >>= \case
         StuckOnType loc ty env cases innerKont ->
@@ -1049,7 +1049,7 @@ runTask (tid, localData, task) = withLocal localData $ do
                     concat <$> traverse getVarInfo ptrs
           vars <- getVarInfo patPtr
           p <- currentPhase
-          let rhs' = foldr (flip (addScope p)) stx
+          let rhs' = foldr (addScope p) stx
                        [ sc'
                        | (sc', _, _, _) <- vars
                        ]
@@ -1068,7 +1068,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             Nothing -> throwError $ InternalError "Type pattern info not added"
             Just vars -> do
               p <- currentPhase
-              let rhs' = foldr (flip (addScope p)) stx
+              let rhs' = foldr (addScope p) stx
                            [ sc'
                            | (sc', _, _, _) <- vars
                            ]
@@ -1298,7 +1298,7 @@ expandOneForm prob stx
             Just (ValueClosure macroImpl) -> do
               macroVal <- inEarlierPhase $ expandEval $
                           apply macroImpl $
-                          ValueSyntax $ addScope p stx stepScope
+                          ValueSyntax $ addScope p stepScope stx
               case macroVal of
                 ValueMacroAction act -> do
                   res <- interpretMacroAction prob act
@@ -1308,7 +1308,7 @@ expandOneForm prob stx
                     Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
-                          forkExpandSyntax prob (flipScope p expansionResult stepScope)
+                          forkExpandSyntax prob (flipScope p stepScope expansionResult)
                         other -> throwError $ ValueNotSyntax other
                 other ->
                   throwError $ ValueNotMacro other
@@ -1445,9 +1445,9 @@ interpretMacroAction prob =
         ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
         ValueSyntax
           case view (constructorName . constructorNameText) ctor of
-            "add" -> addScope' stx sc
-            "flip" -> flipScope' stx sc
-            "remove" -> removeScope' stx sc
+            "add" -> addScope' sc stx
+            "flip" -> flipScope' sc stx
+            "remove" -> removeScope' sc stx
             _ -> error "Impossible!"
     MacroActionWhichProblem -> do
       case prob of

@@ -299,8 +299,9 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           , \m _ ->
               view moduleBody m & map (view completeDecl) &
               \case
-                [Import _, Import _, Define _ fun1 _ firstFun, DefineMacros [_], Define _ fun2 _ secondFun,
-                 Example _ _ e1, Example _ _ e2, DefineMacros [_], Example _ _ e3] -> do
+                (Import _ : Import _ : Import _ : Import _ : Define _ fun1 _ firstFun : DefineMacros [_] :
+                 Define _ fun2 _ secondFun : Example _ _ e1 : Example _ _ e2 : DefineMacros [_] :
+                 Example _ _ e3 : _) -> do
                   spec1 <- lam \x -> lam \_y -> x
                   spec2 <- lam \_x -> lam \y -> y
                   assertAlphaEq "First fun drops second argument" firstFun spec1

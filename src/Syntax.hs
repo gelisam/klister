@@ -11,6 +11,7 @@ core language by the expander.
 {-# LANGUAGE DeriveFunctor #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
 module Syntax where
@@ -62,17 +63,17 @@ makeLenses ''ParsedModule
 
 class HasScopes a where
   getScopes :: a -> ScopeSet
-  adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> a -> Scope -> a
+  adjustScope :: (Scope -> ScopeSet -> ScopeSet) -> Scope -> a -> a
   mapScopes :: (ScopeSet -> ScopeSet) -> a -> a
 
 instance HasScopes (Stx Text) where
   getScopes (Stx scs _ _) = scs
-  adjustScope f (Stx scs srcloc x) sc = Stx (f sc scs) srcloc x
+  adjustScope f sc (Stx scs srcloc x) = Stx (f sc scs) srcloc x
   mapScopes f (Stx scs srcloc x) = Stx (f scs) srcloc x
 
 instance HasScopes Syntax where
   getScopes (Syntax (Stx scs _ _)) = scs
-  adjustScope f stx sc = mapScopes (f sc) stx
+  adjustScope f sc = mapScopes (f sc)
   mapScopes f (Syntax (Stx scs srcloc e)) =
     Syntax $
     Stx (f scs) srcloc $
@@ -90,44 +91,47 @@ instance Phased Syntax where
   shift i = mapScopes (shift i)
 
 
-addScope :: HasScopes a => Phase -> a -> Scope -> a
+addScope :: HasScopes a => Phase -> Scope -> a -> a
 addScope p = adjustScope (ScopeSet.insertAtPhase p)
 
-removeScope :: HasScopes a => Phase -> a -> Scope -> a
+removeScope :: HasScopes a => Phase -> Scope -> a -> a
 removeScope p = adjustScope (ScopeSet.deleteAtPhase p)
 
-flipScope :: HasScopes a => Phase -> a -> Scope -> a
+flipScope :: HasScopes a => Phase -> Scope -> a -> a
 flipScope p = adjustScope go
   where
     go sc scs
       | ScopeSet.member p sc scs = ScopeSet.deleteAtPhase p sc scs
       | otherwise                = ScopeSet.insertAtPhase p sc scs
 
-flipScope' :: HasScopes a => a -> Scope -> a
+flipScope' :: HasScopes a => Scope -> a -> a
 flipScope' = adjustScope ScopeSet.flipUniversally
 
-addScope' :: HasScopes a => a -> Scope -> a
+addScope' :: HasScopes a => Scope -> a -> a
 addScope' = adjustScope ScopeSet.insertUniversally
 
-removeScope' :: HasScopes a => a -> Scope -> a
+removeScope' :: HasScopes a => Scope -> a -> a
 removeScope' = adjustScope ScopeSet.deleteUniversally
 
 
-addScopes :: HasScopes a => a -> ScopeSet -> a
-addScopes a0 scopeSet
-  = let a1 = addUniversalScopes a0 scopeSet
-        a2 = addSpecificScopes a1 scopeSet
-    in a2
+addScopes :: forall a. HasScopes a => ScopeSet -> a -> a
+addScopes scopeSet
+  = addSpecificScopes
+  . addUniversalScopes
   where
-    addUniversalScopes :: HasScopes a => a -> ScopeSet -> a
-    addUniversalScopes =
+    addUniversalScopes :: HasScopes a => a -> a
+    addUniversalScopes a0 =
       foldlOf (to ScopeSet.contents . _1 . folded)
-              addScope'
+              (flip addScope')
+              a0
+              scopeSet
 
-    addSpecificScopes :: HasScopes a => a -> ScopeSet -> a
-    addSpecificScopes =
+    addSpecificScopes :: HasScopes a => a -> a
+    addSpecificScopes a0 =
       ifoldlOf (to ScopeSet.contents .> _2 .> ifolded <. folded)
-               addScope
+               (\p a sc -> addScope p sc a)
+               a0
+               scopeSet
 
 stxLoc :: Syntax -> SrcLoc
 stxLoc (Syntax (Stx _ srcloc _)) = srcloc

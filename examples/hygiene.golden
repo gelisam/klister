@@ -1,3 +1,6 @@
-#[hygiene.kl:12.19-12.20]<b> : Syntax
-#[hygiene.kl:13.37-13.38]<a> : Syntax
-#[hygiene.kl:23.57-23.58]<b> : Syntax
+#[hygiene.kl:15.19-15.20]<b> : Syntax
+#[hygiene.kl:16.37-16.38]<a> : Syntax
+#[hygiene.kl:26.57-26.58]<b> : Syntax
+5 : Integer
+"defined six" : String
+6 : Integer
