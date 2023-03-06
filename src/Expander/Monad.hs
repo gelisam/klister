@@ -248,10 +248,10 @@ data ExpanderLocal = ExpanderLocal
   , _expanderImportStack :: [ModuleName]
   }
 
-mkInitContext :: ModuleName -> IO ExpanderContext
-mkInitContext mn = do
+mkInitContext :: ModuleName -> FilePath -> IO ExpanderContext
+mkInitContext mn here = do
   kPath <- getKlisterPath
-  st <- newIORef initExpanderState
+  st <- newIORef $! initExpanderState here
   return $ ExpanderContext { _expanderState = st
                            , _expanderLocal = ExpanderLocal
                              { _expanderModuleName = mn
@@ -301,9 +301,9 @@ data ExpanderState = ExpanderState
   , _expanderDefTypes :: !(TypeContext Var SchemePtr) -- ^ Module-level definitions
   }
 
-initExpanderState :: ExpanderState
-initExpanderState = ExpanderState
-  { _expanderWorld = initialWorld
+initExpanderState :: FilePath -> ExpanderState
+initExpanderState here = ExpanderState
+  { _expanderWorld = initialWorld here
   , _expanderNextScopeNum = 0
   , _expanderGlobalBindingTable = mempty
   , _expanderExpansionEnv = mempty
@@ -899,7 +899,11 @@ zonkKindDefault (KFun k1 k2) = KFun <$> zonkKindDefault k1 <*> zonkKindDefault k
 
 importing :: ModuleName -> Expand a -> Expand a
 importing mn act = do
-  inProgress <- view (expanderLocal . expanderImportStack) <$> ask
+  inProgress <- asks (view (expanderLocal . expanderImportStack))
   if mn `elem` inProgress
-    then throwError $ CircularImports mn inProgress
+    then do
+    here <- view (expanderWorld . worldLocation) <$> getState
+    throwError $
+         CircularImports (relativizeModuleName here mn) $
+         fmap (relativizeModuleName here) inProgress
     else Expand $ local (over (expanderLocal . expanderImportStack) (mn:)) (runExpand act)

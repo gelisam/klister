@@ -5,7 +5,6 @@ module World where
 
 import Control.Lens
 import Data.Map (Map)
-import qualified Data.Map as Map
 import Data.Set (Set)
 
 import Core (MacroVar, Var)
@@ -23,29 +22,31 @@ data World a = World
   { _worldEnvironments :: !(Map Phase (Env Var a))
   , _worldTypeContexts :: !(TypeContext Var SchemePtr)
   , _worldTransformerEnvironments :: !(Map Phase (Env MacroVar a))
-  , _worldModules :: !(Map ModuleName CompleteModule)
-  , _worldVisited :: !(Map ModuleName (Set Phase))
-  , _worldExports :: !(Map ModuleName Exports)
-  , _worldEvaluated :: !(Map ModuleName [EvalResult])
-  , _worldDatatypes :: !(Map Phase (Map Datatype DatatypeInfo))
+  , _worldModules      :: !(Map ModuleName CompleteModule)
+  , _worldVisited      :: !(Map ModuleName (Set Phase))
+  , _worldExports      :: !(Map ModuleName Exports)
+  , _worldEvaluated    :: !(Map ModuleName [EvalResult])
+  , _worldDatatypes    :: !(Map Phase (Map Datatype DatatypeInfo))
   , _worldConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
+  , _worldLocation     :: FilePath
   }
 makeLenses ''World
 
 phaseEnv :: Phase -> World a -> Env Var a
 phaseEnv p = maybe Env.empty id . view (worldEnvironments . at p)
 
-initialWorld :: World a
-initialWorld =
-  World { _worldEnvironments = Map.empty
+initialWorld :: FilePath -> World a
+initialWorld fp =
+  World { _worldEnvironments = mempty
         , _worldTypeContexts = mempty
-        , _worldTransformerEnvironments = Map.empty
-        , _worldModules = Map.empty
-        , _worldVisited = Map.empty
-        , _worldExports = Map.empty
-        , _worldEvaluated = Map.empty
-        , _worldDatatypes = Map.empty
-        , _worldConstructors = Map.empty
+        , _worldTransformerEnvironments = mempty
+        , _worldModules      = mempty
+        , _worldVisited      = mempty
+        , _worldExports      = mempty
+        , _worldEvaluated    = mempty
+        , _worldDatatypes    = mempty
+        , _worldConstructors = mempty
+        , _worldLocation     = fp
         }
 
 addExpandedModule :: CompleteModule -> World a -> World a

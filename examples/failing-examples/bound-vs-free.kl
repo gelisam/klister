@@ -24,4 +24,4 @@
 (example ((lambda2 _ y 'result) 1 2))
 (example ((lambda2 x _ 'result) 1 2))
 (example ((lambda2 x y 'result) 1 2))
---(example ((lambda2 x x 'result) 1 2))  -- variables must be distinct
+(example ((lambda2 x x 'result) 1 2))  -- variables must be distinct

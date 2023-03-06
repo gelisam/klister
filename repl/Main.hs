@@ -20,6 +20,7 @@ import Options.Applicative
 
 import System.Exit (exitFailure, exitSuccess)
 import System.IO
+import System.Directory
 
 import Evaluator
 import Expander
@@ -70,17 +71,18 @@ main = do
     opts = info parser mempty
 
 mainWithOptions :: Options -> IO ()
-mainWithOptions opts =
+mainWithOptions opts = do
+  root <- getCurrentDirectory
   case optCommand opts of
     Repl (ReplOptions Nothing) -> do
-      ctx <- mkInitContext (KernelName kernelName)
+      ctx <- mkInitContext (KernelName kernelName) root
       void $ execExpand ctx (initializeKernel stdout)
-      repl ctx initialWorld
+      repl ctx (initialWorld root)
     Repl (ReplOptions (Just file)) -> do
-      (_mn, ctx, result) <- expandFile file
+      (_mn, ctx, result) <- expandFile file root
       repl ctx (view expanderWorld result)
     Run (RunOptions file showWorld dumpBindings) -> do
-      (mn, _ctx, result) <- expandFile file
+      (mn, _ctx, result) <- expandFile file root
       when showWorld $
         prettyPrint $ view expanderWorld result
       when dumpBindings $
@@ -94,9 +96,9 @@ mainWithOptions opts =
             \case
               res@(ExampleResult {}) -> prettyPrintLn res
               IOResult io -> io
-  where expandFile file = do
+  where expandFile file rt = do
           mn <- moduleNameFromPath file
-          ctx <- mkInitContext mn
+          ctx <- mkInitContext mn rt
           void $ execExpand ctx (initializeKernel stdout)
           st <- execExpand ctx $ completely $ do
             void $ visit mn
