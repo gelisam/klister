@@ -1,0 +1,4 @@
+Circular imports while importing "examples/non-examples/circular-1.kl"
+  Context:
+    "examples/non-examples/circular-2.kl"
+    "examples/non-examples/circular-1.kl"

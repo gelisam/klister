@@ -1,0 +1,2 @@
+Syntax error from macro:
+    #[bound-vs-free.kl:20.39-20.67]<"variables must be distinct">

@@ -3,7 +3,8 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns #-}
+{-# LANGUAGE TupleSections #-}
+
 module Golden where
 
 import Control.Lens hiding (argument)
@@ -13,17 +14,15 @@ import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
 import qualified Data.Text.Lazy as T
-import System.Directory (doesFileExist)
 import System.FilePath (replaceExtension, takeBaseName)
-import Test.Tasty.HUnit (assertFailure, testCase)
 import Test.Tasty (TestTree, testGroup)
-import Test.Tasty.Golden (findByExtension)
-import qualified Data.List as List
+import Test.Tasty.Golden (findByExtension, goldenVsStringDiff)
 import qualified Data.Map as Map
 import qualified Data.Text.Lazy as Text
-import qualified Data.Text.Lazy.IO as Text
+import qualified Data.Text.Lazy.Encoding as TE
 import System.IO (Handle, openFile, hClose, IOMode(WriteMode))
 import System.IO.Silently (hCapture_)
+import System.Directory
 
 import Evaluator
 import Expander
@@ -35,27 +34,17 @@ import World
 
 mkGoldenTests :: IO TestTree
 mkGoldenTests = do
-  allKlisterFiles <- findByExtension [".kl"] "examples"
-  let klisterFiles :: [FilePath]
-      klisterFiles = filter (not . ("/non-examples/" `List.isInfixOf`))
-                   . filter (not . ("/failing-examples/" `List.isInfixOf`))
-                   $ allKlisterFiles
+  klisterFiles <- findByExtension [".kl"] "examples"
   return $ testGroup "Golden tests"
-    [ testCase testName $ do
-        actual' <- execWriterT $ runExamples klisterFile
-        firstRun <- not <$> doesFileExist goldenFile
-        when firstRun $ do
-          putStrLn $ "first run: creating " ++ goldenFile
-          Text.writeFile goldenFile actual'
-        expected' <- Text.readFile goldenFile
-        when (actual' /= expected') $ do
-          assertFailure . Text.unpack
-                        $ "expected:\n" <> expected'
-                       <> "\ngot:\n" <> actual'
-    | klisterFile <- klisterFiles
-    , let testName = takeBaseName klisterFile
-    , let goldenFile = replaceExtension klisterFile ".golden"
+    [ let actual = execWriterT $ runExamples file
+      in goldenVsStringDiff testName diffCmd goldenFile (TE.encodeUtf8 <$> actual)
+    | file <- klisterFiles
+    , let testName = takeBaseName file
+    , let goldenFile = replaceExtension file ".golden"
     ]
+
+diffCmd :: FilePath -> FilePath -> [String]
+diffCmd goldenFile actualFile = ["diff", "-u", goldenFile, actualFile]
 
 runExamples :: FilePath -> WriterT Text IO ()
 runExamples file = do
@@ -67,32 +56,35 @@ runExamples file = do
   bracket (liftIO $ openFile "/dev/null" WriteMode)
           (liftIO . hClose)
         $ \magicHandle -> do
-    (moduleName, result) <- expandFile magicHandle file
-    case Map.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
-      Nothing -> fail "Internal error: module not evaluated"
-      Just results -> do
-        -- Show just the results of evaluation in the module the user
-        -- asked to run
-        for_ results $
-          \case
-            (ExampleResult _ _ _ tp val) -> do
-              prettyTell val
-              tell " : "
-              prettyTellLn tp
-            (IOResult io) -> do
-              output <- liftIO $ hCapture_ [magicHandle] io
-              tell (T.pack output)
+    expandFile magicHandle file >>= \case
 
-expandFile :: Handle -> FilePath -> WriterT Text IO (ModuleName, ExpanderState)
+      -- if we had an error or an expected failure then report it. Tasty-golden
+      -- will track the failure
+      Left err -> prettyTellLn err
+
+      -- a normal test so all good
+      Right (moduleName, result) ->
+        case Map.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
+          Nothing      -> fail "Internal error: module not evaluated"
+          Just results -> do
+            -- Show just the results of evaluation in the module the user
+            -- asked to run
+            for_ results $
+              \case
+                (ExampleResult _ _ _ tp val) -> do
+                  prettyTell val
+                  tell " : "
+                  prettyTellLn tp
+                (IOResult io) -> do
+                  output <- liftIO $ hCapture_ [magicHandle] io
+                  tell (T.pack output)
+
+expandFile :: Handle -> FilePath -> WriterT Text IO (Either ExpansionErr (ModuleName, ExpanderState))
 expandFile magicHandle file = do
   moduleName <- liftIO $ moduleNameFromPath file
-  ctx <- liftIO $ mkInitContext moduleName
+  ctx <- liftIO $ getCurrentDirectory >>= mkInitContext moduleName
   void $ liftIO $ execExpand ctx (initializeKernel magicHandle)
-  st <- liftIO $ execExpand ctx (visit moduleName >> getState)
-  case st of
-    Left err -> liftIO $ prettyPrintLn err *> fail ""
-    Right result ->
-      pure (moduleName, result)
+  liftIO $ fmap (moduleName,) <$> execExpand ctx (visit moduleName >> getState)
 
 prettyTell :: Pretty ann a
            => a -> WriterT Text IO ()

@@ -14,6 +14,7 @@ import Data.Maybe (maybeToList)
 import Data.Text (Text)
 import Data.Set (Set)
 import System.IO (stdout)
+import System.Directory
 import qualified Data.Text as T
 
 import Test.Tasty
@@ -465,7 +466,7 @@ testExpander input spec = do
   case readExpr "<test suite>" input of
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
-      ctx <- mkInitContext (KernelName kernelName)
+      ctx <- getCurrentDirectory >>= mkInitContext (KernelName kernelName)
       c <- execExpand ctx $ completely $ do
              initializeKernel stdout
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
@@ -485,7 +486,7 @@ testExpansionFails input okp =
   case readExpr "<test suite>" input of
     Left err -> assertFailure . T.unpack $ err
     Right expr -> do
-      ctx <- mkInitContext (KernelName kernelName)
+      ctx <- getCurrentDirectory >>= mkInitContext (KernelName kernelName)
       c <- execExpand ctx $ completely $ do
              initializeKernel stdout
              initializeLanguage (Stx ScopeSet.empty testLoc (KernelName kernelName))
@@ -508,7 +509,7 @@ testExpansionFails input okp =
 testFile :: FilePath -> (Module [] CompleteDecl -> [Value] -> Assertion) -> Assertion
 testFile f p = do
   mn <- moduleNameFromPath f
-  ctx <- mkInitContext mn
+  ctx <- getCurrentDirectory >>= mkInitContext mn
   void $ execExpand ctx (initializeKernel stdout)
   (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=
@@ -530,7 +531,7 @@ testFile f p = do
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
   mn <- moduleNameFromPath f
-  ctx <- mkInitContext mn
+  ctx <- getCurrentDirectory >>= mkInitContext mn
   void $ execExpand ctx (initializeKernel stdout)
   (execExpand ctx $ do
     visit mn >> view expanderWorld <$> getState) >>=

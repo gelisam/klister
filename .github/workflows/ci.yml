@@ -6,6 +6,9 @@ on:
   push:
     branches: [master]
 
+env:
+  KLISTERPATH: ${{ github.workspace }}/examples
+
 jobs:
   cabal:
     name: ${{ matrix.os }} / ghc ${{ matrix.ghc }}
@@ -62,6 +65,10 @@ jobs:
     - name: Build
       run: |
         cabal build all
+
+    - name: Path
+      run: |
+        echo "$KLISTERPATH"
 
     - name: Test
       run: |

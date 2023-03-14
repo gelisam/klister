@@ -7,12 +7,14 @@ module ModuleName (
   , moduleNameFromPath
   , moduleNameToPath
   , moduleNameText
+  , relativizeModuleName
   ) where
 
 import Data.Data (Data)
 import Data.Text (Text)
 import qualified Data.Text as T
 import System.Directory
+import System.FilePath
 
 import ShortShow
 
@@ -40,3 +42,10 @@ moduleNameText :: ModuleName -> Text
 moduleNameText (ModuleName f) = T.pack (show f)
 moduleNameText (KernelName _) = T.pack "kernel"
 
+-- | Given a path, relativize the @ModuleName@ with respect to the path.
+--
+-- > relativizeModuleName "a/b/c/klister" "a/b/c/klister/examples/do.kl" = "examples/do.kl"
+--
+relativizeModuleName :: FilePath -> ModuleName -> ModuleName
+relativizeModuleName l (ModuleName r) = ModuleName (makeRelative l r)
+relativizeModuleName _ k@KernelName{} = k
