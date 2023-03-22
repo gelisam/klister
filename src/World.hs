@@ -4,8 +4,11 @@
 module World where
 
 import Control.Lens
-import Data.Map (Map)
-import Data.Set (Set)
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
+import Data.Sequence as Seq
+import Util.Set (Set)
+import Data.Maybe (fromMaybe)
 
 import Core (MacroVar, Var)
 import Datatype
@@ -18,32 +21,34 @@ import SplitType
 import Type
 import Type.Context
 
+import Util.Store
+
 data World a = World
-  { _worldEnvironments :: !(Map Phase (Env Var a))
+  { _worldEnvironments :: !(Store Phase (Env Var a))
   , _worldTypeContexts :: !(TypeContext Var SchemePtr)
-  , _worldTransformerEnvironments :: !(Map Phase (Env MacroVar a))
-  , _worldModules      :: !(Map ModuleName CompleteModule)
-  , _worldVisited      :: !(Map ModuleName (Set Phase))
-  , _worldExports      :: !(Map ModuleName Exports)
-  , _worldEvaluated    :: !(Map ModuleName [EvalResult])
-  , _worldDatatypes    :: !(Map Phase (Map Datatype DatatypeInfo))
-  , _worldConstructors :: !(Map Phase (Map Constructor (ConstructorInfo Ty)))
+  , _worldTransformerEnvironments :: !(Store Phase (Env MacroVar a))
+  , _worldModules      :: !(HashMap ModuleName CompleteModule)
+  , _worldVisited      :: !(HashMap ModuleName (Set Phase))
+  , _worldExports      :: !(HashMap ModuleName Exports)
+  , _worldEvaluated    :: !(HashMap ModuleName (Seq EvalResult))
+  , _worldDatatypes    :: !(Store Phase (HashMap Datatype DatatypeInfo))
+  , _worldConstructors :: !(Store Phase (HashMap Constructor (ConstructorInfo Ty)))
   , _worldLocation     :: FilePath
   }
 makeLenses ''World
 
 phaseEnv :: Phase -> World a -> Env Var a
-phaseEnv p = maybe Env.empty id . view (worldEnvironments . at p)
+phaseEnv p = fromMaybe Env.empty . view (worldEnvironments . at p)
 
 initialWorld :: FilePath -> World a
 initialWorld fp =
   World { _worldEnvironments = mempty
         , _worldTypeContexts = mempty
         , _worldTransformerEnvironments = mempty
-        , _worldModules      = mempty
-        , _worldVisited      = mempty
-        , _worldExports      = mempty
-        , _worldEvaluated    = mempty
+        , _worldModules      = HM.empty
+        , _worldVisited      = HM.empty
+        , _worldExports      = HM.empty
+        , _worldEvaluated    = HM.empty
         , _worldDatatypes    = mempty
         , _worldConstructors = mempty
         , _worldLocation     = fp

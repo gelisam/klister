@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
@@ -9,11 +10,16 @@ module Kind (Kind(..), KindVar, newKindVar, kFun, KindStore) where
 
 import Control.Lens
 import Data.Data (Data)
-import Data.Map.Strict (Map)
 
 import Unique
 
-newtype KindVar = KindVar Unique deriving (Data, Eq, Ord)
+import Util.Store (Store)
+import Util.Key
+
+newtype KindVar = KindVar Unique
+  deriving newtype (Eq, Ord, HasKey)
+  deriving stock   Data
+
 
 instance Show KindVar where
   show (KindVar i) = "(KindVar " ++ show (hashUnique i) ++ ")"
@@ -33,8 +39,8 @@ newKindVar = KindVar <$> newUnique
 kFun :: [Kind] -> Kind -> Kind
 kFun args result = foldr KFun result args
 
-newtype KindStore = KindStore (Map KindVar Kind)
-  deriving (Monoid, Semigroup, Show)
+newtype KindStore = KindStore (Store KindVar Kind)
+  deriving newtype (Monoid, Semigroup, Show)
 
 type instance Index KindStore = KindVar
 type instance IxValue KindStore = Kind

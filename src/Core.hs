@@ -9,9 +9,8 @@ representing fully-expanded expressions.
 
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE DeriveFoldable #-}
-{-# LANGUAGE DeriveTraversable #-}
+{-# LANGUAGE DeriveTraversable  #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
@@ -38,6 +37,7 @@ import Syntax.SrcLoc
 import Type
 import Unique
 
+import Util.Key
 
 data SyntaxError a = SyntaxError
   { _syntaxErrorLocations :: [a]
@@ -47,13 +47,27 @@ data SyntaxError a = SyntaxError
 makeLenses ''SyntaxError
 
 newtype Var = Var Unique
-  deriving (AlphaEq, Data, Eq, Ord)
+  deriving newtype (AlphaEq, Eq, Ord)
+  deriving stock Data
+
+instance HasKey Var where
+  getKey (Var u) = getKey u
+  fromKey i = Var $! fromKey i
+  {-# INLINE getKey  #-}
+  {-# INLINE fromKey #-}
 
 instance Show Var where
   show (Var i) = "(Var " ++ show (hashUnique i) ++ ")"
 
 newtype MacroVar = MacroVar Unique
-  deriving (AlphaEq, Data, Eq, Ord)
+  deriving newtype (AlphaEq, Eq, Ord)
+  deriving stock Data
+
+instance HasKey MacroVar where
+  getKey (MacroVar u) = getKey u
+  fromKey i = MacroVar $! fromKey i
+  {-# INLINE getKey  #-}
+  {-# INLINE fromKey #-}
 
 instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"

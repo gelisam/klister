@@ -1,14 +1,18 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Binding where
 
 import Control.Lens
 import Data.Data (Data)
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.Hashable
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
 import ScopeSet
 import Data.Text (Text)
+import Data.Sequence (Seq)
 
 import Binding.Info
 import Phase
@@ -16,8 +20,17 @@ import ShortShow
 import Syntax.SrcLoc
 import Unique
 
+import Util.Key
+
 newtype Binding = Binding Unique
-  deriving (Data, Eq, Ord)
+  deriving newtype (Eq, Ord, Hashable)
+  deriving stock Data
+
+instance HasKey Binding where
+  getKey (Binding u) = getKey u
+  fromKey i = Binding $! fromKey i
+  {-# INLINE getKey  #-}
+  {-# INLINE fromKey #-}
 
 instance Show Binding where
   show (Binding b) = "(Binding " ++ show (hashUnique b) ++ ")"
@@ -25,21 +38,21 @@ instance Show Binding where
 instance ShortShow Binding where
   shortShow (Binding b) = "b" ++ show (hashUnique b)
 
-newtype BindingTable = BindingTable { _bindings :: Map Text [(ScopeSet, Binding, BindingInfo SrcLoc)] }
+newtype BindingTable = BindingTable { _bindings :: HashMap Text (Seq (ScopeSet, Binding, BindingInfo SrcLoc)) }
   deriving (Data, Show)
 makeLenses ''BindingTable
 
 instance Semigroup BindingTable where
-  b1 <> b2 = BindingTable $ Map.unionWith (<>) (view bindings b1) (view bindings b2)
+  b1 <> b2 = BindingTable $ HM.unionWith (<>) (view bindings b1) (view bindings b2)
 
 instance Monoid BindingTable where
-  mempty = BindingTable Map.empty
+  mempty = BindingTable HM.empty
 
 instance Phased BindingTable where
-  shift i = over bindings (Map.map (map (over _1 (shift i))))
+  shift i = over bindings (HM.map (fmap (over _1 (shift i))))
 
 type instance Index BindingTable = Text
-type instance IxValue BindingTable = [(ScopeSet, Binding, BindingInfo SrcLoc)]
+type instance IxValue BindingTable = Seq (ScopeSet, Binding, BindingInfo SrcLoc)
 
 instance Ixed BindingTable where
   ix x f (BindingTable bs) = BindingTable <$> ix x f bs

@@ -28,12 +28,6 @@ jobs:
           - cabal: "3.2"
             ghc: "8.10.2"
             os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.8.4"
-            os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.6.5"
-            os: ubuntu-latest
 
             # latest GHC, non-default OS
           - cabal: "3.2"
@@ -74,6 +68,10 @@ jobs:
       run: |
         cabal test all
 
+    - name: TestDebug
+      run: |
+        cabal test all --ghc-options='-debug'
+
   stack:
     name: stack / ghc ${{ matrix.ghc }}
     runs-on: ubuntu-latest
@@ -82,7 +80,7 @@ jobs:
       # cabal, it probably also works with stack.
       matrix:
         stack: ["2.3.1"]
-        ghc: ["8.6.5"]
+        ghc: ["8.10.2"]
 
     steps:
     - uses: actions/checkout@v2

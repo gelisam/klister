@@ -22,11 +22,18 @@ source-repository head
   type: git
   location: https://github.com/gelisam/klister
 
+Flag KDebug
+    Description: Enable debug support for klister interpreter
+    Manual: True
+    Default: False
+
 common deps
   build-depends:
     base                 >= 4.12.0 && < 4.17,
     bifunctors           >= 5.5.5 && < 5.6,
     containers           >= 0.6 && < 0.7,
+    unordered-containers >= 0.2.15 && < 3,
+    hashable,
     directory            >= 1.3.3 && < 1.4,
     exceptions,
     extra                >= 1.6.18 && < 1.8,
@@ -38,8 +45,13 @@ common deps
     text                 ^>= 1.2,
     transformers         ^>= 0.5
 
+common flags
+  if flag(KDebug)
+    CPP-Options: -DKDEBUG
+
 library
   import: deps
+        , flags
   exposed-modules:
       Alpha
       Binding
@@ -75,11 +87,15 @@ library
       SplitCore
       SplitType
       Syntax
+      Syntax.Syntax
       Syntax.Lexical
       Syntax.SrcLoc
       Type
       Type.Context
       Unique
+      Util.Key
+      Util.Store
+      Util.Set
       Value
       World
   other-modules:
@@ -104,10 +120,12 @@ executable klister
 
 test-suite klister-tests
   import: deps
+        , flags
   type: exitcode-stdio-1.0
   main-is: Test.hs
   other-modules:
       Golden
+      MiniTests
       Paths_klister
   hs-source-dirs:
       tests

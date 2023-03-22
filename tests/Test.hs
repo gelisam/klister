@@ -1,4 +1,5 @@
 {-# LANGUAGE BlockArguments #-}
+{-# LANGUAGE CPP        #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -6,13 +7,16 @@
 {-# LANGUAGE ViewPatterns #-}
 module Main where
 
-import Control.Lens hiding (List)
+import Prelude hiding (filter)
+import Control.Lens hiding (List, Empty)
 import Control.Monad
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as HM
 import Control.Monad.IO.Class (liftIO)
 import Data.Maybe (maybeToList)
 import Data.Text (Text)
 import Data.Set (Set)
+import Data.Sequence (Seq(..), filter)
+import Data.Foldable (toList)
 import System.IO (stdout)
 import System.Directory
 import qualified Data.Text as T
@@ -51,6 +55,7 @@ import Value
 import World
 
 import Golden
+import MiniTests
 
 main :: IO ()
 main = do
@@ -73,7 +78,11 @@ operationTests :: TestTree
 operationTests =
   testGroup "Core operations"
   [ testCase "Shifting core expressions" $
+#ifndef KDEBUG
+    let sc = Scope 42
+#else
     let sc = Scope 42 "Test suite"
+#endif
         scs = ScopeSet.insertAtPhase runtime sc ScopeSet.empty
         stx = Syntax (Stx scs fakeLoc (Id "hey"))
         expr = Core (CoreApp (Core (CoreInteger 2))
@@ -115,31 +124,10 @@ miniTests =
           , lam $ \f -> lam $ \x -> f `app` x
           )
         , ( "Trivial user macro"
-          , "[let-syntax \n\
-            \  [m [lambda [_] \n\
-            \       [pure [quote [lambda [x] x]]]]] \n\
-            \  m]"
-          , lam $ \x -> x
+          , trivialUserMacro, lam $ \x -> x
           )
         , ( "Let macro"
-          , "[let-syntax \n\
-            \  [let1 [lambda [stx] \n\
-            \          (syntax-case stx \n\
-            \            [[list [_ binder body]] \n\
-            \             (syntax-case binder \n\
-            \               [[list [x e]] \n\
-            \                {- [[lambda [x] body] e] -} \n\
-            \                [pure [list-syntax \n\
-            \                        [[list-syntax \n\
-            \                           [[ident-syntax 'lambda stx] \n\
-            \                            [list-syntax [x] stx] \n\
-            \                            body] \n\
-            \                           stx] \n\
-            \                         e] \n\
-            \                        stx]]])])]] \n\
-            \  [let1 [x [lambda [x] x]] \n\
-            \    x]]"
-          , (lam $ \x -> x) `app` (lam $ \x -> x)
+          , letMacro, (lam $ \x -> x) `app` (lam $ \x -> x)
           )
         ]
       ]
@@ -154,11 +142,7 @@ miniTests =
               _ -> False
           )
         , ( "unbound variable inside let-syntax"
-          , "[let-syntax \
-            \  [m [lambda [_] \
-            \       [pure [quote [lambda [x] x]]]]] \
-            \  anyRandomWord]"
-            , \case
+          , unboundVarLet, \case
                 Unknown (Stx _ _ "anyRandomWord") -> True
                 _ -> False
             )
@@ -192,27 +176,27 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/two-defs.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               filter (\case {(Define {}) -> True; _ -> False}) &
               \case
-                [Define {}, Define {}] -> pure ()
+                (Define {} :<| Define {} :<| Empty) -> pure ()
                 _ -> assertFailure "Expected two definitions"
           )
         , ( "examples/id-compare.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _ _ _) -> True; _ -> False}) &
+              view moduleBody m & fmap (view completeDecl) &
+              filter (\case {(Example {}) -> True; _ -> False}) &
               \case
-                [Example _ _ e1, Example _ _ e2] -> do
+                (Example _ _ e1 :<| Example _ _ e2 :<| Empty) -> do
                   assertAlphaEq "first example" e1 (Core (corePrimitiveCtor "true" []))
                   assertAlphaEq "second example" e2 (Core (corePrimitiveCtor "false" []))
                 _ -> assertFailure "Expected two examples"
           )
         , ( "examples/lang.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                [Define _fn fv _t fbody, Example _ _ e] -> do
+                (Define _fn fv _t fbody :<| Example _ _ e :<| Empty) -> do
                   fspec <- lam \_x -> lam \ y -> lam \_z -> y
                   assertAlphaEq "definition of f" fbody fspec
                   case e of
@@ -223,10 +207,10 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/import.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
-              filter (\case {(Example _ _ _) -> True; _ -> False}) &
+              view moduleBody m & fmap (view completeDecl) &
+              filter (\case {(Example {}) -> True; _ -> False}) &
               \case
-                [Example _ _ e1, Example _ _ e2] -> do
+                (Example _ _ e1 :<| Example _ _ e2 :<| Empty) -> do
                   case e1 of
                     (Core (CoreApp (Core (CoreApp (Core (CoreVar _)) _)) _)) ->
                       pure ()
@@ -240,42 +224,44 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/phase1.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                [Import _,
-                 Meta [ view completeDecl -> Define _ _ _ _
-                      , view completeDecl -> Define _ _ _ _
-                      ],
-                 DefineMacros [(_, _, _)],
-                 Example _ _ ex] ->
+                (Import _
+                 :<| Meta ((view completeDecl -> Define {})
+                            :<| (view completeDecl -> Define {})
+                            :<| Empty
+                          )
+                 :<| DefineMacros [(_, _, _)]
+                 :<| Example _ _ ex
+                 :<| Empty) ->
                   assertAlphaEq "Example is integer" ex (Core (CoreInteger 1))
                 _ -> assertFailure "Expected an import, two meta-defs, a macro def, and an example"
           )
         , ( "examples/imports-shifted-macro.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                [Import _, Import _, DefineMacros [(_, _, _)], Example _ _ ex] ->
+                (Import _ :<| Import _ :<| DefineMacros [(_, _, _)] :<| Example _ _ ex :<| Empty) ->
                   assertAlphaEq "Example is (false)" ex (Core (corePrimitiveCtor "false" []))
                 _ -> assertFailure "Expected import, import, macro, example"
           )
         , ( "examples/macro-body-shift.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                [Import _, Define _ _ _ e, DefineMacros [(_, _, _)]] -> do
+                (Import _ :<| Define _ _ _ e :<| DefineMacros [(_, _, _)] :<| Empty) -> do
                   spec <- lam \_x -> lam \y -> lam \_z -> y
                   assertAlphaEq "Definition is λx y z . y" e spec
                 _ -> assertFailure "Expected an import, a definition, and a macro"
           )
         , ( "examples/test-quasiquote.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                (Import _ : Import _ : Define _ _ _ thingDef : examples) -> do
+                (Import _ :<| Import _ :<| Define _ _ _ thingDef :<| examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
-                      case examples of
+                      case toList examples of
                         [e1, e2, e3, e4, e5, e6, e7, e8, Example _ _ _] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
                         other -> assertFailure ("Expected 8 tested examples, 1 untested: " ++ show other)
@@ -284,12 +270,12 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/quasiquote-syntax-test.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) &
               \case
-                (Import _ : _ : _ : Define _ _ _ thingDef : examples) -> do
+                (Import _ :<| _ :<| _ :<| Define _ _ _ thingDef :<| examples) -> do
                   case thingDef of
                     Core (CoreSyntax (Syntax (Stx _ _ (Id "nothing")))) ->
-                      case examples of
+                      case toList examples of
                         [e1, e2, e3, e4, e5, e6, e7, e8] -> do
                           testQuasiquoteExamples [e1, e2, e3, e4, e5, e6, e7, e8]
                         other -> assertFailure ("Expected 8 examples and 2 exports: " ++ show other)
@@ -298,7 +284,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
           )
         , ( "examples/hygiene.kl"
           , \m _ ->
-              view moduleBody m & map (view completeDecl) &
+              view moduleBody m & fmap (view completeDecl) & toList &
               \case
                 (Import _ : Import _ : Import _ : Import _ : Define _ fun1 _ firstFun : DefineMacros [_] :
                  Define _ fun2 _ secondFun : Example _ _ e1 : Example _ _ e2 : DefineMacros [_] :
@@ -402,7 +388,7 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
         ]
       ]
 
-    isEmpty [] = return ()
+    isEmpty Empty = return ()
     isEmpty _ = assertFailure "Expected empty, got non-empty"
 
 testQuasiquoteExamples :: (Show t, Show sch, Show decl) => [Decl t sch decl Core] -> IO ()
@@ -506,7 +492,7 @@ testExpansionFails input okp =
   where testLoc = SrcLoc "test contents" (SrcPos 0 0) (SrcPos 0 0)
 
 
-testFile :: FilePath -> (Module [] CompleteDecl -> [Value] -> Assertion) -> Assertion
+testFile :: FilePath -> (Module Seq CompleteDecl -> [Value] -> Assertion) -> Assertion
 testFile f p = do
   mn <- moduleNameFromPath f
   ctx <- getCurrentDirectory >>= mkInitContext mn
@@ -523,10 +509,10 @@ testFile f p = do
           Just (KernelModule _) ->
             assertFailure "Expected user module, got kernel"
           Just (Expanded m _) ->
-            case Map.lookup mn (view worldEvaluated w) of
+            case HM.lookup mn (view worldEvaluated w) of
               Nothing -> assertFailure "Module values not in its own expansion"
               Just evalResults ->
-                p m [val | ExampleResult _ _ _ _ val <- evalResults]
+                p m [val | ExampleResult _ _ _ _ val <- toList evalResults]
 
 testFileError :: FilePath -> (ExpansionErr -> Bool) -> Assertion
 testFileError f p = do
@@ -575,7 +561,11 @@ genPhase =
   in more <$> Gen.int range256 <*> pure runtime
 
 genScope :: MonadGen m => m Scope
+#ifndef KDEBUG
+genScope = Scope <$> Gen.int range1024
+#else
 genScope = Scope <$> Gen.int range1024 <*> Gen.text range16 Gen.lower
+#endif
 
 genSetScope :: MonadGen m => m (Set Scope)
 genSetScope = Gen.set range32 genScope

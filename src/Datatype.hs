@@ -1,20 +1,25 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE DeriveGeneric #-}
 module Datatype where
 
 import Control.Lens
 import Data.Data (Data)
 import Data.String
 import Data.Text (Text)
+import Data.Hashable
 
 import Alpha
 import Kind
 import ModuleName
 import ShortShow
+import GHC.Generics (Generic)
 
 newtype DatatypeName = DatatypeName { _datatypeNameText :: Text }
-  deriving (Data, Eq, IsString, Ord, Show)
+  deriving newtype (Eq, IsString, Ord, Show, Hashable)
+  deriving stock Data
 makeLenses ''DatatypeName
 
 data Datatype
@@ -22,11 +27,14 @@ data Datatype
     { _datatypeModule :: !ModuleName -- ^ The module that defines the datatype
     , _datatypeName :: !DatatypeName -- ^ The unique name for the datatype at this module and phase
     }
-  deriving (Data, Eq, Ord, Show)
+  deriving stock (Data, Eq, Ord, Show, Generic)
 makeLenses ''Datatype
 
+instance Hashable Datatype
+
 newtype ConstructorName = ConstructorName  { _constructorNameText :: Text }
-  deriving (Data, Eq, IsString, Ord, Show)
+  deriving newtype (Eq, IsString, Ord, Show, Hashable)
+  deriving stock   Data
 makeLenses ''ConstructorName
 
 data Constructor
@@ -34,9 +42,10 @@ data Constructor
     { _constructorModule :: !ModuleName -- ^ The module that defines the constructor
     , _constructorName :: !ConstructorName -- ^ The unique name for the constructor at this module and phase
     }
-  deriving (Data, Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show, Generic)
 makeLenses ''Constructor
 
+instance Hashable Constructor
 instance ShortShow Constructor where
   shortShow = show
 

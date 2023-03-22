@@ -42,13 +42,15 @@ import Control.Applicative
 import Control.Lens hiding (List, children)
 import Control.Monad.Except
 import Control.Monad.Reader
-import Control.Monad.Writer
+import Control.Monad.State.Strict
 import Data.Foldable
+import Data.Function (on)
 import Data.List (nub)
-import Data.List.Extra (maximumOn)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as HM
 import Data.Maybe
-import qualified Data.Set as Set
+import Data.Ord
+import Data.Sequence (Seq(..))
+import qualified Data.Sequence as Seq
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
@@ -82,6 +84,9 @@ import Type
 import Value
 import World
 import qualified ScopeSet
+
+import qualified Util.Set   as Set
+import qualified Util.Store as S
 
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
@@ -222,7 +227,7 @@ visit modName = do
   p <- currentPhase
   let i = phaseNum p
   visitedp <- Set.member p .
-              view (expanderWorld . worldVisited . at modName . non Set.empty) <$>
+              view (expanderWorld . worldVisited . at modName . non mempty) <$>
               getState
   unless visitedp $ do
     let m' = shift i m -- Shift the syntax literals in the module source code
@@ -240,17 +245,17 @@ visit modName = do
 
 -- | Evaluate an expanded module at the current expansion phase,
 -- recursively loading its run-time dependencies.
-evalMod :: CompleteModule -> Expand [EvalResult]
+evalMod :: CompleteModule -> Expand (Seq EvalResult)
 evalMod (KernelModule _) = do
   p <- currentPhase
   dts <- view expanderKernelDatatypes <$> getState
   modifyState $
-    over (expanderWorld . worldDatatypes . at p . non Map.empty) $
-    Map.union dts
+    over (expanderWorld . worldDatatypes . at p . non mempty) $
+    HM.union dts
   ctors <- view expanderKernelConstructors <$> getState
   modifyState $
-    over (expanderWorld . worldConstructors . at p . non Map.empty) $
-    Map.union ctors
+    over (expanderWorld . worldConstructors . at p . non mempty) $
+    HM.union ctors
   vals <- view expanderKernelValues <$> getState
   modifyState $
     over (expanderWorld . worldEnvironments . at p) $
@@ -258,12 +263,11 @@ evalMod (KernelModule _) = do
       Nothing -> Just (snd <$> vals)
       Just env -> Just (env <> (snd <$> vals))
   modifyState $
-    over (expanderWorld . worldTypeContexts . at p . non mempty) $ (<> (fst <$> vals))
-  return []
-evalMod (Expanded em _) = execWriterT $ do
-    traverseOf_ (moduleBody . each) evalDecl em
+    over (expanderWorld . worldTypeContexts . at p . non mempty) (<> (fst <$> vals))
+  return mempty
+evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl em) mempty
   where
-    evalDecl :: CompleteDecl -> WriterT [EvalResult] Expand ()
+    evalDecl :: CompleteDecl -> StateT (Seq EvalResult) Expand ()
     evalDecl (CompleteDecl d) =
       case d of
         Define x n sch e -> do
@@ -285,11 +289,11 @@ evalMod (Expanded em _) = execWriterT $ do
                             }
           for_ ctors \(_, cn, argTypes) ->
             lift $ modifyState $
-            over (expanderWorld . worldConstructors . at p . non Map.empty) $
-            Map.insert cn (ConstructorInfo argTypes dt)
+            over (expanderWorld . worldConstructors . at p . non mempty) $
+            HM.insert cn (ConstructorInfo argTypes dt)
           lift $ modifyState $
-            over (expanderWorld . worldDatatypes . at p . non Map.empty) $
-            Map.insert dt $ DatatypeInfo
+            over (expanderWorld . worldDatatypes . at p . non mempty) $
+            HM.insert dt $ DatatypeInfo
               { _datatypeArgKinds     = argKinds
               , _datatypeConstructors = [c | (_, c, _) <- ctors ]
               }
@@ -297,12 +301,12 @@ evalMod (Expanded em _) = execWriterT $ do
         Example loc sch expr -> do
           env <- lift currentEnv
           value <- lift $ expandEval (eval expr)
-          tell $ [ExampleResult loc env expr sch value]
+          modify' (:|> ExampleResult loc env expr sch value)
         Run loc expr -> do
           lift (expandEval (eval expr)) >>=
             \case
               (ValueIOAction act) ->
-                tell $ [IOResult $ void $ act]
+                modify' (:|> (IOResult . void $ act))
               _ -> throwError $ InternalError $
                    "While running an action at " ++
                    T.unpack (pretty loc) ++
@@ -315,8 +319,8 @@ evalMod (Expanded em _) = execWriterT $ do
               over (expanderWorld . worldTransformerEnvironments . at p) $
               Just . maybe (Env.singleton n x v) (Env.insert n x v)
         Meta decls -> do
-          ((), out) <- lift $ inEarlierPhase (runWriterT $ traverse_ evalDecl decls)
-          tell out
+          ((), out) <- lift $ inEarlierPhase (runStateT (traverse_ evalDecl decls) mempty)
+          modify' (<> out)
         Import spec -> lift $ getImports spec >> pure () -- for side effect of evaluating module
         Export _ -> pure ()
 
@@ -326,7 +330,7 @@ evalMod (Expanded em _) = execWriterT $ do
 getEValue :: Binding -> Expand EValue
 getEValue b = do
   ExpansionEnv env <- view expanderExpansionEnv <$> getState
-  case Map.lookup b env of
+  case S.lookup b env of
     Just v -> return v
     Nothing -> throwError (InternalError ("No such binding: " ++ show b))
 
@@ -338,26 +342,21 @@ visibleBindings = do
   return (globals <> locals)
 
 
-
-
-allMatchingBindings :: Text -> ScopeSet -> Expand [(ScopeSet, Binding)]
+allMatchingBindings :: Text -> ScopeSet -> Expand (Seq (ScopeSet, Binding))
 allMatchingBindings x scs = do
-  namesMatch <- view (at x . non []) <$> visibleBindings
+  namesMatch <- view (at x . non mempty) <$> visibleBindings
   p <- currentPhase
-  let scopesMatch =
-        [ (scopes, b)
-        | (scopes, b, _) <- namesMatch
-        , ScopeSet.isSubsetOf p scopes scs
-        ]
+  let scopesMatch = fmap (\(s,b,_) -> (s,b))
+        . Seq.filter (\(scopes, _, _) -> ScopeSet.isSubsetOf p scopes scs)
+        $ namesMatch
   return scopesMatch
 
 
-
-checkUnambiguous :: ScopeSet -> [ScopeSet] -> Ident -> Expand ()
+checkUnambiguous :: ScopeSet -> (Seq ScopeSet) -> Ident -> Expand ()
 checkUnambiguous best candidates blame =
   do p <- currentPhase
      let bestSize = ScopeSet.size p best
-     let candidateSizes = map (ScopeSet.size p) (nub candidates)
+     let candidateSizes = map (ScopeSet.size p) (nub $ toList candidates)
      if length (filter (== bestSize) candidateSizes) > 1
        then throwError (Ambiguous p blame candidates)
        else return ()
@@ -367,12 +366,14 @@ resolve stx@(Stx scs srcLoc x) = do
   p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of
-    [] ->
+    Seq.Empty ->
       throwError (Unknown (Stx scs srcLoc x))
     candidates ->
-      let best = maximumOn (ScopeSet.size p . fst) candidates
-      in checkUnambiguous (fst best) (map fst candidates) stx *>
-         return (snd best)
+      let
+        check = ScopeSet.size p . fst
+        (best_scpset, best_bind) = maximumBy (compare `on` check) candidates
+      in checkUnambiguous best_scpset (fmap fst candidates) stx *>
+         return best_bind
 
 
 initializeKernel :: Handle -> Expand ()
@@ -700,7 +701,7 @@ initializeKernel outputChannel = do
                                     }
         modifyState $
           over expanderKernelConstructors $
-          Map.insert ctor cInfo
+          HM.insert ctor cInfo
         cb <- freshBinding
         bind cb $ EConstructor ctor
         addToKernel ctorName runtime cb
@@ -713,7 +714,7 @@ initializeKernel outputChannel = do
             }
       modifyState $
         over expanderKernelDatatypes $
-        Map.insert dt info
+        HM.insert dt info
 
 
     addPatternPrimitive ::
@@ -1098,7 +1099,7 @@ runTask (tid, localData, task) = withLocal localData $ do
                                  }
       modifyState $
         set (expanderCurrentConstructors .
-             at p . non Map.empty .
+             at p . non mempty .
              at ctor) $
         Just info
       b <- freshBinding

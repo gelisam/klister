@@ -64,7 +64,6 @@ module Expander.Primitives
 import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad.Except
-import qualified Data.Map as Map
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -158,7 +157,7 @@ datatype dest outScopesDest stx = do
         }
   modifyState $
     set (expanderCurrentDatatypes .
-         at p . non Map.empty .
+         at p . non mempty .
          at d) $
     Just info
 

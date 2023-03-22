@@ -4,27 +4,28 @@ module Alpha where
 
 import Control.Applicative
 import Control.Lens
-import Control.Monad.Fail
 import Control.Monad.State
-import Data.Map (Map)
+import Control.Monad.Fail
+import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Text
-import qualified Data.Map as Map
 
 import Unique
 
+import Util.Key
+
 
 data AlphaState = AlphaState
-  { _alphaStateEnv1 :: Map Unique Int
-  , _alphaStateEnv2 :: Map Unique Int
+  { _alphaStateEnv1 :: IntMap Int
+  , _alphaStateEnv2 :: IntMap Int
   , _alphaStateNext :: Int
   }
 makeLenses ''AlphaState
 
 initialAlphaState :: AlphaState
 initialAlphaState = AlphaState
-  { _alphaStateEnv1 = Map.empty
-  , _alphaStateEnv2 = Map.empty
+  { _alphaStateEnv1 = mempty
+  , _alphaStateEnv2 = mempty
   , _alphaStateNext = 0
   }
 
@@ -56,13 +57,13 @@ alphaEq x y = isJust $ runAlpha $ alphaCheck x y
 
 instance AlphaEq Unique where
   alphaCheck x y = Alpha $ do
-    maybeM <- use (alphaStateEnv1 . at x)
-    maybeN <- use (alphaStateEnv2 . at y)
+    maybeM <- use (alphaStateEnv1 . at (getKey x))
+    maybeN <- use (alphaStateEnv2 . at (getKey y))
     guard (maybeM == maybeN)
-    when (maybeM == Nothing) $ do
+    when (isNothing maybeM) $ do
       n <- unAlpha nextInt
-      assign (alphaStateEnv1 . at x) (Just n)
-      assign (alphaStateEnv2 . at y) (Just n)
+      assign (alphaStateEnv1 . at (getKey x)) (Just n)
+      assign (alphaStateEnv2 . at (getKey y)) (Just n)
 
 instance (AlphaEq a, AlphaEq b) => AlphaEq (a, b) where
   alphaCheck (x1, y1)

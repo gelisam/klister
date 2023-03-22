@@ -2,6 +2,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module Module (
     Module(..)
   , moduleName
@@ -41,10 +43,11 @@ import Control.Lens
 import Control.Monad.IO.Class
 import Data.Data (Data)
 import Data.Functor
-import Data.Map (Map)
-import qualified Data.Map as Map
+import Data.HashMap.Strict (HashMap)
+import qualified Data.HashMap.Strict as HM
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Sequence (Seq)
 import Data.Text (Text)
 import Numeric.Natural
 
@@ -59,6 +62,9 @@ import Syntax.SrcLoc
 import Type
 import Unique
 
+import Util.Key
+import Util.Store (Store)
+import qualified Util.Store as S
 
 newtype ModulePtr = ModulePtr Unique
   deriving (Eq, Ord)
@@ -75,32 +81,32 @@ data ImportSpec
   | ShiftImports ImportSpec Natural
   | RenameImports ImportSpec [(Ident, Ident)]
   | PrefixImports ImportSpec Text
-  deriving (Data, Show)
+  deriving (Data, Show, Eq)
 
-newtype Imports = Imports (Map ModuleName (Map Phase (Set Text)))
+newtype Imports = Imports (HashMap ModuleName (Store Phase (Set Text)))
   deriving (Data, Show)
 
 instance Phased Imports where
-  shift i (Imports imports) = Imports (Map.map (Map.mapKeys (shift i)) imports)
+  shift i (Imports imports) = Imports (HM.map (S.mapKeys (+ Phase i)) imports)
 
 noImports :: Imports
-noImports = Imports Map.empty
+noImports = Imports mempty
 
 instance Semigroup Imports where
-  Imports i1 <> Imports i2 = Imports (Map.unionWith (Map.unionWith Set.union) i1 i2)
+  Imports i1 <> Imports i2 = Imports (HM.unionWith (S.unionWith Set.union) i1 i2)
 
 instance Monoid Imports where
   mempty = noImports
   mappend = (<>)
 
-newtype Exports = Exports (Map Phase (Map Text Binding))
+newtype Exports = Exports (Store Phase (HashMap Text Binding))
   deriving (Data, Show)
 
 instance Phased Exports where
-  shift i (Exports exports) = Exports $ Map.mapKeys (shift i) exports
+  shift i (Exports exports) = Exports $ S.mapKeys (+ Phase i) exports
 
 instance Semigroup Exports where
-  Exports m1 <> Exports m2 = Exports $ Map.unionWith (flip (<>)) m1 m2
+  Exports m1 <> Exports m2 = Exports $ S.unionWith (flip (<>)) m1 m2
 
 instance Monoid Exports where
   mempty = noExports
@@ -110,8 +116,8 @@ forExports :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f
 forExports act (Exports todo) =
   traverse (\(x,y,z) -> act x y z)
     [ (p, n, b)
-    | (p, m) <- Map.toList todo
-    , (n, b) <- Map.toList m
+    | (p, m) <- S.toList todo
+    , (n, b) <- HM.toList m
     ]
 
 forExports_ :: Applicative f => (Phase -> Text -> Binding -> f a) -> Exports -> f ()
@@ -123,29 +129,29 @@ getExport p x (Exports es) = view (at p) es >>= view (at x)
 addExport :: Phase -> Text -> Binding -> Exports -> Exports
 addExport p x b (Exports es) = Exports $ over (at p) (Just . ins) es
   where
-    ins Nothing = Map.singleton x b
-    ins (Just m) = Map.insert x b m
+    ins Nothing = HM.singleton x b
+    ins (Just m) = HM.insert x b m
 
 noExports :: Exports
-noExports = Exports Map.empty
+noExports = Exports mempty
 
 mapExportNames :: (Text -> Text) -> Exports -> Exports
-mapExportNames f (Exports es) = Exports $ Map.map (Map.mapKeys f) es
+mapExportNames f (Exports es) = Exports $ fmap (HM.mapKeys f) es
 
 filterExports :: (Phase -> Text -> Bool) -> Exports -> Exports
 filterExports ok (Exports es) =
-  Exports $ Map.mapMaybeWithKey helper es
+  Exports $ S.mapMaybeWithKey helper es
   where
     helper p bs =
-      let out = Map.filterWithKey (\t _ -> ok p t) bs
-      in if Map.null out then Nothing else Just out
+      let out = HM.filterWithKey (\t _ -> ok p t) bs
+      in if HM.null out then Nothing else Just out
 
 data ExportSpec
   = ExportIdents [Ident]
   | ExportRenamed ExportSpec [(Text, Text)]
   | ExportPrefixed ExportSpec Text
   | ExportShifted ExportSpec Natural
-  deriving (Data, Show)
+  deriving (Data, Show, Eq)
 
 data Module f a = Module
   { _moduleName :: ModuleName
@@ -157,18 +163,20 @@ data Module f a = Module
 makeLenses ''Module
 
 
-newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) [CompleteDecl] Core }
-  deriving (Data, Show)
+newtype CompleteDecl = CompleteDecl { _completeDecl :: Decl Ty (Scheme Ty) (Seq CompleteDecl) Core }
+  deriving (Data, Show, Eq)
 
 instance Phased CompleteDecl where
+  {-# INLINE shift #-}
   shift i (CompleteDecl d) = CompleteDecl (shift i d)
 
 data CompleteModule
-  = Expanded !(Module [] CompleteDecl) !BindingTable
+  = Expanded !(Module Seq CompleteDecl) !BindingTable
   | KernelModule !Phase
   deriving (Data, Show)
 
 instance Phased CompleteModule where
+  {-# INLINE shift #-}
   shift i (Expanded m bs) = Expanded (shift i m) (shift i bs)
   shift i (KernelModule p) = KernelModule (shift i p)
 
@@ -180,7 +188,7 @@ instance (Functor f, Phased a) => Phased (Module f a) where
 
 
 newtype DeclPtr = DeclPtr Unique
-  deriving (Eq, Ord)
+  deriving newtype (Eq, Ord, HasKey)
 
 instance Show DeclPtr where
   show (DeclPtr u) = "(DeclPtr " ++ show (hashUnique u) ++ ")"
@@ -198,7 +206,7 @@ data Decl ty scheme decl expr
   | Export ExportSpec
   | Data Ident DatatypeName [Kind] [(Ident, Constructor, [ty])]
     -- ^ User-written name, internal name, type-argument kinds, constructors
-  deriving (Data, Functor, Show)
+  deriving (Data, Functor, Show, Eq)
 
 
 instance Bifunctor (Decl ty scheme) where
@@ -215,7 +223,7 @@ instance (Phased decl, Phased expr) => Phased (Decl ty scheme decl expr) where
   shift i = bimap (shift i) (shift i)
 
 newtype DeclTreePtr = DeclTreePtr Unique
-  deriving (Eq, Ord)
+  deriving newtype (Eq, Ord, HasKey)
 
 instance Show DeclTreePtr where
   show (DeclTreePtr u) = "(DeclTreePtr " ++ show (hashUnique u) ++ ")"
@@ -231,7 +239,7 @@ data DeclTreeF decl next
 
 data SplitDeclTree a = SplitDeclTree
   { _splitDeclTreeRoot :: DeclTreePtr
-  , _splitDeclTreeDescendents :: Map DeclTreePtr (DeclTreeF a DeclTreePtr)
+  , _splitDeclTreeDescendents :: Store DeclTreePtr (DeclTreeF a DeclTreePtr)
   }
 
 makeLenses ''CompleteDecl

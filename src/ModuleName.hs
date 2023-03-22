@@ -1,4 +1,6 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE DeriveGeneric #-}
+
 module ModuleName (
   -- * Module names
     ModuleName(..)
@@ -15,17 +17,23 @@ import Data.Text (Text)
 import qualified Data.Text as T
 import System.Directory
 import System.FilePath
+import Data.Hashable
+import GHC.Generics (Generic)
 
 import ShortShow
 
 newtype KernelName = Kernel ()
-  deriving (Data, Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show, Generic)
+
+instance Hashable KernelName
 
 kernelName :: KernelName
 kernelName = Kernel ()
 
 data ModuleName = ModuleName FilePath | KernelName KernelName
-  deriving (Data, Eq, Ord, Show)
+  deriving (Data, Eq, Ord, Show, Generic)
+
+instance Hashable ModuleName
 
 instance ShortShow ModuleName where
   shortShow (ModuleName x) = x

@@ -7,12 +7,15 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+
 module ScopeSet (
   -- * Scope Sets and their construction
     ScopeSet
   , empty
   , singleScopeAtPhase
   , singleUniversalScope
+  , phaseScopes
+  , universalScopes
   -- * Queries
   , size
   , member
@@ -31,33 +34,35 @@ import Control.Lens
 import Control.Monad
 import Data.Data (Data, gfoldl)
 import Data.Typeable
-import Data.Map.Strict (Map)
-import qualified Data.Map.Strict as Map
-import Data.Set (Set)
-import qualified Data.Set as Set
 
 import Alpha
 import Phase
 import Scope
 import ShortShow
 
+import Util.Store (Store)
+import qualified Util.Store as St
+import Util.Set (Set)
+import qualified Util.Set as Set
+import Util.Key()
+
 data ScopeSet = ScopeSet
   { _universalScopes :: Set Scope
-  , _phaseScopes :: Map Phase (Set Scope)
+  , _phaseScopes     :: Store Phase (Set Scope)
   }
   deriving (Data, Eq, Ord, Show)
 makeLenses ''ScopeSet
 
 instance ShortShow ScopeSet where
   shortShow (ScopeSet always phased) =
-    "{" ++ show (Set.toList always) ++ " | " ++ show (Map.toList phased) ++ "}"
+    "{" ++ show (Set.toList always) ++ " | " ++ show (St.toList phased) ++ "}"
 
 instance Semigroup ScopeSet where
   scs1 <> scs2 =
     ScopeSet
       { _universalScopes = view universalScopes scs1 <> view universalScopes scs2
       , _phaseScopes =
-        Map.unionWith (<>) (view phaseScopes scs1) (view phaseScopes scs2)
+        St.unionWith (<>) (view phaseScopes scs1) (view phaseScopes scs2)
       }
 
 instance Monoid ScopeSet where
@@ -65,7 +70,7 @@ instance Monoid ScopeSet where
   mappend = (<>)
 
 empty :: ScopeSet
-empty = ScopeSet Set.empty Map.empty
+empty = ScopeSet Set.empty mempty
 
 scopes :: Phase -> ScopeSet -> Set Scope
 scopes p scs = view universalScopes scs `Set.union`
@@ -92,7 +97,7 @@ member :: Phase -> Scope -> ScopeSet -> Bool
 member p sc scs = sc `Set.member` (scopes p scs)
 
 instance Phased ScopeSet where
-  shift j = over phaseScopes $ Map.mapKeys (shift j)
+  shift j = over phaseScopes $ St.mapKeys (+ Phase j)
 
 isSubsetOf :: Phase -> ScopeSet -> ScopeSet -> Bool
 isSubsetOf p scs1 scs2 =
@@ -115,18 +120,20 @@ flipUniversally sc = over (phaseScopes . each . at sc) flipper .
     flipper (Just ()) = Nothing
     flipper Nothing = Just ()
 
-contents :: ScopeSet -> (Set Scope, Map Phase (Set Scope))
+contents :: ScopeSet -> (Set Scope, Store Phase (Set Scope))
 contents scs = (view universalScopes scs, view phaseScopes scs)
 
 instance AlphaEq ScopeSet where
   alphaCheck x y = guard (x == y)
 
+{-# INLINE allScopeSets #-}
 allScopeSets :: Data d => Traversal' d ScopeSet
 allScopeSets = allScopeSets'
   where
     allScopeSets' :: forall f d. (Applicative f, Data d)
                   => (ScopeSet -> f ScopeSet)
                   -> d -> f d
+    {-# INLINE allScopeSets' #-}
     allScopeSets' f = gmapA go
       where
         go :: forall a. Data a => a -> f a
@@ -138,7 +145,9 @@ allScopeSets = allScopeSets'
     gmapA :: forall f d. (Applicative f, Data d)
           => (forall x. Data x => x -> f x)
           -> d -> f d
+    {-# INLINE gmapA #-}
     gmapA g = gfoldl combine pure
       where
+        {-# INLINE combine #-}
         combine :: Data a => f (a -> b) -> a -> f b
         combine ff a = (<*>) ff (g a)

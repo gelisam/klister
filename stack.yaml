@@ -1,4 +1,5 @@
 resolver: lts-14.8
 packages:
 - .
-extra-deps: []
+extra-deps:
+  - unordered-containers-0.2.19.1@sha256:9ad8972c2e913c37b1d4f0e1261517fd7a1b8c8a58077e057be69837e3dbaa00,3822

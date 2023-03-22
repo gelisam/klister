@@ -26,7 +26,7 @@ overIORef :: (MonadIO m, MonadReader r m)
           -> m ()
 overIORef refGetter leafSetter f = do
   ref <- view refGetter
-  liftIO $ modifyIORef ref (over leafSetter f)
+  liftIO $ modifyIORef' ref (over leafSetter f)
 
 setIORef :: (MonadIO m, MonadReader r m)
          => Getting (IORef s) r (IORef s)  -- ^ Getter r (IORef s)
@@ -35,4 +35,4 @@ setIORef :: (MonadIO m, MonadReader r m)
          -> m ()
 setIORef refGetter leafSetter a = do
   ref <- view refGetter
-  liftIO $ modifyIORef ref (set leafSetter a)
+  liftIO $ modifyIORef' ref (set leafSetter a)
