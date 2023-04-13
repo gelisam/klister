@@ -41,67 +41,73 @@
                         (sexpr (identifier-contents "quux")))))))))
 (example example-sexpr)
 
--- That is quite a mouthful! This is why Racket, where (SExpr) is called
--- "datum", supports '(foo (bar "baz" 42) (quux)) as a much more succinct
--- notation for constructing lists and datums. This notation is also recognized
--- in Klister, but it means something slightly different:
+-- That is quite a mouthful! In Racket, (SExpr) is called "datum", and the quote
+-- macro can be used to construct the above datum much more succinctly as
+-- '(foo (bar "baz" 42) (quux)). Klister also has a quote macro, but it means
+-- something slightly different:
 --
--- notation for <row> in <col> |       Racket |                    Klister
--- ----------------------------+--------------+---------------------------
---                List Integer |  '(1 2 3) or | (:: 1 (:: 2 (:: 3 (nil))))
---                             | (list 1 2 3) |            or (list 1 2 3)
---         (SExpr) aka "datum" |   '(foo bar) |          no builtin syntax
---  Syntax aka "syntax object" |  #'(foo bar) |                 '(foo bar)
+--  notation for <row> in <col> |       Racket |                    Klister
+-- -----------------------------+--------------+---------------------------
+--                 List Integer |  '(1 2 3) or | (:: 1 (:: 2 (:: 3 (nil))))
+--                              | (list 1 2 3) |            or (list 1 2 3)
+--          (SExpr) aka "datum" |   '(foo bar) |          no builtin syntax
+-- (Syntax) aka "syntax object" |  #'(foo bar) |                 '(foo bar)
 --
 -- A syntax object such as '(foo (bar "baz" 42) (quux)) is an s-expression
 -- whose nodes are annotated with source locations and some information about
--- which variables are in scope at that location. Here's what Syntax would look
--- like if it was defined as a datatype:
+-- which variables are in scope at that location. Here's what (Syntax) would
+-- look like if it was defined as a datatype:
 --
 -- (datatype (Syntax)
 --   (mk-syntax
---     Loc
---     ScopeSet
+--     (Loc)
+--     (ScopeSet)
 --     (Syntax-Contents (Syntax))))
 
 
-------------------------- Manipulating Syntax values --------------------------
+------------------------ Manipulating (Syntax) values -------------------------
 
--- The real Syntax type is opaque, so the way to construct and inspect a value
--- of type Syntax is via primitive functions and macros, not by calling and
--- pattern-matching on the mk-syntax constructor.
---
--- Also, in reality there are no types called Loc and ScopeSet, they are
--- internal fields which cannot be separated from the Syntax to which they are
--- attached. It is nevertheless useful to define type synonyms Loc and ScopeSet
--- representing a Syntax whose only field we care about is their source
--- location or their scoping information, as there are a few primitive
--- functions which treat Syntax values that way.
-
--- Macros are also expanded when they occur inside types, so in Klister, a type
--- synonym is just another macro.
-(define-syntax-rule (Loc) Syntax)
-(define-syntax-rule (ScopeSet) Syntax)
-
-(define syntax->loc id)
-(define syntax->scope id)
-
--- Here are the primitives Klister provides for manipulting Syntax values.
+-- The real (Syntax) type is opaque, so the way to construct and inspect a value
+-- of type (Syntax) is via primitive functions and macros, not by calling and
+-- pattern-matching on the mk-syntax constructor. Here is one such primitive.
 
 (example
-  (the (-> Syntax (Syntax-Contents Syntax))
+  (the (-> (Syntax) (Syntax-Contents Syntax))
+       open-syntax))
+
+-- To go in the opposite direction, the close-syntax primitive combines a (Loc),
+-- a (ScopeSet), and a (Syntax-Conents Syntax) into a (Syntax) value. One
+-- subtelty is that (Loc), (ScopeSet), and (Syntax) are all the same type; we
+-- use the type synonym (Loc) to indicate that a function is only interested in
+-- the source location of a (Syntax) value, and similarly for (ScopeSet).
+
+-- type synonyms
+(define-syntax-rule (Loc) (Syntax))
+(define-syntax-rule (ScopeSet) (Syntax))
+
+(define syntax->loc
+  (the (-> (Syntax) (Loc))
+       id))
+(define syntax->scope
+  (the (-> (Syntax) (ScopeSet))
+       id))
+(define syntax->contents
+  (the (-> (Syntax) (Syntax-Contents (Syntax)))
        open-syntax))
 (example
   (the (-> (Loc) (ScopeSet) (Syntax-Contents Syntax) Syntax)
        close-syntax))
-(example
-  (the (Macro (-> (ScopeAction) (ScopeSet) (ScopeSet)))
-       (make-introducer)))
 
--- The open-syntax and close-syntax primitives are sufficient to set all three
--- fields.
+-- This is the first time we define type synonyms in Klister, so it is a good
+-- opportunity to point out that Klister doesn't need a dedicated syntax for
+-- defining type synonyms and pattern synonyms. Klister macros can appear inside
+-- types and patterns, so a type synonym is just a macro which expands to a
+-- type.
 
-(define syntax->contents open-syntax)
+
+-- The two primitives we have seen so far, open-syntax and close-syntax, are
+-- sufficient to copy any of (Syntax)'s three fields over the corresponding
+-- field of another (Syntax) value.
 
 (defun replace-loc (new-loc stx)
   (close-syntax
@@ -195,6 +201,10 @@ In terms of scoping rules, this means that:
 3. "unsafe" code can see the definitions from the "safe", "trustworthy", and "unsafe" sections.
 
 We thus want to create three scopes called "safe", "trustworthy", and "unsafe". The primitive which creates a new scope is make-introducer; it creates a scope and returns a function which adds or removes that scope from all the nodes in Syntax tree.
+
+(example
+  (the (Macro (-> (ScopeAction) (ScopeSet) (ScopeSet)))
+       (make-introducer)))
 
 -- type synonym
 (define-macro (ScopeIntroducer)
