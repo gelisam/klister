@@ -1,7 +1,241 @@
 #lang "prelude.kl"
 
+(import (shift "prelude.kl" 1))
+(import (shift "do.kl" 1))
+(import (shift "free-identifier-case.kl" 1))
+(import (shift "quasiquote.kl" 1))
 (import "defun.kl")
 (import "do.kl")
+(import "pmatch.kl")
+(import "quasiquote.kl")
+
+(define tree
+  (lambda (_)
+    (error '(tree is only intended to be used as a pattern))))
+
+(meta
+  -- (is-tree-pattern '(tree foo))
+  -- =>
+  -- (pure (just 'foo))
+  --
+  -- (is-tree-pattern '(foo bar))
+  -- =>
+  -- nothing
+  --
+  -- (is-tree-pattern 'else)
+  -- =>
+  -- nothing
+  (define is-tree-pattern
+    (lambda (pattern)
+      (syntax-case pattern
+        [(list (tree_ x))
+         (syntax-case tree_
+           [(ident tree_)
+            (free-identifier-case tree_
+              [tree
+               (pure (just x))]
+              [(else _)
+               (pure nothing)])]
+           [_
+            (pure nothing)])]
+        [_
+         (pure nothing)])))
+
+  -- (is-else-pattern '(else foo))
+  -- =>
+  -- (pure (just 'foo))
+  --
+  -- (is-else-pattern '(foo bar))
+  -- =>
+  -- nothing
+  --
+  -- (is-else-pattern 'else)
+  -- =>
+  -- nothing
+  (define is-else-pattern
+    (lambda (pattern)
+      (syntax-case pattern
+        [(list (else_ x))
+         (syntax-case else_
+           [(ident else_)
+            (free-identifier-case else_
+              [else
+               (pure (just x))]
+              [(else _)
+               (pure nothing)])]
+           [_
+            (pure nothing)])]
+        [_
+         (pure nothing)]))))
+
+
+(define-macros
+  ([match-tree
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ scrutinee pattern body))
+         (syntax-case pattern
+           [(ident x)
+            (pure `(let [,x ,scrutinee]
+                     (just ,body)))]
+           [(list ())
+            (pure `(syntax-case ,scrutinee
+                     [(list ())
+                      (just ,body)]
+                     [_
+                      nothing]))]
+           [(cons car-pattern cdr-pattern)
+            (pure `(syntax-case ,scrutinee
+                     [(cons car-scrutinee cdr-scrutinee)
+                      (pmatch (match-tree car-scrutinee ,car-pattern
+                                (match-tree cdr-scrutinee ,cdr-pattern
+                                  ,body))
+                        [(just (just r))
+                         (just r)]
+                        [(else _)
+                         nothing])]
+                     [_
+                      nothing]))])]))]))
+
+-- (just '(1 2 3 4))
+(example
+  (match-tree '(1 (2 3) 4)
+               (a (b c) d)
+    `(,a ,b ,c ,d)))
+
+-- (just '(1 (2 3) 4))
+(example
+  (match-tree '(1 (2 3) 4)
+               (a b c)
+    `(,a ,b ,c)))
+
+-- (nothing)
+(example
+  (match-tree '(1 (2 3) 4)
+               (a b)
+    `(,a ,b)))
+
+
+(define-macros
+  ([syntax-pmatch
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ scrutinee-cases)
+         (syntax-case scrutinee-cases
+           [(cons scrutinee-expr cases)
+            (pure `(let [scrutinee ,scrutinee-expr]
+                     (syntax-pmatch-aux scrutinee ,cases)))])]))]
+   [syntax-pmatch-aux
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ scrutinee cases))
+         (syntax-case cases
+           [(list ())
+            (pure `(error ',scrutinee))]
+           [(cons pattern-body cases)
+            (syntax-case pattern-body
+              [(list [pattern body])
+               (do (is-else <- (is-else-pattern pattern))
+                   (case is-else
+                     [(just x)
+                      (pure `(let [,x ,scrutinee]
+                               ,body))]
+                     [(nothing)
+                      (pure `(case (match-tree ,scrutinee ,pattern ,body)
+                               [(just r)
+                                r]
+                               [(nothing)
+                                (syntax-pmatch-aux ,scrutinee ,cases)]))]))])])]))]))
+
+-- `(1 2 3 4)
+(example
+  (syntax-pmatch '(1 (2 3) 4)
+    [(a b)
+     'nope]
+    [(a (b c) d)
+     `(,a ,b ,c ,d)]
+    [(else x)
+     'nope]))
+
+-- `(other (1 (2 3) 4 5))
+(example
+  (syntax-pmatch '(1 (2 3) 4 5)
+    [(a b)
+     'nope]
+    [(a (b c) d)
+     'nope]
+    [(else x)
+     `(other ,x)]))
+
+
+(define-macros
+  ([my-syntax-case
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ scrutinee-and-cases)
+         (syntax-case scrutinee-and-cases
+           [(cons scrutinee-expr cases)
+            (pure `(let [scrutinee ,scrutinee-expr]
+                     (my-syntax-case-aux scrutinee ,cases)))])]))]
+   [my-syntax-case-aux
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ scrutinee cases))
+         (syntax-case cases
+           [(list ())
+            -- let the original syntax-case pick the error message
+            (pure `(syntax-case ,scrutinee))]
+           [(cons pattern-body cases)
+            (syntax-case pattern-body
+              [(list [pattern body])
+               (do (is-tree <- (is-tree-pattern pattern))
+                   (is-else <- (is-else-pattern pattern))
+                   (case is-tree
+                     [(just tree-pattern)
+                      (pure `(syntax-pmatch ,scrutinee
+                               [,tree-pattern
+                                ,body]
+                               [(else _)
+                                (my-syntax-case-aux ,scrutinee ,cases)]))]
+                     [(nothing)
+                      (case is-else
+                        [(just x)
+                         (pure `(let [,x ,scrutinee]
+                                  ,body))]
+                        [(nothing)
+                         (pure `(syntax-case ,scrutinee
+                                  [,pattern ,body]
+                                  [_
+                                   (my-syntax-case-aux ,scrutinee ,cases)]))])]))])])]))]))
+
+-- `(1 2 3 4)
+(example
+  (my-syntax-case '(1 (2 3) 4)
+    [(list (a b))
+     'nope]
+    [(tree (a (b c) d))
+     `(,a ,b ,c ,d)]
+    [(else x)
+     'nope]))
+
+-- `(car 1 cdr ((2 3) 4 5))
+(example
+  (my-syntax-case '(1 (2 3) 4 5)
+    [(tree (a (b c) d))
+     'nope]
+    [(cons car cdr)
+     `(car ,car cdr ,cdr)]))
+
+-- `(other ,(1 (2 3) 4 5))
+(example
+  (my-syntax-case '(1 (2 3) 4 5)
+    [(tree (a (b c) d))
+     'nope]
+    [(list (a b))
+     'nope]
+    [(else other)
+     `(other ,other)]))
+
 
 -- (replace-identifier 'y 'x '(x y z z y)
 -- =>
@@ -20,7 +254,9 @@
     (_
      (pure haystack))))
 
--- can't be tested here because we'd need to define a macro but
--- replace-identifier is only available at phase 0.
+--- can't be tested here because we'd need to define a macro but
+--- replace-identifier is only available at phase 0.
 
-(export replace-identifier)
+
+--(export (rename ([my-syntax-case syntax-case]) syntax-case))
+(export tree syntax-pmatch replace-identifier my-syntax-case)

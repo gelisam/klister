@@ -1,0 +1,11 @@
+(just #[quasiquote.kl:56.57-56.60]<(Signal 1 Signal 2 Signal 3 Signal 4)>) : (Maybe Syntax)
+(just #[quasiquote.kl:56.57-56.60]<(Signal 1 (Signal 2 Signal 3) Signal 4)>) : (Maybe Syntax)
+(nothing) : (Maybe Syntax)
+#[quasiquote.kl:56.57-56.60]<(Signal 1 Signal 2 Signal 3 Signal 4)> : Syntax
+#[quasiquote.kl:49.63-49.66]
+ <(other (Signal 1 (Signal 2 Signal 3) Signal 4 Signal 5))> : Syntax
+#[quasiquote.kl:56.57-56.60]<(Signal 1 Signal 2 Signal 3 Signal 4)> : Syntax
+#[quasiquote.kl:49.63-49.66]
+ <(car Signal 1 cdr ((Signal 2 Signal 3) Signal 4 Signal 5))> : Syntax
+#[quasiquote.kl:49.63-49.66]
+ <(other (Signal 1 (Signal 2 Signal 3) Signal 4 Signal 5))> : Syntax
