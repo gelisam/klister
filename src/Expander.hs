@@ -40,6 +40,7 @@ module Expander (
 
 import Control.Applicative
 import Control.Lens hiding (List, children)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
 import Control.Monad.State.Strict
@@ -48,7 +49,6 @@ import Data.Function (on)
 import Data.List (nub)
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
-import Data.Ord
 import Data.Sequence (Seq(..))
 import qualified Data.Sequence as Seq
 import Data.Text (Text)

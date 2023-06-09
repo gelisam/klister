@@ -8,6 +8,7 @@
 module Expander.Syntax where
 
 import Control.Monad.Except
+import Control.Monad.IO.Class
 import Data.Functor.Identity (Identity(Identity))
 import Data.List (nub, sort)
 import Data.Text (Text)

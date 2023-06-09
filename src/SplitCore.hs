@@ -26,7 +26,6 @@ module SplitCore where
 
 import Prelude hiding (lookup)
 import Control.Lens hiding (children)
-import Control.Monad.Except
 import Control.Monad.Writer
 
 import Core

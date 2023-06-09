@@ -4,8 +4,8 @@ module Alpha where
 
 import Control.Applicative
 import Control.Lens
+import Control.Monad
 import Control.Monad.State
-import Control.Monad.Fail
 import Data.IntMap.Strict (IntMap)
 import Data.Maybe
 import Data.Text

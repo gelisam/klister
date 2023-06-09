@@ -25,17 +25,12 @@ module Syntax
  , module Syntax.Syntax
  )where
 
-import Control.Lens hiding (List)
-import Data.Data (Data)
 import Data.Text (Text)
 import qualified Data.Text as T
 
-import Alpha
-import ModuleName
 import Phase
 import Scope
 import ScopeSet
-import ShortShow
 import Syntax.SrcLoc
 import Syntax.Syntax
 

@@ -10,6 +10,7 @@ module Expander.TC (
   ) where
 
 import Control.Lens hiding (indices)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Foldable

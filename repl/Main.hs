@@ -6,7 +6,7 @@ module Main where
 
 import Control.Exception
 import Control.Lens hiding (argument)
-import Control.Monad (forever)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
 

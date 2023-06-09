@@ -152,6 +152,7 @@ module Expander.Monad
 import Control.Applicative
 import Control.Arrow
 import Control.Lens
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.Reader
 import Data.Foldable

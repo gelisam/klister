@@ -9,7 +9,8 @@ module Golden where
 
 import Control.Lens hiding (argument)
 import Control.Monad.Catch (bracket)
-import Control.Monad.Except
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
