@@ -12,9 +12,9 @@ import Control.Lens hiding (List)
 import Control.Monad.State
 import qualified Data.HashMap.Strict as HM
 import qualified Util.Set as Set
-import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
-import qualified Data.Text.Prettyprint.Doc as PP
-import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
+import Prettyprinter hiding (Pretty(..), angles, parens)
+import qualified Prettyprinter as PP
+import Prettyprinter.Render.Text (putDoc, renderStrict)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text as T

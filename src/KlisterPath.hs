@@ -33,7 +33,7 @@ import Control.Lens (view)
 import Data.Functor ((<&>))
 import qualified Data.Set as Set
 import Data.Set (Set)
-import qualified Data.Text.Prettyprint.Doc as PP
+import qualified Prettyprinter as PP
 import System.Directory (canonicalizePath, listDirectory)
 import System.FilePath (takeDirectory)
 import System.FilePath.Posix ((</>))
