@@ -1,3 +1,3 @@
 #!/bin/bash
-find . -name '*.golden' | xargs rm
-stack test
+export KLISTERPATH=`pwd`/examples
+cabal run klister-tests -- --accept
