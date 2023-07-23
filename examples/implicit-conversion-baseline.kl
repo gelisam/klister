@@ -1,0 +1,57 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+(import "defuns.kl")
+(import "list.kl")
+
+
+-- data Expr
+--   = 'var
+--   | '42
+--   | '"foo"
+--   | '(let-implicit f body)
+--   | '(lambda ((the String s) (the Integer n) ...) body)
+--   | '(f arg1 arg2 ...)
+(datatype
+(define-syntax-rule (Var) Syntax)
+(define-syntax-rule (Expr) Syntax)
+
+(datatype (Type)
+  (integer)
+  (string)
+  (arrow (Type) (Type)))
+
+(datatype (Context-Entry)
+  (context-entry (Var) (Type)))
+
+(define-syntax-rule (Context)
+  (List (Context-Entry)))
+
+(define global-context
+  (the (Context)
+       (list (context-entry 'string-length (arrow (string) (integer)))
+             (context-entry 'integer->string (arrow (integer) (string)))
+             (context-entry '+ (arrow (integer)
+                                 (arrow (integer)
+                                   (integer))))
+             (context-entry '* (arrow (integer)
+                                 (arrow (integer)
+                                   (integer)))))))
+
+(defuns
+  [infer (expr)
+   (nothing)]
+  [check (expr type)
+   (nothing)])
+(example (the (-> (Expr) (Maybe (Type)))
+              infer))
+(example (the (-> (Expr) (Type) (Maybe Unit))
+              check))
+
+(define-syntax-rule (let-implicit f body)
+  42)
+
+--(export #%module #%app #%integer-literal
+--        example lambda let-implicit
+--        string-length +)
