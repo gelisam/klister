@@ -1,0 +1,4 @@
+(:: (false) (:: (true) (:: (false) (:: (true) (:: (false) (nil)))))) : (List Bool)
+(:: (true) (:: (false) (:: (true) (:: (false) (:: (true) (nil)))))) : (List Bool)
+(:: 1 (:: 2 (:: 6 (:: 24 (:: 120 (nil)))))) : (List Integer)
+(:: 0 (:: 1 (:: 7 (:: 2 (:: 5 (nil)))))) : (List Integer)
