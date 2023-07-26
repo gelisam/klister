@@ -10,11 +10,10 @@ module Expander.TC (
   ) where
 
 import Control.Lens hiding (indices)
+import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Foldable
-import Data.Map (Map)
-import qualified Data.Map as Map
 import Numeric.Natural
 
 import Expander.Monad
@@ -26,6 +25,9 @@ import Syntax (Syntax, stxLoc)
 import Syntax.SrcLoc
 import Type
 import World
+
+import Util.Store (Store)
+import qualified Util.Store as St
 
 derefType :: MetaPtr -> Expand (TVar Ty)
 derefType ptr =
@@ -160,35 +162,35 @@ notFreeInCtx var = do
 generalizeType :: Ty -> Expand (Scheme Ty)
 generalizeType ty = do
   canGeneralize <- filterM notFreeInCtx =<< metas ty
-  (body, (_, _, argKinds)) <- flip runStateT (0, Map.empty, []) $ do
+  (body, (_, _, argKinds)) <- flip runStateT (0, mempty, []) $ do
     genTyVars canGeneralize ty
   pure $ Scheme argKinds body
 
   where
     genTyVars ::
       [MetaPtr] -> Ty ->
-      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand Ty
+      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
       Ty <$> genVarsTyF vars t'
 
     genVarsTyF ::
       [MetaPtr] -> TyF Ty ->
-      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand (TyF Ty)
+      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand (TyF Ty)
     genVarsTyF vars (TyF ctor args) =
       TyF <$> genVarsCtor vars ctor
           <*> traverse (genTyVars vars) args
 
     genVarsCtor ::
       [MetaPtr] -> TypeConstructor ->
-      StateT (Natural, Map MetaPtr Natural, [Kind]) Expand TypeConstructor
+      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand TypeConstructor
     genVarsCtor vars (TMetaVar v)
       | v `elem` vars = do
           (i, indices, argKinds) <- get
-          case Map.lookup v indices of
+          case St.lookup v indices of
             Nothing -> do
               k <- lift $ typeVarKind v
-              put (i + 1, Map.insert v i indices, argKinds ++ [k])
+              put (i + 1, St.insert v i indices, argKinds ++ [k])
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v

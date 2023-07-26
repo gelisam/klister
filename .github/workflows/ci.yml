@@ -17,27 +17,27 @@ jobs:
       matrix:
         include:
             # latest GHC, default OS
+          - cabal: "3.8"
+            ghc: "9.6"
+            os: ubuntu-latest
+
+            # non-latest GHC, default OS
+          - cabal: "3.8"
+            ghc: "9.4"
+            os: ubuntu-latest
+
+            # non-latest GHC, default OS
           - cabal: "3.6"
             ghc: "9.2.5"
             os: ubuntu-latest
 
-            # non-latest GHC, default OS
-          - cabal: "3.4"
-            ghc: "9.0.1"
-            os: ubuntu-latest
           - cabal: "3.2"
-            ghc: "8.10.2"
-            os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.8.4"
-            os: ubuntu-latest
-          - cabal: "3.2"
-            ghc: "8.6.5"
+            ghc: "8.10.7"
             os: ubuntu-latest
 
             # latest GHC, non-default OS
-          - cabal: "3.2"
-            ghc: "9.0.1"
+          - cabal: "3.8"
+            ghc: "9.6"
             os: macOS-latest
 
     steps:
@@ -74,6 +74,10 @@ jobs:
       run: |
         cabal test all
 
+    - name: TestDebug
+      run: |
+        cabal test all --ghc-options='-debug'
+
   stack:
     name: stack / ghc ${{ matrix.ghc }}
     runs-on: ubuntu-latest
@@ -81,18 +85,18 @@ jobs:
       # only test stack with one OS and one GHC version; if it works with
       # cabal, it probably also works with stack.
       matrix:
-        stack: ["2.3.1"]
-        ghc: ["8.6.5"]
+        ghc: ['9.2.8']
 
     steps:
     - uses: actions/checkout@v2
       if: github.event.action == 'opened' || github.event.action == 'synchronize' || github.event.ref == 'refs/heads/master'
 
-    - uses: actions/setup-haskell@v1
+    - uses: haskell/actions/setup@v2
       name: Setup Haskell Stack
       with:
+        enable-stack: true
         ghc-version: ${{ matrix.ghc }}
-        stack-version: ${{ matrix.stack }}
+        stack-version: 'latest'
 
     - uses: actions/cache@v1
       name: Cache ~/.stack

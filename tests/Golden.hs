@@ -9,7 +9,8 @@ module Golden where
 
 import Control.Lens hiding (argument)
 import Control.Monad.Catch (bracket)
-import Control.Monad.Except
+import Control.Monad
+import Control.Monad.IO.Class
 import Control.Monad.Trans.Writer (WriterT, execWriterT, tell)
 import Data.Foldable (for_)
 import Data.Text.Lazy (Text)
@@ -17,7 +18,7 @@ import qualified Data.Text.Lazy as T
 import System.FilePath (replaceExtension, takeBaseName)
 import Test.Tasty (TestTree, testGroup)
 import Test.Tasty.Golden (findByExtension, goldenVsStringDiff)
-import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as HM
 import qualified Data.Text.Lazy as Text
 import qualified Data.Text.Lazy.Encoding as TE
 import System.IO (Handle, openFile, hClose, IOMode(WriteMode))
@@ -64,7 +65,7 @@ runExamples file = do
 
       -- a normal test so all good
       Right (moduleName, result) ->
-        case Map.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
+        case HM.lookup moduleName (view worldEvaluated (view expanderWorld result)) of
           Nothing      -> fail "Internal error: module not evaluated"
           Just results -> do
             -- Show just the results of evaluation in the module the user

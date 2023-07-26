@@ -1,17 +1,21 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 module SplitType where
 
 import Control.Lens hiding (children)
 import Control.Monad.Writer
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 import PartialType
 import Type
 import Unique
 
+import Util.Store (Store)
+import qualified Util.Store as S
+import Util.Key
+
 newtype SplitTypePtr = SplitTypePtr Unique
-  deriving (Eq, Ord)
+  deriving newtype (Eq, Ord, HasKey)
 
 instance Show SplitTypePtr where
   show (SplitTypePtr i) = "(SplitTypePtr " ++ show (hashUnique i) ++ ")"
@@ -21,7 +25,7 @@ newSplitTypePtr = SplitTypePtr <$> newUnique
 
 data SplitType = SplitType
   { _splitTypeRoot :: SplitTypePtr
-  , _splitTypeDescendants :: Map SplitTypePtr (TyF SplitTypePtr)
+  , _splitTypeDescendants :: Store SplitTypePtr (TyF SplitTypePtr)
   }
 makeLenses ''SplitType
 
@@ -41,16 +45,16 @@ splitType partialType = do
   where
     go ::
       SplitTypePtr -> Maybe (TyF PartialType) ->
-      WriterT (Map SplitTypePtr (TyF SplitTypePtr)) IO ()
+      WriterT (Store SplitTypePtr (TyF SplitTypePtr)) IO ()
     go _ Nothing = pure ()
     go place (Just t) = do
       children <- flip traverse t $ \p -> do
         here <- liftIO newSplitTypePtr
         go here (unPartialType p)
         pure here
-      tell $ Map.singleton place children
+      tell $ S.singleton place children
 
-newtype SchemePtr = SchemePtr Unique deriving (Eq, Ord)
+newtype SchemePtr = SchemePtr Unique deriving newtype (Eq, Ord, HasKey)
 
 newSchemePtr :: IO SchemePtr
 newSchemePtr = SchemePtr <$> newUnique

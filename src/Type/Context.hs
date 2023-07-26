@@ -3,20 +3,21 @@
 module Type.Context where
 
 import Control.Lens
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 import Env
 import Phase
 
-newtype TypeContext v t = TypeContext (Map Phase (Env v t))
+import Util.Store (Store)
+import qualified Util.Store as St
+
+newtype TypeContext v t = TypeContext (Store Phase (Env v t))
   deriving Show
 
 instance Ord v => Semigroup (TypeContext v t) where
-  TypeContext γ1 <> TypeContext γ2 = TypeContext (Map.unionWith (<>) γ1 γ2)
+  TypeContext γ1 <> TypeContext γ2 = TypeContext (St.unionWith (<>) γ1 γ2)
 
 instance Ord v => Monoid (TypeContext v t) where
-  mempty = TypeContext Map.empty
+  mempty = TypeContext mempty
 
 type instance Index (TypeContext v a) = Phase
 type instance IxValue (TypeContext v a) = Env v a
@@ -28,4 +29,4 @@ instance Ord v => At (TypeContext v a) where
   at x f (TypeContext env) = TypeContext <$> at x f env
 
 instance Phased (TypeContext v t) where
-  shift i (TypeContext γ) = TypeContext (Map.mapKeys (shift i) γ)
+  shift i (TypeContext γ) = TypeContext (St.mapKeys (shift i) γ)

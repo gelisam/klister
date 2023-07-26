@@ -13,7 +13,9 @@ module Expander.Error
 import Control.Lens
 import Numeric.Natural
 import Data.Text (Text)
+import Data.Sequence (Seq)
 import qualified Data.Text as T
+import Data.Foldable
 
 import Core
 import Datatype
@@ -31,7 +33,7 @@ import Type
 import Value
 
 data ExpansionErr
-  = Ambiguous Phase Ident [ScopeSet]
+  = Ambiguous Phase Ident (Seq ScopeSet)
   | Unknown (Stx Text)
   | NoProgress [ExpanderTask]
   | NotIdentifier Syntax
@@ -113,7 +115,7 @@ instance Pretty VarInfo ExpansionErr where
       text "Scope set of the identifier:" <> line <>
         viaShow (_stxScopeSet x) <> line <>
       text "Scope sets of the candidates:" <> line <>
-        vsep [viaShow c | c <- candidates]
+        vsep [viaShow c | c <- toList candidates]
   pp env (Unknown x) = text "Unknown:" <+> pp env x
   pp env (NoProgress tasks) =
     hang 4 $

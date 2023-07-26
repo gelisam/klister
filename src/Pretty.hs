@@ -10,13 +10,15 @@ module Pretty (Doc, Pretty(..), string, text, viaShow, (<+>), (<>), align, hang,
 
 import Control.Lens hiding (List)
 import Control.Monad.State
-import qualified Data.Map as Map
-import qualified Data.Set as Set
-import Data.Text.Prettyprint.Doc hiding (Pretty(..), angles, parens)
+import qualified Data.HashMap.Strict as HM
+import qualified Util.Set as Set
+import Prettyprinter hiding (Pretty(..), angles, parens)
+import qualified Prettyprinter as PP
+import Prettyprinter.Render.Text (putDoc, renderStrict)
+import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text as T
-import qualified Data.Text.Prettyprint.Doc as PP
-import Data.Text.Prettyprint.Doc.Render.Text (putDoc, renderStrict)
+import qualified Data.Foldable as F
 import System.FilePath (takeFileName)
 
 import Binding
@@ -38,6 +40,8 @@ import Type
 import Unique
 import Value
 import World
+
+import qualified Util.Store as St
 
 text :: Text -> Doc ann
 text = PP.pretty
@@ -284,7 +288,7 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedString core) where
 instance PrettyBinder VarInfo CompleteDecl where
   ppBind env (CompleteDecl d) = ppBind env d
 
-instance PrettyBinder VarInfo [CompleteDecl] where
+instance PrettyBinder VarInfo (Seq CompleteDecl) where
   ppBind env decls = over _1 vsep
                    $ foldr go (\e -> (mempty, e)) decls mempty
     where
@@ -294,7 +298,6 @@ instance PrettyBinder VarInfo [CompleteDecl] where
       go decl cc e = let (doc, e') = ppBind (env <> e) decl
                          (docs, e'') = cc (e <> e')
                      in (doc:docs, e'')
-
 
 instance Pretty VarInfo Kind where
   pp _   KStar        = text "*"
@@ -566,14 +569,14 @@ instance Pretty VarInfo a => Pretty VarInfo (World a) where
     vsep $ map (hang 4)
       [vsep [ text "Expanded modules"
             , vsep [ pp env m
-                   | (_, m) <- Map.toList (view worldModules w)
+                   | (_, m) <- HM.toList (view worldModules w)
                    ]
             ]
       , vsep [ text "Modules visited"
              , vsep [ hang 4 $
                       pp env mn <> line <>
                       text "{" <> group (vsep (map (pp env) ps)) <> text "}"
-                    | (mn, Set.toList -> ps) <- Map.toList (view worldVisited w)
+                    | (mn, Set.toList -> ps) <- HM.toList (view worldVisited w)
                     ]
              ]
       , vsep [ text "Environments"
@@ -581,7 +584,7 @@ instance Pretty VarInfo a => Pretty VarInfo (World a) where
                vsep [ hang 4 $
                       pp env p <> line <>
                       pp env rho
-                    | (p, rho) <- Map.toList $ view worldEnvironments w
+                    | (p, rho) <- St.toList $ view worldEnvironments w
                     ]
              ]
       ]
@@ -644,8 +647,8 @@ instance Pretty VarInfo BindingTable where
                       text "{" <> group (vsep [ pp env scs <+> text "↦" <+>
                                                 pp env b <+> text "@" <+>
                                                 pp env info
-                                              | (scs, b, info) <- xs]) <> text "}"
-                    | (n, xs) <- Map.toList $ view bindings bs
+                                              | (scs, b, info) <- F.toList xs]) <> text "}"
+                    | (n, xs) <- HM.toList $ view bindings bs
                     ]
 
 punc :: Doc VarInfo -> [Doc VarInfo] -> [Doc VarInfo]
@@ -666,7 +669,7 @@ instance Pretty VarInfo ScopeSet where
       ppSet s =
         text "{" <> commaSep (map (pp env) (Set.toList s)) <> text "}"
       ppMap m =
-        group (vsep [group (viaShow k <+> text "↦" <> line <> v) | (k, v) <- Map.toList m])
+        group (vsep [group (viaShow k <+> text "↦" <> line <> v) | (k, v) <- St.toList m])
 
 
 instance Pretty VarInfo KlisterPathError where
