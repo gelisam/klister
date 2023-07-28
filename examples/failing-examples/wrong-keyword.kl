@@ -1,0 +1,8 @@
+#lang "prelude.kl"
+
+(import "keyword-test.kl")
+
+(example
+  (my-if (= (+ 2 2) 4)
+    then "math works"
+    else "math is broken"))

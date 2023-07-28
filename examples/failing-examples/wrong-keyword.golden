@@ -1,0 +1,2 @@
+Syntax error from macro:
+    #[keyword-test.kl:19.26-19.51]<(my-if: expected my-then)>

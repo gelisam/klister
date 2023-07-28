@@ -1,0 +1,17 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
+
+(define-syntax-rule (define-keyword keyword)
+  (define-variadic-macro (keyword _)
+    (syntax-error '(Keyword keyword cannot appear on its own))))
+
+-- I use this synonym because I can never remember whether I should use
+-- free-identifier=? or bound-identifier=?
+(meta
+  (defun keyword=? (ident keyword)
+    (free-identifier=? ident keyword)))
+
+(export define-keyword)
+(export (shift 1 keyword=?))
