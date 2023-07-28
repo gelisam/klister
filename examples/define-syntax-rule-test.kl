@@ -1,0 +1,24 @@
+#lang "prelude.kl"
+
+(import "define-syntax-rule.kl")
+(import "pair-datatype.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "list.kl" 1))
+
+
+(define-macro (lambda2a x y body)
+  (pure `(lambda (,x ,y) ,body)))
+(define mk-pair-a (lambda2a x y (pair x y)))
+(example (mk-pair-a 1 2))
+
+(define-variadic-macro (lambda2b stx)
+  (case (open-syntax stx)
+    [(list-contents (list _ x y body))
+     (pure `(lambda (,x ,y) ,body))]))
+(define mk-pair-b (lambda2b x y (pair x y)))
+(example (mk-pair-b 1 2))
+
+(define-syntax-rule (lambda2c x y body)
+  (lambda (x y) body))
+(define mk-pair-c (lambda2c x y (pair x y)))
+(example (mk-pair-c 1 2))

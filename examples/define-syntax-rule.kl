@@ -2,10 +2,13 @@
 
 (import (shift "prelude.kl" 1))
 (import (shift "do.kl" 1))
+(import (shift "list.kl" 1))
 (import (shift "list-syntax.kl" 1))
 (import (shift "quasiquote.kl" 1))
 (import (shift "syntax.kl" 1))
 
+-- (define-macro (lambda2 x y body)
+--   (pure `(lambda (,x ,y) ,body)))
 (define-macros
   ((define-macro
      (lambda (stx)
@@ -14,35 +17,42 @@
           (syntax-case pattern
            ((cons macro-name args)
             (pure `(define-macros
-                     ((,macro-name (lambda (stx)
+                     ([,macro-name (lambda (stx)
                                      (syntax-case stx
                                       ((list ,pattern)
-                                       ,body)))))))))))))))
+                                       ,body)))])))))))))))
 
-(define-macros
-  ((define-syntax-rule
-     (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern template))
-          (syntax-case pattern
-           ((cons macro-name args)
-            (do (unquoted-template <- (foldlM (lambda (t arg)
-                                                (replace-identifier
-                                                  arg
-                                                  (list-syntax ('unquote arg) stx)
-                                                  t))
-                                              template
-                                              args))
-                (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
-                (pure `(define-macros
-                         ((,macro-name (lambda (stx)
-                                         (syntax-case stx
-                                          ((list ,pattern)
-                                           (pure ,quasiquoted-template)))))))))))))))))
+-- (define-variadic-macro (lambda2 stx)
+--   (case (open-syntax stx)
+--     [(list-contents (list _ x y body))
+--      (pure `(lambda (,x ,y) ,body))]))
+(define-macro (define-variadic-macro macro-stx body)
+  (case (open-syntax macro-stx)
+    [(list-contents (list macro-name stx-name))
+     (pure `(define-macros
+              ([,macro-name (lambda (,stx-name)
+                              ,body)])))]))
 
-(define-syntax-rule (lambda2 x y body)
-  (lambda (x y) body))
+-- (define-syntax-rule (lambda2 x y body)
+--   (lambda (x y) body))
+(define-variadic-macro (define-syntax-rule stx)
+  (syntax-case stx
+    ((list (_ pattern template))
+     (syntax-case pattern
+      ((cons macro-name args)
+       (do (unquoted-template <- (foldlM (lambda (t arg)
+                                           (replace-identifier
+                                             arg
+                                             (list-syntax ('unquote arg) stx)
+                                             t))
+                                         template
+                                         args))
+           (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
+           (pure `(define-macros
+                    ([,macro-name (lambda (stx)
+                                    (syntax-case stx
+                                     ((list ,pattern)
+                                      (pure ,quasiquoted-template))))])))))))))
 
-(example ((lambda2 x y y) 'foo 'bar))  -- 'bar
 
-(export define-macro define-syntax-rule)
+(export define-macro define-variadic-macro define-syntax-rule)
