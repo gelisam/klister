@@ -1,57 +1,169 @@
 #lang "prelude.kl"
 
-(import (shift "prelude.kl" 1))
+-- This file implements the same language as implicit-conversion.kl, but
+-- without using type-aware macros. This hopefully helps to demonstrate the
+-- benefits of that feature, namely, that we can reuse the host's type checker
+-- while adding our own twist to it.
+
 (import "define-syntax-rule.kl")
-(import "defuns.kl")
-(import "list.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "bool.kl" 1))
+(import (shift "define-syntax-rule.kl" 1))
+(import (shift "defuns.kl" 1))
+(import (shift "do.kl" 1))
+(import (shift "keyword.kl" 1))
+(import (shift "list.kl" 1))
+(import (shift "pair-datatype.kl" 1))
+(import (shift "prelude.kl" 2))
 
 
--- data Expr
---   = 'var
---   | '42
---   | '"foo"
---   | '(let-implicit f body)
---   | '(lambda ((the String s) (the Integer n) ...) body)
---   | '(f arg1 arg2 ...)
-(datatype
-(define-syntax-rule (Var) Syntax)
-(define-syntax-rule (Expr) Syntax)
+-- I can think of two implementation strategies:
+--
+-- 1. a dynamically-typed interpreter which detects type errors at runtime and
+--    inserts the implicit conversion just in time.
+-- 2. a statically-typed transpiler which detects type errors at compile-time
+--    and produces regular Klister code containing the implicit converstions as
+--    ordinary function calls.
+--
+-- In this file, I will use (2) because it seems closer in spirit to the
+-- type-aware macro implementation, which also statically decides which implicit
+-- conversion functions to use and then generates code which calls them.
 
-(datatype (Type)
-  (integer)
-  (string)
-  (arrow (Type) (Type)))
+(meta
+  -- data Expr
+  -- = 'var
+  -- | '42
+  -- | '"foo"
+  -- | '(let-implicit f body)
+  -- | '(lambda ((the String s) (the Integer n) ...) body)
+  -- | '(f arg1 arg2 ...)
+  (define-syntax-rule (Var) Syntax)
+  (define-syntax-rule (Expr) Syntax)
 
-(datatype (Context-Entry)
-  (context-entry (Var) (Type)))
+  (datatype (Type)
+    (integer)
+    (string)
+    (arrow (Type) (Type)))
 
-(define-syntax-rule (Context)
-  (List (Context-Entry)))
+  (defun type=? (t1 t2)
+    (case (pair t1 t2)
+      [(pair (integer) (integer))
+       true]
+      [(pair (string )(string))
+       true]
+      [(pair (arrow arg1 result1)
+             (arrow arg2 result2))
+       (and (type=? arg1 arg2)
+            (type=? result1 result2))]
+      [_
+       false]))
 
-(define global-context
-  (the (Context)
-       (list (context-entry 'string-length (arrow (string) (integer)))
-             (context-entry 'integer->string (arrow (integer) (string)))
-             (context-entry '+ (arrow (integer)
-                                 (arrow (integer)
-                                   (integer))))
-             (context-entry '* (arrow (integer)
-                                 (arrow (integer)
-                                   (integer)))))))
+  (datatype (Explicit-Context-Entry)
+    (explicit-context-entry (Var) (Type)))
 
-(defuns
-  [infer (expr)
-   (nothing)]
-  [check (expr type)
-   (nothing)])
-(example (the (-> (Expr) (Maybe (Type)))
-              infer))
-(example (the (-> (Expr) (Type) (Maybe Unit))
-              check))
+  (datatype (Implicit-Context-Entry)
+    (implicit-context-entry (Type) (Expr)))
 
-(define-syntax-rule (let-implicit f body)
-  42)
+  (define-syntax-rule (Explicit-Context)
+    (List (Explicit-Context-Entry)))
+
+  (define-syntax-rule (Implicit-Context)
+    (List (Implicit-Context-Entry)))
+
+  -- errors if the key is not found in the Explicit-Context
+  (defun lookup-explicit (key explicit-ctx)
+    (case explicit-ctx
+      [(nil)
+       (syntax-error `(,key not in scope))]
+      [(:: (explicit-context-entry var type) explicit-ctx)
+       (do
+         (key=? <- (free-identifier=? key var))
+         (if key=?
+           (pure type)
+           (lookup-explicit key explicit-ctx)))]))
+  (example
+    (the (-> Syntax
+             (Explicit-Context)
+             (Macro (Type)))
+         lookup-explicit))
+
+  -- returns the identity function if the key is not found in the
+  -- Implicit-Context
+  (defun lookup-implicit (key implicit-ctx)
+    (case implicit-ctx
+      [(nil)
+       '(lambda (x) x)]
+      [(:: (implicit-context-entry type expr) implicit-ctx)
+       (if (type=? key type)
+         expr
+         (lookup-implicit key implicit-ctx))]))
+  (example
+    (the (-> (Type)
+             (Implicit-Context)
+             Syntax)
+         lookup-implicit))
+
+  (define global-explicit-context
+    (the (Explicit-Context)
+        (list (explicit-context-entry 'string-length (arrow (string) (integer)))
+              (explicit-context-entry 'integer->string (arrow (integer) (string)))
+              (explicit-context-entry '+ (arrow (integer)
+                                           (arrow (integer)
+                                             (integer))))
+              (explicit-context-entry '* (arrow (integer)
+                                           (arrow (integer)
+                                             (integer)))))))
+
+  --(define-keyword let-implicit)
+
+  --(defuns
+  --  [infer (explicit-ctx implicit-ctx expr)
+  --  (case (open-syntax expr)
+  --    -- = 'var
+  --    -- |
+  --    -- | '(lambda ((the String s) (the Integer n) ...) body)
+  --    -- | '(f arg1 arg2 ...)
+  --    [(identifier-contents _)
+  --      -- 'var
+  --      (syntax-error 'todo)]
+  --    [(integer-contents i)
+  --      -- '42
+  --      (pure (pair expr (integer)))]
+  --    [(string-contents s)
+  --      -- '"foo"
+  --      (pure (pair expr (string)))]
+  --    --[(list-contents (:: head-expr tail-exprs))
+  --    -- (do
+  --    --   (let-implicit? <- (keyword=? head-expr 'let-implicit))
+  --    --   (if let-implicit?
+  --    --     -- '(let-implicit f body)
+  --    --     (case tail-exprs
+  --    --       [(list f-expr body-expr)
+  --    --         (do
+  --    --           (f-type <- (infer explicit-ctx implicit-ctx f-expr))
+  --    --           (let [f-entry
+  --    --                 (implicit-context-entry
+  --    --           (infer explicit-ctx (:: (implicit-ctx) body-expr)
+  --  )]
+  --  [check (explicit-ctx implicit-ctx expr type)
+  --  (syntax-error 'check)])
+  --(example (the (-> (Explicit-Context)
+  --                  (Implicit-Context)
+  --                  (Expr)
+  --                  (Macro (Pair Syntax (Type))))
+  --  infer))
+  --(example (the (-> (Explicit-Context)
+  --                  (Implicit-Context)
+  --                  (Expr)
+  --                  (Type)
+  --                  (Macro Syntax))
+  --  check))
+
+)
+
+--(define-syntax-rule (let-implicit f body)
+--  42)
 
 --(export #%module #%app #%integer-literal
---        example lambda let-implicit
---        string-length +)
+-- example lambda let-implicit
+-- string-length +)
