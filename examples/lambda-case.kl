@@ -2,6 +2,7 @@
 
 (import (shift "prelude.kl" 1))
 (import (shift "quasiquote.kl" 1))
+(import "define-syntax-rule.kl")
 (import "list.kl")
 
 -- In Haskell, the LambdaCase language extension allows us to write
@@ -19,23 +20,21 @@
 -- Klister supports macros, meaning you can define this kind of syntactic
 -- extensions yourself. Here is how to implement lambda-case as a macro.
 
-(define-macros
-  -- (lambda-case                                                   -- (1)
-  --   [(nil) "nil"]
-  --   [(:: _ _) "cons"])
-  -- =>
-  -- (lambda (x)                                                    -- (2)
-  --   (case x
-  --     [(nil) "nil"]
-  --     [(:: _ _) "cons"]))
-  ([lambda-case
-    (lambda (stx)
-      (case (open-syntax stx)                                       -- (3)
-        [(list-contents (:: _ cases))
-         (pure
-           `(lambda (x)
-              ,(close-syntax stx stx                                -- (4)
-                 (list-contents (:: 'case (:: 'x cases))))))]))]))
+-- (lambda-case                                                     -- (1)
+--   [(nil) "nil"]
+--   [(:: _ _) "cons"])
+-- =>
+-- (lambda (x)                                                      -- (2)
+--   (case x
+--     [(nil) "nil"]
+--     [(:: _ _) "cons"]))
+(define-variadic-macro (lambda-case stx)
+  (case (open-syntax stx)                                           -- (3)
+    [(list-contents (:: _ cases))
+     (pure
+       `(lambda (x)
+          ,(close-syntax stx stx                                    -- (4)
+             (list-contents (:: 'case (:: 'x cases))))))]))
 
 (example                                                            -- (5)
   (let [f (lambda-case
