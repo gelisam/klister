@@ -1,0 +1,49 @@
+#lang "prelude.kl"
+
+(import "define-syntax-rule.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "lambda-case.kl" 1))
+(import (shift "type-eq.kl" 1))
+
+
+-- We can't simply write
+--
+--   (example (type=? (-> String Integer)
+--                    (-> Integer String)))
+--
+-- because the result is a (Macro Bool), not a Bool. So instead we have to
+-- write a macro which observes the inferred type of its arguments and compares
+-- those.
+(define-macro (type-of=?-helper)
+  (>>= (which-problem)
+    (lambda-case
+      [(expression t1-to-t2-to-Bool)
+       (type-case t1-to-t2-to-Bool
+         [(-> t1 t2-to-Bool)
+          (type-case t2-to-Bool
+            [(-> t2 Bool)
+             (>>= (type=? t1 t2)
+               (lambda-case
+                 [(true)
+                  (pure '(lambda (_ _) true))]
+                 [(false)
+                   (pure '(lambda (_ _) false))]))])])])))
+
+(define-syntax-rule (type-of=? e1 e2)
+  ((type-of=?-helper) e1 e2))
+
+-- We can't simply generate
+--
+--     (example
+--       (type-of=? (the t1 (error 'undefined))
+--                  (the t2 (error 'undefined))))
+--
+-- because Klister is a strict language, so those errors would be thrown before
+-- (type-of=?-helper) is called.
+(define-syntax-rule (type=?-example t1 t2)
+  (example
+    (type-of=? (the (-> t1 Unit) (lambda (_) unit))
+               (the (-> t2 Unit) (lambda (_) unit)))))
+
+(type=?-example (-> String Integer) (-> String Integer))
+(type=?-example (-> String Integer) (-> Integer String))

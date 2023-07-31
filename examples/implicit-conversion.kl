@@ -13,6 +13,7 @@
 (import "reader.kl")
 (import (shift "reader.kl" 1))
 (import (shift (only "temporaries.kl" make-temporary) 1))
+(import (shift "type-eq.kl" 1))
 
 
 -- Our strategy to implement implicit arguments is to make every expression a
@@ -37,45 +38,27 @@
 
 -- when needed, go through the nested-tuple to find the function we need
 (define-macro (pick-from-nested-tuple)
-  (flet [type-eq? (t1 t2)
-          (type-case t1
-            [String
-             (type-case t2
-              [String (pure true)]
-              [(else _) (pure false)])]
-            [Integer
-             (type-case t2
-              [Integer (pure true)]
-              [(else _) (pure false)])]
-            [(-> t1a t1b)
-             (type-case t2
-               [(-> t2a t2b)
-                (>>= (type-eq? t1a t2a)
-                     (lambda (eq?a)
-                       (>>= (type-eq? t1b t2b)
-                            (lambda (eq?b)
-                              (pure (and eq?a eq?b))))))])])]
-    (>>= (which-problem)
-         (lambda (prob)
-           (case prob
-             [(expression t)
-              (type-case t
-                [(-> nested-tuple needed)
-                 (type-case nested-tuple
-                   [(Pair head tail)
-                    (>>= (type-eq? head needed)
-                         (lambda (eq?)
-                           (case eq?
-                             [(true)
-                              (pure '(lambda (nested-tuple)
-                                       (case nested-tuple
-                                         [(pair head _)
-                                          head])))]
-                             [(false)
-                              (pure '(lambda (nested-tuple)
-                                       (case nested-tuple
-                                         [(pair _ tail)
-                                          ((pick-from-nested-tuple) tail)])))])))])])])))))
+  (>>= (which-problem)
+        (lambda (prob)
+          (case prob
+            [(expression t)
+            (type-case t
+              [(-> nested-tuple needed)
+                (type-case nested-tuple
+                  [(Pair head tail)
+                  (>>= (type=? head needed)
+                        (lambda (eq?)
+                          (case eq?
+                            [(true)
+                            (pure '(lambda (nested-tuple)
+                                      (case nested-tuple
+                                        [(pair head _)
+                                        head])))]
+                            [(false)
+                            (pure '(lambda (nested-tuple)
+                                      (case nested-tuple
+                                        [(pair _ tail)
+                                        ((pick-from-nested-tuple) tail)])))])))])])]))))
 
 (defun reader-ap-with (r2a2b reader-b2c reader-a)
   (reader
@@ -85,44 +68,33 @@
 
 -- determine whether calling pick-from-nested-tuple is needed
 (define-macro (pick-reader-ap-variant)
-  (let [type-eq?
-        (lambda (t1 t2)
-          (type-case t1
-            [String
-             (type-case t2
-              [String (pure true)]
-              [(else _) (pure false)])]
-            [Integer
-             (type-case t2
-              [Integer (pure true)]
-              [(else _) (pure false)])]))]
-    (>>= (which-problem)
-         (lambda (prob)
-            (case prob
-              [(expression t)
-               (type-case t
-                 [(-> reader-f reader-a-to-reader-b)
-                  (type-case reader-a-to-reader-b
-                    [(-> reader-a reader-b)
-                     (type-case reader-f
-                       [(Reader rF e-to-b)
-                        (type-case e-to-b
-                          [(-> e b)
-                           (type-case reader-a
-                             [(Reader rA a)
-                              -- "a" for "actual", "e" for "expected".
-                              -- If the actual type doesn't match the
-                              -- expected type, look for a conversion
-                              -- function in "r".
-                              (>>= (type-eq? a e)
-                                   (lambda (eq?)
-                                     (case eq?
-                                       [(true)
-                                        (pure 'reader-ap)]
-                                       [(false)
-                                        -- look through "r" looking for a
-                                        -- function of type (-> a e)
-                                        (pure '(reader-ap-with (pick-from-nested-tuple)))])))])])])])])])))))
+  (>>= (which-problem)
+        (lambda (prob)
+          (case prob
+            [(expression t)
+              (type-case t
+                [(-> reader-f reader-a-to-reader-b)
+                (type-case reader-a-to-reader-b
+                  [(-> reader-a reader-b)
+                    (type-case reader-f
+                      [(Reader rF e-to-b)
+                      (type-case e-to-b
+                        [(-> e b)
+                          (type-case reader-a
+                            [(Reader rA a)
+                            -- "a" for "actual", "e" for "expected".
+                            -- If the actual type doesn't match the
+                            -- expected type, look for a conversion
+                            -- function in "r".
+                            (>>= (type=? a e)
+                                  (lambda (eq?)
+                                    (case eq?
+                                      [(true)
+                                      (pure 'reader-ap)]
+                                      [(false)
+                                      -- look through "r" looking for a
+                                      -- function of type (-> a e)
+                                      (pure '(reader-ap-with (pick-from-nested-tuple)))])))])])])])])]))))
 
 -- call pick-reader-ap-variant at every function application
 (define-macros

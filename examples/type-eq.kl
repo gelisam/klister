@@ -1,0 +1,35 @@
+#lang "prelude.kl"
+
+(import "bool.kl")
+
+-- TODO: support more types.
+-- For now, only combinations of String, Integer, Bool, Unit, and functions are
+-- supported.
+(defun type=? (t1 t2)
+  (type-case t1
+    [String
+     (type-case t2
+      [String (pure true)]
+      [(else _) (pure false)])]
+    [Integer
+     (type-case t2
+      [Integer (pure true)]
+      [(else _) (pure false)])]
+    [(Bool)
+     (type-case t2
+      [(Bool) (pure true)]
+      [(else _) (pure false)])]
+    [(Unit)
+     (type-case t2
+      [(Unit) (pure true)]
+      [(else _) (pure false)])]
+    [(-> t1a t1b)
+     (type-case t2
+       [(-> t2a t2b)
+        (>>= (type=? t1a t2a)
+             (lambda (eq?a)
+               (>>= (type=? t1b t2b)
+                    (lambda (eq?b)
+                      (pure (and eq?a eq?b))))))])]))
+
+(export type=?)
