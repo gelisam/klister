@@ -10,8 +10,8 @@
 (define-keyword my-else)
 
 (define-macro (my-if cond my-then-ish then-part my-else-ish else-part)
-  (do (my-then? <- (keyword=? my-then-ish 'my-then))
-      (my-else? <- (keyword=? my-else-ish 'my-else))
+  (do (my-then? <- (keyword=? my-then-ish my-then))
+      (my-else? <- (keyword=? my-else-ish my-else))
       (if my-then?
           (if my-else?
               (pure `(if ,cond ,then-part ,else-part))

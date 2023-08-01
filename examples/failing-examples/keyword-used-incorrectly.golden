@@ -1,2 +1,2 @@
 Syntax error from macro:
-    #[keyword.kl:8.20-8.62]<(Keyword my-then cannot appear on its own)>
+    #[keyword.kl:9.22-9.64]<(Keyword my-then cannot appear on its own)>
