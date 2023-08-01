@@ -4,6 +4,12 @@
 (import (shift "n-ary-app.kl" 1))
 
 (define-macros
+  -- (defun f (args...)
+  --   body which references f)
+  -- =>
+  -- (define f
+  --   (flet f (args...)
+  --     body which references f))
   ([defun
     (lambda (stx)
       (case (open-syntax stx)
