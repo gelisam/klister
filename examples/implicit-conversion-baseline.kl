@@ -316,88 +316,60 @@
   -- Implicit-Context
   -- '(lambda (x) x)
 
-  --(defuns
-  --  [infer (explicit-ctx implicit-ctx expr)
-  --   (case (open-syntax expr)
-  --     [(identifier-contents _)
-  --       -- 'var
-  --       (syntax-error 'todo)]
-  --     [(integer-contents i)
-  --       -- '42
-  --       (pure (pair expr (integer)))]
-  --     [(string-contents s)
-  --       -- '"foo"
-  --       (pure (pair expr (string)))]
-  --     [(list-contents (:: head-expr tail-exprs))
-  --      (do
-  --        (let-implicit? <- (keyword=? head-expr keyword-let-implicit))
-  --        (lambda? <- (keyword=? head-expr keyword-let-implicit))
-  --        (if let-implicit?
-  --          -- '(let-implicit ...)
-  --          (case tail-exprs
-  --            [(list f-expr body-expr)
-  --             -- '(let-implicit f body)
-  --             (>>= (infer explicit-ctx implicit-ctx f-expr)
-  --               (lambda-case
-  --                 [(pair f-out f-type)
-  --                  (infer explicit-ctx
-  --                         (:: (implicit-context-entry f-type f-out)
-  --                             implicit-ctx)
-  --                         body-expr)]))]
-  --            [_
-  --             (syntax-error `(expected (let-implicit f body) but got ,expr))])
-  --          (if lambda?
-  --            -- '(lambda ...)
-  --            (case tail-exprs
-  --              [(list arg-exprs body-expr)
-  --               -- '(lambda ... body)
-  --               (case (open-syntax arg-exprs)
-  --                 [(list-contents (list))
-  --                  -- '(lambda () body)
-  --                  (infer explicit-ctx implicit-ctx body-expr)]
-  --                 [(list-contents (:: arg-expr arg-exprs))
-  --                  -- '(lambda (...) body)
-  --                  (case (open-syntax arg-expr)
-  --                    [(list-contents (list the arg-type arg-name))
-  --                     (do
-  --                       (the? <- (keyword=? the keyword-the))
-  --                       -- TODO: parse (the Syntax arg-type) into a Type
-  --                       (if the?
-  --                         -- '(lambda ((the String s) (the Integer n) ...) body)
-  --                         (>>= (infer (:: (explicit-context-entry arg-name arg-type)
-  --                                          explicit-ctx)
-  --                                      implicit-ctx
-  --                                      -- '(lambda ((the Integer n) ...) body)
-  --                                      `(,keyword-lambda ,(close-syntax arg-exprs arg-exprs
-  --                                                                       (list-contents arg-exprs))
-  --                                                        body-expr))
-  --                           (lambda-case
-  --                             [(pair body-out body-type)
-  --                              (pure (pair `(lambda (,arg-name) ,body-out)
-  --                                          (arrow arg-type body-type)))]))
-  --                         (syntax-error `(expected (the String s) but got ,arg-expr))))]
-  --                    [_
-  --                     (syntax-error `(expected (the String s) but got ,arg-expr))])]
-  --                 [_
-  --                  (syntax-error `(expected (lambda (...) ...) but got ,expr))])]
-  --              [_
-  --               (syntax-error `(expected (lambda (...) ...) but got ,expr))])
-  --            -- '(f arg1 arg2 ...)
-  --            (syntax-error 'todo)
-  --   )))])]
-  --  [check (explicit-ctx implicit-ctx expr type)
-  --   (syntax-error 'check)])
-  --(example (the (-> (Explicit-Context)
-  --                  (Implicit-Context)
-  --                  (Expr)
-  --                  (Macro (Pair Syntax (Type))))
-  --  infer))
-  --(example (the (-> (Explicit-Context)
-  --                  (Implicit-Context)
-  --                  (Expr)
-  --                  (Type)
-  --                  (Macro Syntax))
-  --  check))
+  (defuns
+    [infer (loc explicit-ctx implicit-ctx expr)
+     (case expr
+       [(expr-var var-name)
+        (error 'todo)]
+       [(expr-integer i)
+        (pair (close-syntax loc loc
+                (integer-contents i))
+              (integer))]
+       [(expr-string s)
+        (pair (close-syntax loc loc
+                (string-contents s))
+              (string))]
+       [(expr-let-implicit f-expr body-expr)
+        (case (infer loc explicit-ctx implicit-ctx f-expr)
+          [(pair f-stx f-type)
+           (infer loc
+                  explicit-ctx
+                  (:: (implicit-context-entry f-type f-stx)
+                      implicit-ctx)
+                  body-expr)])]
+       [(expr-lambda (pair arg-type arg-name) body)
+        (case (infer loc
+                     (:: (explicit-context-entry arg-name arg-type)
+                         explicit-ctx)
+                     implicit-ctx
+                     body)
+          [(pair body-stx body-type)
+           (pair `(lambda (,arg-name) ,body-stx)
+                 (arrow arg-type body-type))])]
+       [(expr-app f-expr arg-expr)
+        (case (infer loc explicit-ctx implicit-ctx f-expr)
+          [(pair f-stx f-type)
+           (case f-type
+             [(arrow arg-type result-type)
+              (let [arg-stx
+                    (check loc explicit-ctx implicit-ctx arg-expr arg-type)]
+                (pair `(,f-stx ,arg-stx)
+                      result-type))])])])]
+    [check (explicit-ctx implicit-ctx expr type)
+     (error 'check)])
+  (example (the (-> Syntax
+                    (Explicit-Context)
+                    (Implicit-Context)
+                    (Expr)
+                    (Pair Syntax (Type)))
+                infer))
+  (example (the (-> Syntax
+                    (Explicit-Context)
+                    (Implicit-Context)
+                    (Expr)
+                    (Type)
+                    Syntax)
+                check))
 
 )
 
