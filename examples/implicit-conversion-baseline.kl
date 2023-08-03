@@ -320,55 +320,61 @@
     [infer (loc explicit-ctx implicit-ctx expr)
      (case expr
        [(expr-var var-name)
-        (error 'todo)]
+        (>>= (lookup-explicit var-name explicit-ctx)
+             (lambda-case
+               [(nothing)
+                (syntax-error `(,var-name not in scope))]
+               [(just var-type)
+                (pure (pair var-name var-type))]))]
        [(expr-integer i)
-        (pair (close-syntax loc loc
-                (integer-contents i))
-              (integer))]
+        (pure (pair (close-syntax loc loc
+                       (integer-contents i))
+                    (integer)))]
        [(expr-string s)
-        (pair (close-syntax loc loc
-                (string-contents s))
-              (string))]
+        (pure (pair (close-syntax loc loc
+                       (string-contents s))
+                    (string)))]
        [(expr-let-implicit f-expr body-expr)
-        (case (infer loc explicit-ctx implicit-ctx f-expr)
-          [(pair f-stx f-type)
-           (infer loc
-                  explicit-ctx
-                  (:: (implicit-context-entry f-type f-stx)
-                      implicit-ctx)
-                  body-expr)])]
+        (>>= (infer loc explicit-ctx implicit-ctx f-expr)
+             (lambda-case
+               [(pair f-stx f-type)
+                (infer loc
+                       explicit-ctx
+                       (:: (implicit-context-entry f-type f-stx)
+                           implicit-ctx)
+                       body-expr)]))]
        [(expr-lambda (pair arg-type arg-name) body)
-        (case (infer loc
-                     (:: (explicit-context-entry arg-name arg-type)
-                         explicit-ctx)
-                     implicit-ctx
-                     body)
-          [(pair body-stx body-type)
-           (pair `(lambda (,arg-name) ,body-stx)
-                 (arrow arg-type body-type))])]
+        (>>= (infer loc
+                    (:: (explicit-context-entry arg-name arg-type)
+                        explicit-ctx)
+                    implicit-ctx
+                    body)
+             (lambda-case
+               [(pair body-stx body-type)
+                (pure (pair `(lambda (,arg-name) ,body-stx)
+                            (arrow arg-type body-type)))]))]
        [(expr-app f-expr arg-expr)
-        (case (infer loc explicit-ctx implicit-ctx f-expr)
-          [(pair f-stx f-type)
-           (case f-type
-             [(arrow arg-type result-type)
-              (let [arg-stx
-                    (check loc explicit-ctx implicit-ctx arg-expr arg-type)]
-                (pair `(,f-stx ,arg-stx)
-                      result-type))])])])]
+        (>>= (infer loc explicit-ctx implicit-ctx f-expr)
+             (lambda-case
+               [(pair f-stx (arrow arg-type result-type))
+                (>>= (check loc explicit-ctx implicit-ctx arg-expr arg-type)
+                     (lambda (arg-stx)
+                       (pure (pair `(,f-stx ,arg-stx)
+                                   result-type))))]))])]
     [check (explicit-ctx implicit-ctx expr type)
      (error 'check)])
   (example (the (-> Syntax
                     (Explicit-Context)
                     (Implicit-Context)
                     (Expr)
-                    (Pair Syntax (Type)))
+                    (Macro (Pair Syntax (Type))))
                 infer))
   (example (the (-> Syntax
                     (Explicit-Context)
                     (Implicit-Context)
                     (Expr)
                     (Type)
-                    Syntax)
+                    (Macro Syntax))
                 check))
 
 )
