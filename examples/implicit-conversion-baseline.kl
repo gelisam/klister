@@ -64,13 +64,19 @@
              (Type)
              Bool)
          type=?))
+  (example
+    (type=? (arrow (integer) (string))
+            (arrow (integer) (string))))
+  (example
+    (type=? (arrow (integer) (string))
+            (arrow (string) (integer))))
 
   (defuns
     [type->syntax (loc type)
      (case type
-       [integer
+       [(integer)
         'Integer]
-       [string
+       [(string)
         'String]
        [(arrow _ _)
         (close-syntax loc loc
@@ -93,6 +99,12 @@
              (Type)
              (List Syntax))
          arrow-types->syntaxes))
+  (example
+    (type->syntax 'loc (arrow (integer)
+                         (arrow (integer) (string)))))
+  (example
+    (arrow-types->syntaxes 'loc (arrow (integer)
+                                  (arrow (integer) (string)))))
 
   (define-syntax-rule (Var) Syntax)
 
@@ -115,20 +127,6 @@
               (Expr)))
 
   (defuns
-    [parse-arrow-type-list (loc stxs)
-     (case stxs
-       [(nil)
-        -- '(->)
-        (syntax-error `(expected a list of types but got
-                                 ,(close-syntax loc loc (list-contents (:: '-> stxs)))))]
-       [(:: result-stx (nil))
-        -- '(-> string)
-        (parse-type result-stx)]
-       [(:: arg-stx rest-stxs)
-        -- '(-> integer string)
-        (do (arg-type <- (parse-type arg-stx))
-            (rest-types <- (parse-arrow-type-list loc rest-stxs))
-            (pure (arrow arg-type rest-types)))])]
     [parse-type (stx)
      (case (open-syntax stx)
        [(identifier-contents _)
@@ -145,16 +143,30 @@
               (parse-arrow-type-list stx stxs)
               (syntax-error `(expected (-> ...) but got ,stx))))]
        [_
-        (syntax-error `(expected type but got ,stx))])])
+        (syntax-error `(expected type but got ,stx))])]
+    [parse-arrow-type-list (loc stxs)
+     (case stxs
+       [(nil)
+        -- '(->)
+        (syntax-error `(expected a list of types but got
+                                 ,(close-syntax loc loc (list-contents (:: '-> stxs)))))]
+       [(:: result-stx (nil))
+        -- '(-> string)
+        (parse-type result-stx)]
+       [(:: arg-stx rest-stxs)
+        -- '(-> integer string)
+        (do (arg-type <- (parse-type arg-stx))
+            (rest-types <- (parse-arrow-type-list loc rest-stxs))
+            (pure (arrow arg-type rest-types)))])])
+  (example
+    (the (-> Syntax
+             (Macro (Type)))
+         parse-type))
   (example
     (the (-> Syntax
              (List Syntax)
              (Macro (Type)))
          parse-arrow-type-list))
-  (example
-    (the (-> Syntax
-             (Macro (Type)))
-         parse-type))
 
   (defun parse-var (stx)
     (case (open-syntax stx)
@@ -210,8 +222,10 @@
   (example
     (with-unknown-type [A]
       (the (-> (Pair A (List A))
-              (Pair (List A) A))
+               (Pair (List A) A))
           init-last)))
+  (example
+    (init-last (pair 1 (list 2 3 4))))
 
   (defuns
     [parse-expr (stx)
