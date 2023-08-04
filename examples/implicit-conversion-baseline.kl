@@ -38,6 +38,10 @@
 (define-keyword keyword-the)
 
 (meta
+  -- data Type
+  --   = 'Integer
+  --   | 'String
+  --   | '(-> Integer Integer String)
   (datatype (Type)
     (integer)
     (string)
@@ -55,6 +59,35 @@
             (type=? result1 result2))]
       [_
        false]))
+
+  (defuns
+    [type->syntax (loc type)
+     (case type
+       [integer
+        'Integer]
+       [string
+        'String]
+       [(arrow _ _)
+        (close-syntax loc loc
+          (list-contents
+            (:: '-> (arrow-types->syntaxes loc type))))])]
+    [arrow-types->syntaxes (loc types)
+     (case types
+       [(arrow type more-types)
+        (:: (type->syntax loc type)
+            (arrow-types->syntaxes loc more-types))]
+       [_
+        (list (type->syntax loc types))])])
+  (example
+    (the (-> Syntax
+             (Type)
+             Syntax)
+         type->syntax))
+  (example
+    (the (-> Syntax
+             (Type)
+             (List Syntax))
+         arrow-types->syntaxes))
 
   (define-syntax-rule (Var) Syntax)
 
@@ -310,12 +343,6 @@
     (the (Implicit-Context)
          (list)))
 
-  -- errors if the key is not found in the Explicit-Context
-  -- (syntax-error `(,key not in scope)
-  -- returns the identity function if the key is not found in the
-  -- Implicit-Context
-  -- '(lambda (x) x)
-
   (defuns
     [infer (loc explicit-ctx implicit-ctx expr)
      (case expr
@@ -361,8 +388,18 @@
                      (lambda (arg-stx)
                        (pure (pair `(,f-stx ,arg-stx)
                                    result-type))))]))])]
-    [check (explicit-ctx implicit-ctx expr type)
-     (error 'check)])
+    [check (loc explicit-ctx implicit-ctx expr expected-type)
+     (>>= (infer loc explicit-ctx implicit-ctx expr)
+          (lambda-case
+            [(pair expr-stx actual-type)
+             (if (type=? actual-type expected-type)
+               (pure expr-stx)
+               (case (lookup-implicit expected-type implicit-ctx)
+                 [(nothing)
+                  (syntax-error `(expected ,(type->syntax loc expected-type)
+                                  but got ,(type->syntax loc actual-type)))]
+                 [(just conversion-stx)
+                  (pure `(,conversion-stx ,expr-stx))]))]))])
   (example (the (-> Syntax
                     (Explicit-Context)
                     (Implicit-Context)
