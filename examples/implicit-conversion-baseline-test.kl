@@ -1,12 +1,11 @@
 #lang "implicit-conversion-baseline.kl"
 
-
 (example
   42)
 
---(example
---  (let-implicit string-length
---    (+ 1 "foo")))
+(example
+  (let-implicit string-length
+    (+ 1 "foo")))
 
 --(example
 --  (let-implicit string-length

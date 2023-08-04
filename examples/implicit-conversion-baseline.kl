@@ -59,6 +59,11 @@
             (type=? result1 result2))]
       [_
        false]))
+  (example
+    (the (-> (Type)
+             (Type)
+             Bool)
+         type=?))
 
   (defuns
     [type->syntax (loc type)
@@ -354,12 +359,14 @@
                [(just var-type)
                 (pure (pair var-name var-type))]))]
        [(expr-integer i)
-        (pure (pair (close-syntax loc loc
-                       (integer-contents i))
+        (pure (pair `(#%integer-literal
+                       ,(close-syntax loc loc
+                          (integer-contents i)))
                     (integer)))]
        [(expr-string s)
-        (pure (pair (close-syntax loc loc
-                       (string-contents s))
+        (pure (pair `(#%string-literal
+                       ,(close-syntax loc loc
+                          (string-contents s)))
                     (string)))]
        [(expr-let-implicit f-expr body-expr)
         (>>= (infer loc explicit-ctx implicit-ctx f-expr)
@@ -419,7 +426,7 @@
       (>>= (infer expr-stx global-explicit-context global-implicit-context expr)
         (lambda-case
           [(pair out-stx _)
-           (pure out-stx)]))))
+           (pure `(example ,out-stx))]))))
 
 (export (rename ([my-example example]
                  [keyword-integer Integer]
@@ -435,4 +442,8 @@
                 keyword-arrow
                 keyword-let-implicit
                 keyword-lambda
-                keyword-the))
+                keyword-the
+                string-length
+                integer->string
+                +
+                *))
