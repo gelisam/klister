@@ -412,13 +412,27 @@
                     (Expr)
                     (Type)
                     (Macro Syntax))
-                check))
+                check)))
 
-)
+(define-macro (my-example expr-stx)
+  (do (expr <- (parse-expr expr-stx))
+      (>>= (infer expr-stx global-explicit-context global-implicit-context expr)
+        (lambda-case
+          [(pair out-stx _)
+           (pure out-stx)]))))
 
---(define-syntax-rule (let-implicit f body)
---  42)
-
---(export #%module #%app #%integer-literal
--- example lambda let-implicit
--- string-length +)
+(export (rename ([my-example example]
+                 [keyword-integer Integer]
+                 [keyword-string String]
+                 [keyword-arrow ->]
+                 [keyword-let-implicit let-implicit]
+                 [keyword-lambda lambda]
+                 [keyword-the the])
+                #%module
+                my-example
+                keyword-integer
+                keyword-string
+                keyword-arrow
+                keyword-let-implicit
+                keyword-lambda
+                keyword-the))
