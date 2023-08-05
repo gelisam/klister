@@ -7,11 +7,11 @@
   (let-implicit string-length
     (+ 1 "foo")))
 
---(example
---  (let-implicit string-length
---    (let-implicit integer->string
---      (string-append (+ 1 "foo") "!"))))
---
+(example
+  (let-implicit string-length
+    (let-implicit integer->string
+      (string-append (+ 1 "foo") "!"))))
+
 --(example
 --  (lambda ((the Integer x))
 --    (+ 2 x)))

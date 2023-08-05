@@ -101,10 +101,12 @@
          arrow-types->syntaxes))
   (example
     (type->syntax 'loc (arrow (integer)
-                         (arrow (integer) (string)))))
+                         (arrow (integer)
+                           (string)))))
   (example
     (arrow-types->syntaxes 'loc (arrow (integer)
-                                  (arrow (integer) (string)))))
+                                  (arrow (integer)
+                                    (string)))))
 
   (define-syntax-rule (Var) Syntax)
 
@@ -349,8 +351,13 @@
 
   (define global-explicit-context
     (the (Explicit-Context)
-         (list (explicit-context-entry 'string-length (arrow (string) (integer)))
-               (explicit-context-entry 'integer->string (arrow (integer) (string)))
+         (list (explicit-context-entry 'integer->string (arrow (integer)
+                                                          (string)))
+               (explicit-context-entry 'string-append (arrow (string)
+                                                        (arrow (string)
+                                                          (string))))
+               (explicit-context-entry 'string-length (arrow (string)
+                                                        (integer)))
                (explicit-context-entry '+ (arrow (integer)
                                             (arrow (integer)
                                               (integer))))
@@ -415,7 +422,7 @@
             [(pair expr-stx actual-type)
              (if (type=? actual-type expected-type)
                (pure expr-stx)
-               (case (lookup-implicit expected-type implicit-ctx)
+               (case (lookup-implicit (arrow actual-type expected-type) implicit-ctx)
                  [(nothing)
                   (syntax-error `(expected ,(type->syntax loc expected-type)
                                   but got ,(type->syntax loc actual-type)))]
@@ -457,7 +464,8 @@
                 keyword-let-implicit
                 keyword-lambda
                 keyword-the
-                string-length
                 integer->string
+                string-append
+                string-length
                 +
                 *))
