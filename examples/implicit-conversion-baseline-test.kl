@@ -12,10 +12,10 @@
     (let-implicit integer->string
       (string-append (+ 1 "foo") "!"))))
 
---(example
---  (lambda ((the Integer x))
---    (+ 2 x)))
---
+(example
+  (lambda ((the Integer x))
+    (+ 2 x)))
+
 --(example
 --  (let-implicit (lambda ((the String s))
 --                  (* 10 (string-length s)))

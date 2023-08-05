@@ -184,7 +184,7 @@
   (defun parse-the-type-arg (stx)
     (case (open-syntax stx)
       [(list-contents (list the type-stx var-stx))
-       (do (the? <- (keyword=? type-stx keyword-the))
+       (do (the? <- (keyword=? the keyword-the))
            (if the?
              -- (the string s)
              (do (type <- (parse-type type-stx))
@@ -310,6 +310,11 @@
   (datatype (Explicit-Context-Entry)
     (explicit-context-entry (Var) (Type)))
 
+  (defun explicit-context-entry->syntax (loc entry)
+    (case entry
+      [(explicit-context-entry var type)
+       `(,var : ,(type->syntax loc type))]))
+
   (datatype (Implicit-Context-Entry)
     (implicit-context-entry (Type) Syntax))
 
@@ -318,6 +323,18 @@
 
   (define-syntax-rule (Implicit-Context)
     (List (Implicit-Context-Entry)))
+  
+  (defuns
+    [explicit-context->syntax (loc explicit-ctx)
+     (close-syntax loc loc
+       (list-contents (explicit-context->syntaxes loc explicit-ctx)))]
+    [explicit-context->syntaxes (loc entries)
+     (case entries
+       [(nil)
+        (nil)]
+       [(:: entry more-entries)
+        (:: (explicit-context-entry->syntax loc entry)
+            (explicit-context->syntaxes loc more-entries))])])
 
   (defun lookup-explicit (key explicit-ctx)
     (case explicit-ctx
@@ -376,7 +393,8 @@
         (>>= (lookup-explicit var-name explicit-ctx)
              (lambda-case
                [(nothing)
-                (syntax-error `(,var-name not in scope))]
+                (syntax-error `(,var-name not in scope
+                                 ,(explicit-context->syntax loc explicit-ctx)))]
                [(just var-type)
                 (pure (pair var-name var-type))]))]
        [(expr-integer i)
