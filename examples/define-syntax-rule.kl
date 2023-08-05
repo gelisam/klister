@@ -54,5 +54,39 @@
                                      ((list ,pattern)
                                       (pure ,quasiquoted-template))))])))))))))
 
+-- If you have a value (the (Macro Syntax) action), you cannot test it using
+-- (example action) because that will print the Macro action instead of running
+-- it. Use (example-macro-syntax action) instead.
+--
+-- (example-macro-syntax
+--   (>>= (bound-identifier=? 'x 'x)
+--     (lambda-case
+--       [(true)
+--        (pure '"equal")]
+--       [(false)
+--        (pure '"not-equal")])))
+--
+-- Note that the action runs at the meta level, so any identifiers it uses
+-- must be defined at the meta level as well.
+--
+-- (meta
+--   (define equal '"equal")
+--   (define not-equal '"not-equal"))
+-- (example-macro-syntax
+--   (>>= (bound-identifier=? 'x 'x)
+--     (lambda-case
+--       [(true)
+--        (pure equal)]
+--       [(false)
+--        (pure not-equal)])))
+(define-syntax-rule (example-macro-syntax action)
+  (group
+    (define-macro (my-macro)
+      action)
+    (example (my-macro))))
 
-(export define-macro define-variadic-macro define-syntax-rule)
+(export
+  define-macro
+  define-variadic-macro
+  define-syntax-rule
+  example-macro-syntax)

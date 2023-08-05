@@ -3,6 +3,7 @@
 (import "define-syntax-rule.kl")
 (import "pair-datatype.kl")
 (import (shift "prelude.kl" 1))
+(import (shift "lambda-case.kl" 1))
 (import (shift "list.kl" 1))
 
 
@@ -22,3 +23,22 @@
   (lambda (x y) body))
 (define mk-pair-c (lambda2c x y (pair x y)))
 (example (mk-pair-c 1 2))
+
+(example-macro-syntax
+  (>>= (bound-identifier=? 'x 'x)
+    (lambda-case
+      [(true)
+       (pure '"equal")]
+      [(false)
+       (pure '"not-equal")])))
+
+(meta
+  (define equal '"equal")
+  (define not-equal '"not-equal"))
+(example-macro-syntax
+  (>>= (bound-identifier=? 'x 'x)
+    (lambda-case
+      [(true)
+       (pure equal)]
+      [(false)
+       (pure not-equal)])))

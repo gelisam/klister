@@ -1,3 +1,5 @@
 (pair 1 2) : (Pair Integer Integer)
 (pair 1 2) : (Pair Integer Integer)
 (pair 1 2) : (Pair Integer Integer)
+"equal" : String
+"equal" : String
