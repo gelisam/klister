@@ -136,7 +136,7 @@ TODO: explain how the sub-trees get computed.
 
 ### The macro monad
 
-Some transformers are user-written macros. These macros have the type `Syntax -> Macro Syntax`. In other words, they receive a syntax object and then compute a new syntax object using actions in the macro monad. (note that we do not yet have a type checker - but programs that don't act like a `Syntax -> Macro Syntax` will fail at run time).
+Some transformers are user-written macros. These macros have the type `Syntax -> Macro Syntax`. In other words, they receive a syntax object and then compute a new syntax object using actions in the macro monad.
 
 The macro monad includes operations to compare the binding information of identifiers, to send a signal (see next section), to block until receipt of a signal, and to raise a syntax error. When expanding a user macro, the macro is applied to the syntax object being expanded, and the resulting macro monad action is interpreted in the metalanguage expansion monad. This can have three results:
 
