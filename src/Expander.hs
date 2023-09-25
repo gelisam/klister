@@ -41,9 +41,13 @@ module Expander (
 import Control.Applicative
 import Control.Lens hiding (List, children)
 import Control.Monad
-import Control.Monad.Except
-import Control.Monad.Reader
-import Control.Monad.State.Strict
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Except (MonadError(catchError, throwError))
+import Control.Monad.Reader (MonadReader(local))
+import Control.Monad.Trans.Class (MonadTrans(lift))
+import Control.Monad.Trans.Except (runExceptT)
+import Control.Monad.Trans.Reader (runReaderT)
+import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
 import Data.Foldable
 import Data.Function (on)
 import Data.List (nub)

@@ -7,8 +7,11 @@
 module Evaluator where
 
 import Control.Lens hiding (List, elements)
-import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.Except (MonadError(throwError))
+import Control.Monad.Reader (MonadReader(ask, local))
+import Control.Monad.Trans.Except (ExceptT)
+import Control.Monad.Trans.Reader (ReaderT)
 import Data.Text (Text)
 import qualified Data.Text as T
 
