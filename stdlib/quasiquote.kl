@@ -1,73 +1,96 @@
 #lang kernel
 
-[import [shift kernel 1]]
-[import [shift "n-ary-app.kl" 1]]
-[import [shift "defun.kl" 1]]
+(import (shift kernel 1))
+(import (shift "n-ary-app.kl" 1))
+(import (shift "defun.kl" 1))
 
 (meta
-  (defun map-syntax (f stx)
-    (syntax-case stx
-      [() stx]
-      [(cons a d)
-       (cons-list-syntax (f a) (map-syntax f d) stx)]
-      [_ stx])))
+  -- a helper function when extracting the x in (keyword x), after the head has
+  -- already been checked to be the expected keyword
+  (defun must-be-singleton-after-keyword (stx stx-keyword stxs)
+    (case stxs
+      [(:: x (nil))
+        -- (keyword x)
+        (pure x)]
+      [_
+       -- (keyword x y z), a common mistake for (keyword (x y z))
+       (syntax-error
+         -- this is used in the implementation of quasiquote, so we can't just
+         -- say `(invalid syntax ,stx did you mean (,stx-keyword (,@stxs)) ?)
+         (close-syntax stx stx
+           (list-contents
+             (:: 'invalid
+               (:: 'syntax
+                 (:: stx
+                   (:: 'did
+                     (:: 'you
+                       (:: 'mean
+                         (:: (close-syntax stx stx
+                                (list-contents
+                                  (:: stx-keyword
+                                    (:: (close-syntax stx stx
+                                          (list-contents stxs))
+                                      (nil)))))
+                               (:: '?
+                                 (nil))))))))))))]))
 
-[define-macros
-  ([unquote
-    [lambda (stx)
-      (syntax-error [quote "unquote used out of context"] stx)]]
-   [quasiquote
-    [lambda (stx)
-      (syntax-case stx
-        [[list [_ e]]
-         (syntax-case e
-           [[ident x]
-            [pure [list-syntax [[quote quote] x]
-                               x]]]
-           [[integer int]
-            [pure [list-syntax [[quote quote] (integer-syntax int e)]
-                               e]]]
-           [[string str]
-            [pure [list-syntax [[quote quote] (string-syntax str e)]
-                               e]]]
-           [()
-            [pure
-             [list-syntax [[quote empty-list-syntax]
-                           [list-syntax [[quote quote]
-                                        e]
-                                       'here]]
-                         e]]]
-           [[cons x y]
-            (syntax-case x
-              [[ident i]
-               [>>= [free-identifier=? i [quote unquote]]
-                 [lambda [unquote?]
-                   [if unquote?
-                       (syntax-case y
-                         [[list [v]] [pure v]]
-                         [_ (syntax-error '"wrong number of arguments to unquote" e)])
-                       [pure
-                        (list-syntax ('list-syntax
-                                        (map-syntax (lambda (s)
-                                                      (list-syntax ('quasiquote s)
-                                                                   s))
-                                                    e)
-                                        (list-syntax ('quote e) 'foo))
-                                      e)]]]]]
-              [_ [pure
-                  (list-syntax ('list-syntax
-                                  (map-syntax (lambda (s)
-                                                (list-syntax ('quasiquote s) s))
-                                              e)
-                                  (list-syntax ('quote e) 'foo))
-                                e)]])])]
-        [_ (syntax-error [list-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
-
-(define-macros
-  ([quasiquote/loc
-    (lambda (stx)
-      (syntax-case stx
-        [(list (_ loc q))
-         (pure (list-syntax ('replace-loc loc (list-syntax ('quasiquote q) stx)) stx))]))]))
-
-(export unquote quasiquote quasiquote/loc)
+  (defun quasiquote-depth (depth stx is-tail)
+    (if (= depth 0)
+      -- the x in `(... ,x ...)
+      -- or in `(... `(... ,(... ,x ...) ...) ...)
+      (pure stx)
+      (case (open-syntax stx)
+        [(list-contents (:: stx-head stxs-tail))
+         -- (...)
+         (if is-tail
+           (error 'todo)
+           (>>= (free-identifier=? stx-head 'quasiquote)
+             (lambda (quasiquote?)
+               (if quasiquote?
+                 -- (quasiquote x)
+                 -- or
+                 -- `x
+                 (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
+                   (lambda (x)
+                     (quasiquote-depth (+ depth 1) x (false))))
+                 (>>= (free-identifier=? stx-head 'unquote)
+                   (lambda (unquote?)
+                     (if unquote?
+                       -- (unquote x)
+                       -- or
+                       -- ,x
+                       (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
+                         (lambda (x)
+                           (quasiquote-depth (- depth 1) x (false))))
+                       
+                       -- some other list, e.g, ((foo ,x bar) ,y baz)
+                       (let [stx-tail
+                             (close-syntax stx stx
+                               (list-contents stxs-tail))]
+                         (>>= (quasiquote-depth depth stx-head (false))
+                           (lambda (output-head)
+                             (>>= (quasiquote-depth depth stx-tail (true))
+                               (lambda (output-tail)
+                                 (case (open-syntax output-tail)
+                                   [(list-contents outputs-tail)
+                                    (pure (close-syntax stx stx
+                                            (list-contents (:: output-head outputs-tail))))]
+                                   [_
+                                    (error '"never happens: (quasiquote-depth _ '(...) (true)) always returns a list")])))))))))))))]
+        [_
+         -- something else, e.g. a string, a number, or an empty list
+         (pure stx)])))
+)
+--(define-macros
+--  ([quasiquote
+--    (lambda (stx)
+--      (quasiquote-depth 0 stx (false)))]))
+--
+--(define-macros
+--  ([quasiquote/loc
+--    (lambda (stx)
+--      (syntax-case stx
+--        [(list (_ loc q))
+--         (pure (list-syntax ('replace-loc loc (list-syntax ('quasiquote q) stx)) stx))]))]))
+--
+--(export unquote quasiquote quasiquote/loc)
