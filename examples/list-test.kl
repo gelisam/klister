@@ -13,7 +13,8 @@
   (map string-length (list "foo" "bar" "baz" "quux")))
 
 (example
-  (filter (< 10) (list 1 11 111 2 22 222 3 33 333)))
+  (filter (lambda (x) (< x 10))
+    (list 1 11 111 2 22 222 3 33 333)))
 
 (example
   (snoc (list 1 2 3) 4))
