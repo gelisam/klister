@@ -4,9 +4,43 @@
 (import (shift "n-ary-app.kl" 1))
 (import (shift "defun.kl" 1))
 
+(define-macros
+  ([unquote
+    (lambda (stx)
+      (syntax-error (quote "unquote used out of context") stx))]))
+
 (meta
-  -- a helper function when extracting the x in (keyword x), after the head has
-  -- already been checked to be the expected keyword
+  -- Re-defining list-append here rather than using the one in "list.kl", in
+  -- order to avoid a cycle.
+  --
+  -- (list-append (list 1 2 3) (list 4 5 6))
+  -- =>
+  -- (list 1 2 3 4 5 6)
+  (defun list-append (xs ys)
+    (case xs
+      [(nil)
+       ys]
+      [(:: x xs)
+       (:: x (list-append xs ys))]))
+
+  -- A helper function when extracting the x in (keyword x), after the head has
+  -- already been checked to be the expected keyword.
+  --
+  -- (must-be-singleton-after-keyword
+  --   '(my-keyword (1 2 3))
+  --   'my-keyword
+  --   (list '(1 2 3)))
+  -- =>
+  -- '(1 2 3)
+  --
+  -- (must-be-singleton-after-keyword
+  --   '(my-keyword 1 2 3)
+  --   'my-keyword
+  --   (list '1 '2 '3))
+  -- =>
+  -- error:
+  --   (invalid syntax (my-keyword 1 2 3)
+  --    did you mean (my-keyword (1 2 3)) ?)
   (defun must-be-singleton-after-keyword (stx stx-keyword stxs)
     (case stxs
       [(:: x (nil))
@@ -34,63 +68,229 @@
                                (:: '?
                                  (nil))))))))))))]))
 
-  (defun quasiquote-depth (depth stx is-tail)
-    (if (= depth 0)
-      -- the x in `(... ,x ...)
-      -- or in `(... `(... ,(... ,x ...) ...) ...)
-      (pure stx)
+  -- Produce the code which reconstructs the given syntax object.
+  -- 
+  -- (meta-quote '(1 2 3))
+  -- =>
+  -- '(quote (1 2 3))
+  (defun meta-quote (stx)
+    (close-syntax stx stx
+      (list-contents
+        (:: 'quote
+          (:: stx
+            (nil))))))
+
+  -- Used to fake mutual recursion in the next function.
+  (datatype (Args)
+    (args/single (Integer) (Syntax))
+    (args/list (Integer) (List (Syntax))))
+
+  -- This function fakes mutual recursion. Ideally, we would like two implement
+  -- two mutually-recursive functions with different types:
+  --
+  -- (the (-> Integer Syntax (Macro Syntax))
+  --      quasiquote-depth/single)
+  -- (the (-> Integer (List Syntax) (Macro Syntax))
+  --      quasiquote-depth/list)
+  --
+  -- Instead, they are both implemented as a single function
+  --
+  -- (the (-> (Args) (Macro Syntax))
+  --      quasiquote-depth)
+  (defun quasiquote-depth/args (args)
+    (let [quasiquote-depth/single
+          (lambda (depth stx)
+            (quasiquote-depth/args (args/single depth stx)))]
+      (let [quasiquote-depth/list
+            (lambda (depth stxs)
+              (quasiquote-depth/args (args/list depth stxs)))]
+        (case args
+          [(args/single depth stx)
+           -- quasiquote-depth/single reconstructs the syntax object it is
+           -- given as input.
+           --
+           -- (quasiquote-depth/single 1 '(1 2 (3 4) 5 6))
+           -- =>
+           -- '(close-syntax ... ...
+           --    (list-contents
+           --      (list '1
+           --            '2
+           --            (close-syntax ... ...
+           --              (list-contents
+           --                (list '3
+           --                      '4)))
+           --            '5
+           --            '6)))
+           --
+           -- If the input syntax object contains an unquoted expression, the
+           -- expression is evaluated, it returns a syntax object, and the
+           -- unquoted expression is replaced with that returned syntax object.
+           --
+           -- (define three-four '(3 4))
+           -- (quasiquote-depth/single 1 '(1 2 ,three-four 5 6))
+           -- =>
+           -- '(close-syntax ... ...
+           --    (list-contents
+           --      (list '1 '2 three-four '5 '6)))
+           -- (close-syntax ... ...
+           --   (list-contents
+           --     (list '1 '2 three-four '5 '6)))
+           -- =>
+           -- '(1 2 (3 4) 5 6)
+           --
+           -- If the input syntax object contains an unquote-spliced
+           -- expression, the expression is evaluated, it returns a list of
+           -- syntax objects, and the unquote-spliced expression is replaced
+           -- with the elements of the returned syntax object.
+           --
+           -- (define three-four (list '3 '4))
+           -- (quasiquote-depth/single 1 '(1 2 ,@three-four 5 6))
+           -- =>
+           -- '(close-syntax ... ...
+           --    (list-contents
+           --      (list-append
+           --        (list '1 '2)
+           --        three-four
+           --        (list '5 '6))))
+           -- (close-syntax ... ...
+           --   (list-contents
+           --     (list-append
+           --       (list '1 '2)
+           --       three-four
+           --       (list '5 '6))))
+           -- =>
+           -- '(1 2 3 4 5 6)
+           --
+           -- Nested quasiquote calls increase the depth, and nested unquote
+           -- and unquote-splicing calls decrease the depth. The substitutions
+           -- described above are only performed at depth zero.
+           -- 
+           -- (define five-six '(5 6))
+           -- (quasiquote-depth/single 2 '(1 2 ,(3 4 ,five-six 7 8) 9 10))
+           -- =>
+           -- '(close-syntax ... ...
+           --    (list-contents
+           --      (list '1
+           --            '2
+           --            (close-syntax ... ...
+           --              (list-contents
+           --                (list 'unquote
+           --                      (close-syntax ... ...
+           --                        (list-contents
+           --                          (list '3
+           --                                '4
+           --                                five-six
+           --                                '7
+           --                                '8))))))
+           --            '9
+           --            '10)))
+           -- =>
+           -- '(1 2 ,(3 4 (5 6) 7 8) 9 10)
+           (error '"not implemented")
+           ]
+          [(args/list depth stxs)
+           -- quasiquote-depth/list reconstructs the list of syntax objects it
+           -- is given as input.
+           --
+           -- (quasiquote-depth/list 1 (list '1 '2 '(3 4) '5 '6))
+           -- =>
+           -- '(list '1
+           --        '2
+           --        (close-syntax ... ...
+           --          (list-contents
+           --            (list '3
+           --                  '4)))
+           --        '5
+           --        '6)
+           -- (list '1
+           --       '2
+           --       (close-syntax ... ...
+           --         (list-contents
+           --           (list '3
+           --                 '4)))
+           --       '5
+           --       '6)
+           -- =>
+           -- (list '1 '2 '(3 4) '5 '6)
+           (error '"not implemented")]))))
+    --(if (= depth 0)
+    --      -- the x in `(... ,x ...)
+    --      -- or in `(... `(... ,(... ,x ...) ...) ...)
+    --      (pure stx)
+    --      (case (open-syntax stx)
+    --        [(list-contents (:: stx-head stxs-tail))
+    --         -- (...)
+    --         (if is-tail
+    --           (error 'todo)
+    --           (>>= (free-identifier=? stx-head 'quasiquote)
+    --             (lambda (quasiquote?)
+    --               (if quasiquote?
+    --                 -- (quasiquote x)
+    --                 -- or
+    --                 -- `x
+    --                 (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
+    --                   (lambda (x)
+    --                     (quasiquote-depth (false) (+ depth 1) x)))
+    --                 (>>= (free-identifier=? stx-head 'unquote)
+    --                   (lambda (unquote?)
+    --                     (if unquote?
+    --                       -- (unquote x)
+    --                       -- or
+    --                       -- ,x
+    --                       (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
+    --                         (lambda (x)
+    --                           (quasiquote-depth (false) (- depth 1) x)))
+    --                       
+    --                       -- some other list, e.g, ((foo ,x bar) ,y baz)
+    --                       (let [stx-tail
+    --                             (close-syntax stx stx
+    --                               (list-contents stxs-tail))]
+    --                         (>>= (quasiquote-depth (false) depth stx-head)
+    --                           (lambda (output-head)
+    --                             (>>= (quasiquote-depth (true) depth stx-tail)
+    --                               (lambda (output-tail)
+    --                                 (case (open-syntax output-tail)
+    --                                   [(list-contents outputs-tail)
+    --                                    (pure (close-syntax stx stx
+    --                                            (list-contents (:: output-head outputs-tail))))]
+    --                                   [_
+    --                                    (error '"never happens: (quasiquote-depth (true)) always returns a list")])))))))))))))]
+    --        [_
+    --         -- something else, e.g. a string, a number, or an empty list
+    --         (pure stx)
+    --         ]))
+    --     )
+  (defun quasiquote-depth (depth stx)
+    (quasiquote-depth/args (args/single depth stx)))
+)
+
+(define-macros
+  ([quasiquote
+    (lambda (stx)
       (case (open-syntax stx)
         [(list-contents (:: stx-head stxs-tail))
-         -- (...)
-         (if is-tail
-           (error 'todo)
-           (>>= (free-identifier=? stx-head 'quasiquote)
-             (lambda (quasiquote?)
-               (if quasiquote?
-                 -- (quasiquote x)
-                 -- or
-                 -- `x
-                 (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
-                   (lambda (x)
-                     (quasiquote-depth (+ depth 1) x (false))))
-                 (>>= (free-identifier=? stx-head 'unquote)
-                   (lambda (unquote?)
-                     (if unquote?
-                       -- (unquote x)
-                       -- or
-                       -- ,x
-                       (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
-                         (lambda (x)
-                           (quasiquote-depth (- depth 1) x (false))))
-                       
-                       -- some other list, e.g, ((foo ,x bar) ,y baz)
-                       (let [stx-tail
-                             (close-syntax stx stx
-                               (list-contents stxs-tail))]
-                         (>>= (quasiquote-depth depth stx-head (false))
-                           (lambda (output-head)
-                             (>>= (quasiquote-depth depth stx-tail (true))
-                               (lambda (output-tail)
-                                 (case (open-syntax output-tail)
-                                   [(list-contents outputs-tail)
-                                    (pure (close-syntax stx stx
-                                            (list-contents (:: output-head outputs-tail))))]
-                                   [_
-                                    (error '"never happens: (quasiquote-depth _ '(...) (true)) always returns a list")])))))))))))))]
+         -- (quasiquote ...)
+         -- or
+         -- `x
+         (>>= (must-be-singleton-after-keyword stx stx-head stxs-tail)
+           (lambda (x)
+             (quasiquote-depth 1 x)))]
         [_
-         -- something else, e.g. a string, a number, or an empty list
-         (pure stx)])))
-)
---(define-macros
---  ([quasiquote
---    (lambda (stx)
---      (quasiquote-depth 0 stx (false)))]))
---
---(define-macros
---  ([quasiquote/loc
---    (lambda (stx)
---      (syntax-case stx
---        [(list (_ loc q))
---         (pure (list-syntax ('replace-loc loc (list-syntax ('quasiquote q) stx)) stx))]))]))
---
---(export unquote quasiquote quasiquote/loc)
+         (syntax-error (quote "quasiquote used out of context") stx)]))]
+   [quasiquote/loc
+    (lambda (stx)
+      (syntax-case stx
+        [(list (_ loc q))
+         (pure
+           (close-syntax stx stx
+             (list-contents
+               (:: 'replace-loc
+                 (:: loc
+                   (:: (close-syntax stx stx
+                         (list-contents
+                           (:: 'quasiquote
+                             (:: q
+                               (nil)))))
+                     (nil)))))))]))]))
+
+(export unquote quasiquote quasiquote/loc)
