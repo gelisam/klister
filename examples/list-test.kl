@@ -1,5 +1,29 @@
 #lang "prelude.kl"
 
+-- These examples are here rather than in "list.kl" so that the resulting
+-- values are tracked by our test suite, which only covers the "examples"
+-- folder, not "stdlib".
+
 (import "list.kl")
 
-(example (reverse (list 1 2 3)))
+(example
+  (foldr + 0 (list 1 2 3 4)))
+
+(example
+  (map string-length (list "foo" "bar" "baz" "quux")))
+
+(example
+  (filter (lambda (x) (< x 10))
+    (list 1 11 111 2 22 222 3 33 333)))
+
+(example
+  (snoc (list 1 2 3) 4))
+
+(example
+  (reverse (list 1 2 3)))
+
+(example
+  (syntax->list '(a b c)))
+
+(example
+  (list->syntax (list 'a 'b 'c) 'here))

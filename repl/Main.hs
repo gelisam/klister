@@ -7,8 +7,8 @@ module Main where
 import Control.Exception
 import Control.Lens hiding (argument)
 import Control.Monad
-import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.Trans.Reader
+import Control.Monad.Trans.Except
 
 import Data.Foldable (for_)
 import Data.IORef

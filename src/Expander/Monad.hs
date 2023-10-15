@@ -153,8 +153,11 @@ import Control.Applicative
 import Control.Arrow
 import Control.Lens
 import Control.Monad
-import Control.Monad.Except
-import Control.Monad.Reader
+import Control.Monad.IO.Class (MonadIO(liftIO))
+import Control.Monad.Except (MonadError(throwError))
+import Control.Monad.Reader (MonadReader(ask, local), asks)
+import Control.Monad.Trans.Except (ExceptT, runExceptT)
+import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Data.Foldable
 import Data.IORef
 import Data.HashMap.Strict (HashMap)
