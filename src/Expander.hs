@@ -2,15 +2,11 @@
 {-# LANGUAGE BlockArguments #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE MultiWayIf #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
 module Expander (
@@ -26,7 +22,7 @@ module Expander (
   , initializeKernel
   , initializeLanguage
   , currentPhase
-  , expandEval
+  , evalInCurrentPhase
   , ExpansionErr(..)
   , ExpanderContext
   , expanderCurrentBindingTable
@@ -45,8 +41,6 @@ import Control.Monad.IO.Class (MonadIO(liftIO))
 import Control.Monad.Except (MonadError(catchError, throwError))
 import Control.Monad.Reader (MonadReader(local))
 import Control.Monad.Trans.Class (MonadTrans(lift))
-import Control.Monad.Trans.Except (runExceptT)
-import Control.Monad.Trans.Reader (runReaderT)
 import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
 import Data.Foldable
 import Data.Function (on)
@@ -88,6 +82,7 @@ import Type
 import Value
 import World
 import qualified ScopeSet
+
 
 import qualified Util.Set   as Set
 import qualified Util.Store as S
@@ -277,7 +272,7 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
         Define x n sch e -> do
           ptr <- liftIO newSchemePtr
           lift $ linkScheme ptr sch
-          val <- lift $ expandEval (eval e)
+          val <- lift $ evalInCurrentPhase e
           p <- lift currentPhase
           lift $ modifyState $
             over (expanderWorld . worldTypeContexts . at p) $
@@ -304,10 +299,10 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
 
         Example loc sch expr -> do
           env <- lift currentEnv
-          value <- lift $ expandEval (eval expr)
+          value <- lift $ evalInCurrentPhase expr
           modify' (:|> ExampleResult loc env expr sch value)
         Run loc expr -> do
-          lift (expandEval (eval expr)) >>=
+          lift (evalInCurrentPhase expr) >>=
             \case
               (ValueIOAction act) ->
                 modify' (:|> (IOResult . void $ act))
@@ -318,7 +313,7 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
-            v <- expandEval (eval e)
+            v <- evalInCurrentPhase e
             modifyState $
               over (expanderWorld . worldTransformerEnvironments . at p) $
               Just . maybe (Env.singleton n x v) (Env.insert n x v)
@@ -558,18 +553,14 @@ initializeKernel outputChannel = do
               ValueIOAction $ do
                 vx <- mx
                 vioy <- case f of
-                  HO fun -> do
-                    pure (fun vx)
+                  HO fun -> pure (fun vx)
                   FO clos -> do
                     let env = view closureEnv clos
                         var = view closureVar clos
                         ident = view closureIdent clos
                         body = view closureBody clos
-                    out <- runExceptT $ flip runReaderT env $ runEval $
-                      withExtendedEnv ident var vx $
-                        eval body
-                    case out of
-                      Left err -> error (T.unpack (pretty err))
+                    case (evaluateWithExtendedEnv env [(ident, var, vx)] body) of
+                      Left err -> error (T.unpack (pretty $ projectError err))
                       Right vioy -> pure vioy
                 let ValueIOAction my = vioy
                 my
@@ -914,13 +905,19 @@ runTask (tid, localData, task) = withLocal localData $ do
           case ty of
             Ty (TyF (TMetaVar ptr) _) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
-        other -> do
-          selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
-          case selectedBranch of
+        other -> case doTypeCase env loc (Ty other) cases of
+          Right v -> case v of
             ValueMacroAction nextStep -> do
               forkInterpretMacroAction dest nextStep kont
             otherVal -> do
-              expandEval $ evalErrorType "macro action" otherVal
+              p <- currentPhase
+              throwError $ MacroEvaluationError p $ evalErrorType "macro action" otherVal
+          Left err -> do
+            -- an error occurred in the evaluator, so just report it
+            p <- currentPhase
+            throwError
+              $ MacroEvaluationError p
+              $ projectError err
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
@@ -935,7 +932,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             Nothing -> error "Internal error - macro body not fully expanded"
             Just macroImpl -> do
               p <- currentPhase
-              macroImplVal <- inEarlierPhase $ expandEval $ eval macroImpl
+              macroImplVal <- inEarlierPhase $ evalInCurrentPhase macroImpl
               let tenv = Env.singleton v x macroImplVal
               -- Extend the env!
               modifyState $ over (expanderCurrentTransformerEnvs . at p) $
@@ -951,7 +948,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             Nothing -> stillStuck tid task
             Just e -> do
               p <- currentPhase
-              v <- expandEval (eval e)
+              v <- evalInCurrentPhase e
               let env = Env.singleton x n v
               modifyState $ over (expanderCurrentEnvs . at p) $
                 Just . maybe env (<> env)
@@ -983,24 +980,36 @@ runTask (tid, localData, task) = withLocal localData $ do
       case value of
         ValueSyntax syntax -> do
           forkExpandSyntax dest syntax
-        other -> expandEval $ evalErrorType "syntax" other
+        other -> do
+          p <- currentPhase
+          throwError $ MacroEvaluationError p $ evalErrorType "syntax" other
     ContinueMacroAction dest value (closure:kont) -> do
-      result <- expandEval $ apply closure value
-      case result of
-        ValueMacroAction macroAction -> do
-          forkInterpretMacroAction dest macroAction kont
-        other -> expandEval $ evalErrorType "macro action" other
+      case apply closure value of
+        Left err -> do
+          p <- currentPhase
+          throwError
+            $ MacroEvaluationError p
+            $ evalErrorType "macro action"
+            $ erroneousValue
+            $ projectError err
+        Right v ->
+          case v of
+            ValueMacroAction macroAction -> do
+              forkInterpretMacroAction dest macroAction kont
+            other -> do
+              p <- currentPhase
+              throwError $ MacroEvaluationError p $ evalErrorType "macro action" other
     EvalDefnAction x n p expr ->
       linkedCore expr >>=
       \case
         Nothing -> stillStuck tid task
         Just definiens ->
           inPhase p $ do
-            val <- expandEval (eval definiens)
+            val <- evalInCurrentPhase definiens
             modifyState $ over (expanderCurrentEnvs . at p) $
-              \case
-                Nothing -> Just $ Env.singleton x n val
-                Just env -> Just $ env <> Env.singleton x n val
+                \case
+                  Nothing -> Just $ Env.singleton x n val
+                  Just env -> Just $ env <> Env.singleton x n val
     GeneralizeType edest ty schdest -> do
       ready <- isExprChecked edest
       if ready
@@ -1301,13 +1310,19 @@ expandOneForm prob stx
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
             Just (ValueClosure macroImpl) -> do
-              macroVal <- inEarlierPhase $ expandEval $
-                          apply macroImpl $
-                          ValueSyntax $ addScope p stepScope stx
+              macroVal <- inEarlierPhase
+                          $ pure
+                          $ apply macroImpl
+                          $ ValueSyntax
+                          $ addScope p stepScope stx
               case macroVal of
-                ValueMacroAction act -> do
-                  res <- interpretMacroAction prob act
-                  case res of
+                Left err -> throwError
+                            $ ValueNotMacro
+                            $ erroneousValue
+                            $ projectError err
+                Right mv  -> case mv of
+                  ValueMacroAction act ->
+                    interpretMacroAction prob act >>= \case
                     StuckOnType loc ty env cases kont ->
                       forkAwaitingTypeCase loc prob ty env cases kont
                     Done expanded ->
@@ -1315,8 +1330,8 @@ expandOneForm prob stx
                         ValueSyntax expansionResult ->
                           forkExpandSyntax prob (flipScope p stepScope expansionResult)
                         other -> throwError $ ValueNotSyntax other
-                other ->
-                  throwError $ ValueNotMacro other
+                  other ->
+                    throwError $ ValueNotMacro other
             Nothing ->
               throwError $ InternalError $
               "No transformer yet created for " ++ shortShow ident ++
@@ -1400,12 +1415,17 @@ interpretMacroAction prob =
           phase <- view (expanderLocal . expanderPhase)
           s <- getState
           let env = fromMaybe Env.empty .
-                    view (expanderWorld . worldEnvironments . at phase) $
-                    s
-          value <- expandEval $ withEnv env $ apply closure boundResult
-          case value of
-            ValueMacroAction act -> interpretMacroAction prob act
-            other -> throwError $ ValueNotMacro other
+                    view (expanderWorld . worldEnvironments . at phase) $ s
+          case applyInEnv env closure boundResult of
+            -- FIXME DYG: what error to throw here
+            Left err -> throwError
+              $ ValueNotMacro
+              $ erroneousValue
+              $ projectError err
+            Right v  ->
+              case v of
+                ValueMacroAction act -> interpretMacroAction prob act
+                other -> throwError $ ValueNotMacro other
     MacroActionSyntaxError syntaxError ->
       throwError $ MacroRaisedSyntaxError syntaxError
     MacroActionIdentEq how v1 v2 -> do
