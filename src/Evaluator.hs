@@ -1,20 +1,77 @@
+{-# LANGUAGE KindSignatures #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE GADTSyntax #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Evaluator where
+
+{- Note [The CEK interpreter]:
+
+The Klister interpreter is a straightforward implementation of a CEK
+interpreter. The interpreter keeps three kinds of state:
+
+-- C: Control      ::= The thing that is being evaluated
+-- E: Environment  ::= The interpreter environment
+-- K: Kontinuation ::= The syntactic context of the thing that is being interpreted
+
+Why a CEK? A CEK interpreter allows us to have precise control over the
+evaluation of a klister program. For example, because the interpreter keeps a
+reference to the kontinuation we can provide stack traces. This handle also
+makes a more advanced debugger possible. Upon an evaluation error we could save
+the kontinuation stack, over write a variable in the environment a la common
+lisp or even rewind the evaluation
+
+See Matthias Felleison's course website for a good reference:
+https://felleisen.org/matthias/4400-s20/lecture23.html
+
+The bird's eye view:
+
+The evaluator crawl's the input AST and progresses in three modes:
+
+-- 'Down': meaning that the evaluator is searching for a redex to evaluate and
+-- therefore moving "down" the AST.
+
+-- 'Up': meaning that the evaluator has evaluated some redex to a value and is
+-- passing that value "up" the execution stack.
+
+-- 'Er': meaning that something has gone wrong, the stack is captured and the Er
+-- will float up to be handled by the caller of the evaluator.
+
+All interesting things happen by matching on 'Kont', the continuation. This
+allows the evaluator to know exactly what needs to happen in order to continue.
+
+-- TODO: #108 describe the how the debugger hooks in
+
+-}
+
+module Evaluator
+  ( EvalError (..)
+  , EvalResult (..)
+  , TypeError (..)
+  , evaluate
+  , evaluateIn
+  , evaluateWithExtendedEnv
+  , evalErrorType
+  , evalErrorText
+  , projectError
+  , erroneousValue
+  , applyInEnv
+  , apply
+  , doTypeCase
+  , try
+  ) where
 
 import Control.Lens hiding (List, elements)
-import Control.Monad.IO.Class (MonadIO)
-import Control.Monad.Except (MonadError(throwError))
-import Control.Monad.Reader (MonadReader(ask, local))
-import Control.Monad.Trans.Except (ExceptT)
-import Control.Monad.Trans.Reader (ReaderT)
+import Control.Exception hiding (TypeError, evaluate)
+import Data.Data (Typeable)
 import Data.Text (Text)
 import qualified Data.Text as T
+import Data.List (foldl')
 
+import Datatype
 import Core
 import Env
 import ShortShow
@@ -22,6 +79,14 @@ import Syntax
 import Syntax.SrcLoc
 import Type
 import Value
+
+-- -----------------------------------------------------------------------------
+-- Interpreter Data Types
+
+
+data EvalResult
+  = ExampleResult SrcLoc VEnv Core (Scheme Ty) Value
+  | IOResult (IO ())
 
 -- TODO: more precise representation
 type Type = Text
@@ -38,8 +103,345 @@ data EvalError
   | EvalErrorType TypeError
   | EvalErrorCase SrcLoc Value
   | EvalErrorUser Syntax
-  deriving (Show)
+  | EvalErrorIdent Value
+  deriving (Show, Typeable)
 makePrisms ''EvalError
+instance Exception EvalError
+
+-- | The Kontinuation type. The naming convention InFoo means that the subject
+-- of evaluation in the CEK machine is Foo. For example, when the continuation
+-- is 'InArg' the subject of evaluation is the argument of the function and the
+-- continuation holds the un-evaluated function symbol in its first field.
+data Kont where
+
+  Halt :: Kont
+  -- ^ Marks the evaluator finishing
+
+  -- functions
+  InArg :: !Value -> !VEnv -> !Kont -> Kont
+  -- ^ The argument is being evaluated, so hold onto the function symbol. We
+  -- require that the function symbol be fully evaluated before evaluating the
+  -- arguments, hence the @Value@
+  InFun :: !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
+  -- ^ The function is being evaluated, so hold onto the argument.
+
+  InLetDef :: !Ident -> !Var -> !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
+  -- ^ Evaluating the let def
+
+  -- constructors
+  InCtor :: ![Value] -> !Constructor -> ![CoreF TypePattern ConstructorPattern Core] -> !VEnv -> !Kont -> Kont
+
+  -- Cases
+  InCaseScrut     :: ![(SyntaxPattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
+  InDataCaseScrut :: ![(ConstructorPattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
+  InTypeCaseScrut :: ![(TypePattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
+
+  -- lists
+  InConsHd :: !Core -> !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
+  InConsTl :: !Core -> !Syntax -> !VEnv -> !Kont -> Kont
+  InList   :: !Core -> ![Core] -> ![Syntax] -> !VEnv -> !Kont -> Kont
+
+  -- idents
+  InIdent :: !Core -> !VEnv -> !Kont -> Kont
+  InIdentEqL :: !HowEq -> !Core -> !VEnv -> !Kont -> Kont
+  InIdentEqR :: !Value -> !HowEq -> !VEnv -> !Kont -> Kont
+
+  -- Macros
+  InPureMacro :: !VEnv -> !Kont -> Kont
+  InBindMacroHd :: !Core -> !VEnv -> !Kont -> Kont
+  InBindMacroTl :: !MacroAction -> !VEnv -> !Kont -> Kont
+
+  -- atomics
+  InInteger :: !Core -> !VEnv -> !Kont -> Kont
+  InString  :: !Core -> !VEnv -> !Kont -> Kont
+  InReplaceLocL :: !Core -> !VEnv -> !Kont -> Kont
+  InReplaceLocR :: !SrcLoc -> !VEnv -> !Kont -> Kont
+
+  -- scope
+  InScope :: !(ExprF Syntax) -> !VEnv -> !Kont -> Kont
+
+  -- logs and errors
+  InLog   :: !VEnv -> !Kont -> Kont
+  InError :: !VEnv -> !Kont -> Kont
+
+
+  InSyntaxErrorMessage   :: ![Core] -> !VEnv -> !Kont -> Kont
+  InSyntaxErrorLocations :: !Syntax -> ![Core] -> ![Syntax] -> !VEnv -> !Kont -> Kont
+
+-- | The state of the evaluator
+data EState where
+  Down :: !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> EState
+  -- ^ 'Down', we are searching the AST for a redex and building up the stack of
+  -- continuations
+  Up   :: !Value -> !VEnv -> !Kont -> EState
+  -- ^ 'Up', means we have performed some evaluation on a redex and are
+  -- returning a value up the stack
+  Er   :: !EvalError -> !VEnv -> !Kont -> EState
+  -- ^ 'Er', meaning that we are in an error state and running the debugger
+
+
+-- -----------------------------------------------------------------------------
+-- The evaluator. The CEK machine is a state machine, the @step@ function moves
+-- the state machine a single step of evaluation. This is the heart of the
+-- evaluator.
+
+
+-- | Make a single step transition in the CEK state machine.
+step :: EState -> EState
+step done@(Up _val _ Halt) = done
+
+-- for now we just bail out. Once we have a debugger we'll do something more
+-- advanced.
+step done@(Er _err _env _k)  = done
+
+-- Upsweep, returning a value after evaluating a redex
+step (Up v e k) =
+  case k of
+    -- functions
+    -- we evaluated the arg to get a closed so now we evaluate the fun
+    (InArg fun env kont) -> applyAsClosure env fun v kont
+    -- we evaluated the fun so now do the application
+    (InFun arg env kont) -> Down arg env (InArg v e kont)
+
+
+    -- lets
+    -- we have the value for the def, now eval the body
+    (InLetDef id' var body env kont) -> Down body (extend id' var v env) kont
+
+    -- done, FIXME use a banker's queue instead of a list
+    (InCtor v_args c [] _env kont) -> Up (ValueCtor c (reverse $ v : v_args)) e kont
+    -- still processing
+    (InCtor vs c (a:as) env kont) -> Down a env (InCtor (v:vs) c as env kont)
+
+
+    -- Cases
+    (InCaseScrut cs loc env kont)     -> doCase loc v cs env kont
+    (InDataCaseScrut cs loc env kont) -> doDataCase loc v cs env kont
+    (InTypeCaseScrut cs loc env kont) ->
+      evalAsType v
+      (\good -> Up (ValueMacroAction $ MacroActionTypeCase e loc good cs) env kont)
+      (\err  -> Er err env kont)
+
+
+    -- Idents
+    (InIdent scope env kont) -> case v of
+      ValueSyntax stx ->
+        case _unSyntax stx of
+          (Stx _ _ expr) -> case expr of
+            Integer _ ->
+              Er (EvalErrorType
+                   $ TypeError { _typeErrorExpected = "id"
+                               , _typeErrorActual   = "integer"
+                               }) e k
+            String _ ->
+              Er (EvalErrorType
+                  $ TypeError { _typeErrorExpected = "id"
+                              , _typeErrorActual   = "string"
+                              }) e k
+            List _ ->
+              Er (EvalErrorType
+                  $ TypeError { _typeErrorExpected = "id"
+                              , _typeErrorActual   = "list"
+                              }) e k
+            name@(Id _) -> Down (unCore scope) env (InScope name env kont)
+      other -> Er (EvalErrorIdent other) e k
+    (InIdentEqL how r env kont)  -> Down (unCore r) env (InIdentEqR v how env kont)
+    (InIdentEqR how lv env kont) -> Up (ValueMacroAction $ MacroActionIdentEq lv how v) env kont
+
+    -- Short circuit to speed this up, we could issue an Down and do this recursively
+    (InScope expr env kont) ->
+      evalAsSyntax v
+      (\(Syntax (Stx scopeSet loc _)) -> Up (ValueSyntax $ Syntax $ Stx scopeSet loc expr) env kont)
+      (\err                           -> Er err env kont)
+
+
+    -- pairs
+    (InConsHd scope tl env kont) ->
+      evalAsSyntax v
+      (\good -> Down tl env (InConsTl scope good env kont))
+      (\err  -> Er err env kont)
+    (InConsTl scope hd env kont) ->
+      evalAsSyntax v
+      (\(Syntax (Stx _ _ expr)) ->
+          case expr of
+            List tl -> Down (unCore scope) env (InScope (List $ hd : tl) env kont)
+            String _ ->
+              Er (EvalErrorType
+                   $ TypeError { _typeErrorExpected = "list"
+                               , _typeErrorActual   = "string"
+                               }) e k
+            Id _ -> Er (EvalErrorType
+                        $ TypeError { _typeErrorExpected = "list"
+                                    , _typeErrorActual   = "id"
+                                    }) e k
+            Integer _ -> Er (EvalErrorType
+                             $ TypeError { _typeErrorExpected = "list"
+                                         , _typeErrorActual   = "integer"
+                                         }) e k
+         )
+      (\err -> Er err env kont)
+
+
+    -- lists
+    -- base case
+    (InList scope [] dones env kont) ->
+      evalAsSyntax v
+      (\good -> Down (unCore scope) e (InScope (List $ reverse $ good : dones) env kont))
+      (\err  -> Er err env kont)
+    -- still some todo
+    (InList scope (el:els) dones env kont) ->
+      evalAsSyntax v
+      (\good -> Down (unCore el) env (InList scope els (good : dones) env kont))
+      (\err  -> Er err env kont)
+
+
+    -- Macros
+    (InPureMacro env kont) -> Up (ValueMacroAction $ MacroActionPure v) env kont
+    (InBindMacroHd tl env kont) ->
+      evalAsMacroAction v
+      (\good -> Down (unCore tl) env (InBindMacroTl good env kont))
+      (\err  -> Er err env kont)
+
+    (InBindMacroTl macroAction env kont) ->
+      evalAsClosure v
+      (\good -> Up (ValueMacroAction $ MacroActionBind macroAction good) env kont)
+      (\err  -> Er err env kont)
+
+
+    -- Syntax and Atomics
+    (InInteger scope env kont) ->
+      evalAsInteger v
+      (\good -> Down (unCore scope) env (InScope (Integer good) env kont))
+      (\err  -> Er err env kont)
+    (InString scope env kont) ->
+      evalAsString v
+      (\good -> Down (unCore scope) env (InScope (String good) env kont))
+      (\err  -> Er err env kont)
+    (InReplaceLocL stx env kont) ->
+      evalAsSyntax v
+      (\(Syntax (Stx _ newLoc _)) -> Down (unCore stx) env (InReplaceLocR newLoc env kont) )
+      (\err -> Er err env kont)
+    (InReplaceLocR loc env kont) ->
+      evalAsSyntax v
+      (\(Syntax (Stx scs _ contents)) -> Up (ValueSyntax $ Syntax $ Stx scs loc contents) env kont)
+      (\err -> Er err env kont)
+    (InLog   env kont)   ->
+      evalAsSyntax v
+      (\good -> Up (ValueMacroAction (MacroActionLog good)) env kont)
+      (\err  -> Er err env kont)
+
+
+    -- Errors
+    (InError env kont) ->
+      evalAsSyntax v
+      (\good -> Er (EvalErrorUser good) env kont)
+      (\err  -> Er err env kont)
+    (InSyntaxErrorMessage locs env kont) ->
+      evalAsSyntax v
+      (\msg_syn ->
+         case locs of
+           -- done
+           []     -> Up (ValueMacroAction $ MacroActionSyntaxError
+                          (SyntaxError { _syntaxErrorMessage   = msg_syn
+                                       , _syntaxErrorLocations = mempty
+                                       })) env kont
+           (l:ls) -> Down (unCore l) env (InSyntaxErrorLocations msg_syn ls mempty env kont)
+          )
+      (\err -> Er err env kont)
+    -- done
+    (InSyntaxErrorLocations msg_syn [] dones env kont) ->
+        Up (ValueMacroAction
+                $ MacroActionSyntaxError (SyntaxError { _syntaxErrorMessage   = msg_syn
+                                                      , _syntaxErrorLocations = dones
+                                                      })) env kont
+    (InSyntaxErrorLocations msg (l:ls) dones env kont) ->
+      evalAsSyntax v
+      (\good -> Down (unCore l) env (InSyntaxErrorLocations msg ls (good : dones) env kont))
+      (\err  -> Er err env kont)
+
+-- the downsweep, searching for a redex to evaluate.
+step (Down c env k)  =
+  case c of
+
+    -- atoms
+    (CoreString s)    -> Up (ValueString s) env k
+    (CoreInteger i)   -> Up (ValueInteger i) env k
+    (CoreIntegerSyntax (ScopedInteger int scope)) -> Down (unCore int) env (InInteger scope env k)
+    (CoreStringSyntax  (ScopedString  str scope)) -> Down (unCore str) env (InString scope env k)
+    (CoreSyntax s)    -> Up (ValueSyntax s) env k
+    (CoreError what)  -> Down (unCore what) env (InError env k)
+    (CoreEmpty (ScopedEmpty scope)) -> Down (unCore scope) env (InScope (List mempty) env k)
+    CoreMakeIntroducer -> Up (ValueMacroAction MacroActionIntroducer)   env k
+    CoreWhichProblem   -> Up (ValueMacroAction MacroActionWhichProblem) env k
+
+
+    -- variables and binders
+    (CoreVar var) ->
+      case lookupVal var env of
+        Just val -> Up val env k
+        _        -> Er (EvalErrorUnbound var) env k
+
+    (CoreLet ident var def body) ->
+      Down (unCore def) env (InLetDef ident var (unCore body) env k)
+
+    (CoreLetFun fIdent fVar argIdent argVar def body) ->
+      let vFun = ValueClosure $ FO $ FOClosure
+            { _closureEnv   = Env.insert fVar fIdent vFun env
+            , _closureIdent = argIdent
+            , _closureVar   = argVar
+            , _closureBody  = def
+            }
+          newEnv = Env.insert fVar fIdent vFun env
+      in Down (unCore body) newEnv k
+
+    (CoreCtor con args) -> case args of
+                           -- just a symbol, shortcut out
+                           []     -> Up (ValueCtor con mempty) env k
+                           -- process fields left to right
+                           (f:fs) -> Down (unCore f) env (InCtor mempty con (fmap unCore fs) env k)
+
+
+    -- lambdas and application
+    (CoreLam ident var body) ->
+      let lam = ValueClosure $ FO $ FOClosure
+            { _closureEnv   = env
+            , _closureIdent = ident
+            , _closureVar   = var
+            , _closureBody  = body
+            }
+      in Up lam env k
+    (CoreApp fun arg) -> Down (unCore fun) env (InFun (unCore arg) env k)
+
+
+    -- cases
+    (CoreCase     loc scrutinee cases) -> Down (unCore scrutinee) env (InCaseScrut     cases loc env k)
+    (CoreDataCase loc scrutinee cases) -> Down (unCore scrutinee) env (InDataCaseScrut cases loc env k)
+    (CoreTypeCase loc scrut cases)     -> Down (unCore scrut)     env (InTypeCaseScrut cases loc env k)
+
+    (CoreIdent (ScopedIdent ident scope)) -> Down (unCore ident) env (InIdent scope env k)
+    (CoreIdentEq how l r)                 -> Down (unCore l)     env (InIdentEqL how r env k)
+
+    (CoreCons (ScopedCons hd tl scope))   -> Down (unCore hd) env (InConsHd scope (unCore tl) env k)
+    -- empty, short circuit
+    (CoreList (ScopedList ls scope)) -> case ls of
+                                         []     -> Down (unCore scope) env (InScope (List []) env k)
+                                         (e:es) -> Down (unCore e) env (InList scope es mempty env k)
+    (CoreReplaceLoc loc stx) -> Down (unCore loc) env (InReplaceLocL stx env k)
+
+
+    -- macros
+    (CorePureMacro arg)   -> Down (unCore arg) env (InPureMacro env k)
+    (CoreBindMacro hd tl) -> Down (unCore hd) env (InBindMacroHd tl env k)
+
+
+    -- others
+    (CoreLog msg)      -> Down (unCore msg) env (InLog env k)
+    (CoreSyntaxError err) ->
+      Down (unCore $ _syntaxErrorMessage err) env (InSyntaxErrorMessage (_syntaxErrorLocations err) env k)
+
+
+-- -----------------------------------------------------------------------------
+-- Helper Functions
 
 evalErrorText :: EvalError -> Text
 evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
@@ -50,240 +452,187 @@ evalErrorText (EvalErrorCase loc val) =
 evalErrorText (EvalErrorUser what) =
   T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
   syntaxText what
+evalErrorText (EvalErrorIdent v) = "Attempt to bind identifier to non-value: " <> valueText v
 
-newtype Eval a = Eval
-   { runEval :: ReaderT VEnv (ExceptT EvalError IO) a }
-   deriving (Functor, Applicative, Monad,
-             MonadReader VEnv, MonadError EvalError,
-             MonadIO)
+type ContinueWith a = a -> EState
+type OnFailure   = EvalError -> EState
 
-withEnv :: VEnv -> Eval a -> Eval a
-withEnv = local . const
+evalAsClosure :: Value -> ContinueWith Closure -> OnFailure -> EState
+evalAsClosure closure_to_be on_success on_error =
+  case closure_to_be of
+    ValueClosure closure -> on_success closure
+    other -> on_error (evalErrorType "function" other)
 
-withExtendedEnv :: Ident -> Var -> Value -> Eval a -> Eval a
-withExtendedEnv n x v act = local (Env.insert x n v) act
+evalAsInteger :: Value -> ContinueWith Integer -> OnFailure -> EState
+evalAsInteger int_to_be on_success on_error =
+  case int_to_be of
+    ValueInteger i -> on_success i
+    other          -> on_error (evalErrorType "integer" other)
 
-withManyExtendedEnv :: [(Ident, Var, Value)] -> Eval a -> Eval a
-withManyExtendedEnv exts act = local (inserter exts) act
-  where
-    inserter [] = id
-    inserter ((n, x, v) : rest) = Env.insert x n v . inserter rest
+evalAsSyntax :: Value -> ContinueWith Syntax -> OnFailure -> EState
+evalAsSyntax syn_to_be on_success on_error =
+  case syn_to_be of
+    ValueSyntax syntax -> on_success syntax
+    other              -> on_error (evalErrorType "syntax" other)
 
+evalAsString :: Value -> ContinueWith Text -> OnFailure -> EState
+evalAsString str_to_be on_success on_error =
+  case str_to_be of
+    ValueString str -> on_success str
+    other           -> on_error (evalErrorType "string" other)
 
-data EvalResult
-  = ExampleResult SrcLoc VEnv Core (Scheme Ty) Value
-  | IOResult (IO ())
+evalAsMacroAction :: Value -> (MacroAction -> EState) -> (EvalError -> EState) -> EState
+evalAsMacroAction v on_success on_error = case v of
+    ValueMacroAction macroAction -> on_success macroAction
+    other                        -> on_error (evalErrorType "macro action" other)
 
-apply :: Closure -> Value -> Eval Value
-apply (FO (FOClosure {..})) value = do
+evalAsType :: Value -> ContinueWith Ty -> OnFailure -> EState
+evalAsType v on_success on_error =
+  case v of
+    ValueType t -> on_success t
+    other       -> on_error (evalErrorType "type" other)
+
+applyInEnv :: VEnv -> Closure -> Value -> Either EState Value
+applyInEnv old_env (FO (FOClosure {..})) value =
+  let env = Env.insert _closureVar
+                       _closureIdent
+                       value
+                       (_closureEnv <> old_env)
+  in evaluateIn env _closureBody
+applyInEnv _ (HO prim) value = return $! prim value
+
+apply :: Closure -> Value -> Either EState Value
+apply (FO (FOClosure {..})) value =
   let env = Env.insert _closureVar
                        _closureIdent
                        value
                        _closureEnv
-  withEnv env $
-    eval _closureBody
-apply (HO prim) value = pure (prim value)
+  in evaluateIn env _closureBody
+apply (HO prim) value = return $! prim value
 
-eval :: Core -> Eval Value
-eval (Core (CoreVar var)) = do
-  env <- ask
-  case lookupVal var env of
-    Just value -> pure value
-    _ -> throwError $ EvalErrorUnbound var
-eval (Core (CoreLet ident var def body)) = do
-  val <- eval def
-  env <- ask
-  withEnv (Env.insert var ident val env) (eval body)
-eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
-  env <- ask
-  let vFun =
-        ValueClosure $ FO $ FOClosure
-          { _closureEnv = Env.insert funVar funIdent vFun env
-          , _closureIdent = argIdent
-          , _closureVar = argVar
-          , _closureBody = def
-          }
-  withEnv (Env.insert funVar funIdent vFun env) (eval body)
-eval (Core (CoreLam ident var body)) = do
-  env <- ask
-  pure $ ValueClosure $ FO $ FOClosure
-    { _closureEnv   = env
-    , _closureIdent = ident
-    , _closureVar   = var
-    , _closureBody  = body
-    }
-eval (Core (CoreApp fun arg)) = do
-  closure <- evalAsClosure fun
-  value <- eval arg
-  apply closure value
-eval (Core (CoreCtor c args)) =
-  ValueCtor c <$> traverse eval args
-eval (Core (CoreDataCase loc scrut cases)) = do
-  value <- eval scrut
-  doDataCase loc value cases
-eval (Core (CoreString str)) = pure (ValueString str)
-eval (Core (CoreError what)) = do
-  msg <- evalAsSyntax what
-  throwError $ EvalErrorUser msg
-eval (Core (CorePureMacro arg)) = do
-  value <- eval arg
-  pure $ ValueMacroAction
-       $ MacroActionPure value
-eval (Core (CoreBindMacro hd tl)) = do
-  macroAction <- evalAsMacroAction hd
-  closure <- evalAsClosure tl
-  pure $ ValueMacroAction
-       $ MacroActionBind macroAction closure
-eval (Core (CoreSyntaxError syntaxErrorExpr)) = do
-  syntaxErrorValue <- traverse evalAsSyntax syntaxErrorExpr
-  pure $ ValueMacroAction
-       $ MacroActionSyntaxError syntaxErrorValue
-eval (Core (CoreIdentEq how e1 e2)) =
-  ValueMacroAction <$> (MacroActionIdentEq how <$> eval e1 <*> eval e2)
-eval (Core (CoreLog msg)) = do
-  msgVal <- evalAsSyntax msg
-  return $ ValueMacroAction (MacroActionLog msgVal)
-eval (Core CoreMakeIntroducer) =
-  return $ ValueMacroAction MacroActionIntroducer
-eval (Core CoreWhichProblem) = do
-  return $ ValueMacroAction MacroActionWhichProblem
-eval (Core (CoreInteger i)) =
-  pure $ ValueInteger i
-eval (Core (CoreSyntax syntax)) = do
-  pure $ ValueSyntax syntax
-eval (Core (CoreCase loc scrutinee cases)) = do
-  v <- eval scrutinee
-  doCase loc v cases
-eval (Core (CoreIdent (ScopedIdent ident scope))) = do
-  identSyntax <- evalAsSyntax ident
-  case identSyntax of
-    Syntax (Stx _ _ expr) ->
-      case expr of
-        Integer _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "integer"
-            }
-        String _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "string"
-            }
-        List _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "id"
-            , _typeErrorActual   = "list"
-            }
-        Id name -> withScopeOf scope $ Id name
-eval (Core (CoreEmpty (ScopedEmpty scope))) = withScopeOf scope (List [])
-eval (Core (CoreCons (ScopedCons hd tl scope))) = do
-  hdSyntax <- evalAsSyntax hd
-  tlSyntax <- evalAsSyntax tl
-  case tlSyntax of
-    Syntax (Stx _ _ expr) ->
-      case expr of
-        List vs -> withScopeOf scope $ List $ hdSyntax : vs
-        String _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "string"
-            }
-        Id _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "id"
-            }
-        Integer _ ->
-          throwError $ EvalErrorType $ TypeError
-            { _typeErrorExpected = "list"
-            , _typeErrorActual   = "integer"
-            }
-eval (Core (CoreList (ScopedList elements scope))) = do
-  vec <- List <$> traverse evalAsSyntax elements
-  withScopeOf scope vec
-eval (Core (CoreIntegerSyntax (ScopedInteger int scope))) = do
-  intV <- evalAsInteger int
-  withScopeOf scope (Integer intV)
-eval (Core (CoreStringSyntax (ScopedString str scope))) = do
-  strV <- evalAsString str
-  withScopeOf scope (String strV)
-eval (Core (CoreReplaceLoc loc stx)) = do
-  Syntax (Stx _ newLoc _) <- evalAsSyntax loc
-  Syntax (Stx scs _ contents) <- evalAsSyntax stx
-  return $ ValueSyntax $ Syntax $ Stx scs newLoc contents
-eval (Core (CoreTypeCase loc scrut cases)) = do
-  ty <- evalAsType scrut
-  env <- ask
-  return $ ValueMacroAction $ MacroActionTypeCase env loc ty cases
+applyAsClosure :: VEnv -> Value -> Value -> Kont -> EState
+applyAsClosure e v_closure value k = case v_closure of
+    ValueClosure closure -> app closure
+    other                -> Er (evalErrorType "function" other) e k
 
-evalErrorType :: Text -> Value -> Eval a
+    where app (FO (FOClosure{..})) =
+            let env = Env.insert _closureVar _closureIdent value (_closureEnv <> e)
+            in Down (unCore _closureBody) env k
+          app (HO prim)            = Up (prim value) mempty k
+
+-- | predicate to check for done state
+final :: EState -> Bool
+final (Up _v _env Halt) = True
+final (Er _err _env _k) = True
+final _                 = False
+
+-- | Initial state
+start :: VEnv -> CoreF TypePattern ConstructorPattern Core -> EState
+start e c = Down c e Halt
+
+yield :: EState -> Either EState Value
+yield (Up v _ Halt) = Right v
+yield e@Er{}        = Left  e
+yield _             = error "evaluate: completed impossibly"
+
+extend :: Ident -> Var -> Value -> VEnv -> VEnv
+extend i var = Env.insert var i
+
+extends :: [(Ident, Var, Value)] -> VEnv -> VEnv
+extends exts env = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env exts
+
+evalErrorType :: Text -> Value -> EvalError
 evalErrorType expected got =
-  throwError $ EvalErrorType $ TypeError
+  EvalErrorType $ TypeError
     { _typeErrorExpected = expected
     , _typeErrorActual   = describeVal got
     }
 
-evalAsClosure :: Core -> Eval Closure
-evalAsClosure core = do
-  value <- eval core
-  case value of
-    ValueClosure closure ->
-      pure closure
-    other -> evalErrorType "function" other
-
-evalAsInteger :: Core -> Eval Integer
-evalAsInteger core = do
-  value <- eval core
-  case value of
-    ValueInteger i -> pure i
-    other -> evalErrorType "integer" other
-
-evalAsSyntax :: Core -> Eval Syntax
-evalAsSyntax core = do
-  value <- eval core
-  case value of
-    ValueSyntax syntax -> pure syntax
-    other -> evalErrorType "syntax" other
-
-evalAsString :: Core -> Eval Text
-evalAsString core = do
-  value <- eval core
-  case value of
-    ValueString str -> pure str
-    other -> evalErrorType "string" other
-
-evalAsMacroAction :: Core -> Eval MacroAction
-evalAsMacroAction core = do
-  value <- eval core
-  case value of
-    ValueMacroAction macroAction -> pure macroAction
-    other -> evalErrorType "macro action" other
-
-evalAsType :: Core -> Eval Ty
-evalAsType core = do
-  value <- eval core
-  case value of
-    ValueType t -> pure t
-    other -> evalErrorType "type" other
-
-withScopeOf :: Core -> ExprF Syntax -> Eval Value
-withScopeOf scope expr = do
-  scopeSyntax <- evalAsSyntax scope
-  case scopeSyntax of
-    Syntax (Stx scopeSet loc _) ->
-      pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
-
-doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
-doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
-doDataCase loc v0 ((pat, rhs) : ps) =
-  match (doDataCase loc v0 ps) (eval rhs) [(unConstructorPattern pat, v0)]
+doTypeCase :: VEnv -> SrcLoc -> Ty -> [(TypePattern, Core)] -> Either EState Value
+-- We pass @Right $ ValueType v0@ here so that the Core type-case still matches
+-- on the outermost constructor instead of failing immedaitely. This behavior
+-- comports with the other cases and could allow a debugger to fixup an
+-- expression while knowing the type-case.
+doTypeCase _env _blameLoc v0 [] = Right $ ValueType v0
+doTypeCase env blameLoc (Ty v0) ((p, rhs0) : ps) =
+  do v <- doTypeCase env blameLoc (Ty v0) ps
+     match v p rhs0 v0
   where
-    match ::
-      Eval Value {- ^ Failure continuation -} ->
-      Eval Value {- ^ Success continuation, to be used in an extended environment -} ->
-      [(ConstructorPatternF ConstructorPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
-      Eval Value
-    match _fk sk [] = sk
+    match :: Value -> TypePattern -> Core -> TyF Ty -> Either EState Value
+    match next (TypePattern t) rhs scrut =
+      case (t, scrut) of
+        -- unification variables never match; instead, type-case remains stuck
+        -- until the variable is unified with a concrete type constructor or a
+        -- skolem variable.
+        (TyF (TMetaVar _) _, _) -> return next
+        (_, TyF (TMetaVar _) _) -> return next
+
+        (TyF ctor1 args1, TyF ctor2 args2)
+          | ctor1 == ctor2 && length args1 == length args2 ->
+            evaluateWithExtendedEnv env [ (n, x, ValueType arg)
+                                        | (n, x) <- args1
+                                        | arg <- args2
+                                        ] rhs
+        (_, _) -> return next
+    match _next (AnyType n x) rhs scrut =
+      evaluateWithExtendedEnv env [(n, x, ValueType (Ty scrut))] rhs
+
+-- TODO SAT this
+doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> VEnv -> Kont -> EState
+doCase blameLoc v0 []               e  kont = Er (EvalErrorCase blameLoc v0) e kont
+doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kont) p rhs0 v0 e kont
+  where
+    match next (SyntaxPatternIdentifier n x) rhs scrutinee env k =
+      case scrutinee of
+        v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
+          step $ Down (unCore rhs) (extend n x v env) k
+        _ -> next
+    match next (SyntaxPatternInteger n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueInteger int) env) k
+        _ -> next
+    match next (SyntaxPatternString n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (String str))) ->
+          step $ Down (unCore rhs) (extend n x (ValueString str) env) k
+        _ -> next
+    match next SyntaxPatternEmpty rhs scrutinee env k =
+      case scrutinee of
+        (ValueSyntax (Syntax (Stx _ _ (List [])))) ->
+          step $ Down (unCore rhs) env k
+        _ -> next
+    match next (SyntaxPatternCons nx x nxs xs) rhs scrutinee env k =
+      case scrutinee of
+        (ValueSyntax (Syntax (Stx scs loc (List (v:vs))))) ->
+          let mkEnv = extend nx x (ValueSyntax v)
+                    . extend nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs))))
+          in step $ Down (unCore rhs) (mkEnv env) k
+        _ -> next
+    match next (SyntaxPatternList xs) rhs scrutinee env k =
+      case scrutinee of
+        (ValueSyntax (Syntax (Stx _ _ (List vs))))
+          | length vs == length xs ->
+            let vals = [ (n, x, ValueSyntax v)
+                       | (n,x) <- xs
+                       | v     <- vs
+                       ]
+            in step $ Down (unCore rhs) (vals `extends` env) k
+        _ -> next
+    match _next SyntaxPatternAny rhs _scrutinee env k =
+      step $ Down (unCore rhs) env k
+
+doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> VEnv -> Kont -> EState
+doDataCase loc v0 [] env kont = Er (EvalErrorCase loc v0) env kont
+doDataCase loc v0 ((pat, rhs) : ps) env kont =
+  match (doDataCase loc v0 ps env kont) (\newEnv -> step $ Down (unCore rhs) newEnv kont) [(unConstructorPattern pat, v0)]
+  where
+    match
+      :: EState {- ^ Failure continuation -}
+      -> (VEnv -> EState) {- ^ Success continuation, to be used in an extended environment -}
+      -> [(ConstructorPatternF ConstructorPattern, Value)] {- ^ Subpatterns and their scrutinees -}
+      -> EState
+    match _fk sk [] = sk env
     match fk sk ((CtorPattern ctor subPats, tgt) : more) =
       case tgt of
         ValueCtor c args
@@ -293,70 +642,31 @@ doDataCase loc v0 ((pat, rhs) : ps) =
               else match fk sk (zip (map unConstructorPattern subPats) args ++ more)
         _otherValue -> fk
     match fk sk ((PatternVar n x, tgt) : more) =
-      match fk (withExtendedEnv n x tgt $ sk) more
+      match fk (sk . extend n x tgt) more
 
-doTypeCase :: SrcLoc -> Ty -> [(TypePattern, Core)] -> Eval Value
-doTypeCase blameLoc v0 [] = throwError (EvalErrorCase blameLoc (ValueType v0))
-doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0) ps) p rhs0 v0
+-- -----------------------------------------------------------------------------
+-- Top level API
+
+evaluate :: Core -> Either EState Value
+evaluate =  evaluateIn mempty
+
+evaluateIn :: VEnv -> Core -> Either EState Value
+evaluateIn e = yield . until final step . start e . unCore
+
+evaluateWithExtendedEnv :: VEnv -> [(Ident, Var, Value)] -> Core -> Either EState Value
+evaluateWithExtendedEnv env exts = evaluateIn (inserter exts)
   where
-    match :: Eval Value -> TypePattern -> Core -> TyF Ty -> Eval Value
-    match next (TypePattern t) rhs scrut =
-      case (t, scrut) of
-        -- unification variables never match; instead, type-case remains stuck
-        -- until the variable is unified with a concrete type constructor or a
-        -- skolem variable.
-        (TyF (TMetaVar _) _, _) -> next
-        (_, TyF (TMetaVar _) _) -> next
+    inserter = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env
 
-        (TyF ctor1 args1, TyF ctor2 args2)
-          | ctor1 == ctor2 && length args1 == length args2 ->
-            withManyExtendedEnv [ (n, x, ValueType arg)
-                                | (n, x) <- args1
-                                | arg <- args2]
-                                (eval rhs)
-        (_, _) -> next
-    match _next (AnyType n x) rhs scrut =
-      withExtendedEnv n x (ValueType (Ty scrut)) (eval rhs)
+-- TODO DYG: Move to separate module
+projectError :: EState -> EvalError
+projectError (Er err _env _k) = err
+projectError _                = error "debugger: impossible"
 
-doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> Eval Value
-doCase blameLoc v0 []               = throwError (EvalErrorCase blameLoc v0)
-doCase blameLoc v0 ((p, rhs0) : ps) = match (doCase blameLoc v0 ps) p rhs0 v0
-  where
-    match next (SyntaxPatternIdentifier n x) rhs =
-      \case
-        v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
-          withExtendedEnv n x v (eval rhs)
-        _ -> next
-    match next (SyntaxPatternInteger n x) rhs =
-      \case
-        ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
-          withExtendedEnv n x (ValueInteger int) (eval rhs)
-        _ -> next
-    match next (SyntaxPatternString n x) rhs =
-      \case
-        ValueSyntax (Syntax (Stx _ _ (String str))) ->
-          withExtendedEnv n x (ValueString str) (eval rhs)
-        _ -> next
-    match next SyntaxPatternEmpty rhs =
-      \case
-        (ValueSyntax (Syntax (Stx _ _ (List [])))) ->
-          eval rhs
-        _ -> next
-    match next (SyntaxPatternCons nx x nxs xs) rhs =
-      \case
-        (ValueSyntax (Syntax (Stx scs loc (List (v:vs))))) ->
-          withExtendedEnv nx x (ValueSyntax v) $
-          withExtendedEnv nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs)))) $
-          eval rhs
-        _ -> next
-    match next (SyntaxPatternList xs) rhs =
-      \case
-        (ValueSyntax (Syntax (Stx _ _ (List vs))))
-          | length vs == length xs ->
-            withManyExtendedEnv [(n, x, (ValueSyntax v))
-                                | (n,x) <- xs
-                                | v <- vs] $
-            eval rhs
-        _ -> next
-    match _next SyntaxPatternAny rhs =
-      const (eval rhs)
+erroneousValue :: EvalError -> Value
+erroneousValue (EvalErrorCase _loc v) = v
+erroneousValue (EvalErrorIdent v)     = v
+erroneousValue  _                     =
+  error $ mconcat [ "erroneousValue: "
+                  , "Evaluator concluded in an error that did not return a value"
+                  ]

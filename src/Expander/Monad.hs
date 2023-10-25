@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE ViewPatterns       #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
 
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 {-# LANGUAGE BangPatterns #-}
@@ -34,7 +35,7 @@ module Expander.Monad
   , inTypeBinder
   , dependencies
   , execExpand
-  , expandEval
+  , evalInCurrentPhase
   , freshBinding
   , freshConstructor
   , freshDatatype
@@ -860,14 +861,14 @@ setTasks = modifyState . set expanderTasks
 clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
 
-expandEval :: Eval a -> Expand a
-expandEval evalAction = do
+evalInCurrentPhase :: Core -> Expand Value
+evalInCurrentPhase evalAction = do
   env <- currentEnv
-  out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
+  let out = evaluateIn env evalAction
   case out of
     Left err -> do
       p <- currentPhase
-      throwError $ MacroEvaluationError p err
+      throwError $ MacroEvaluationError p $ projectError err
     Right val -> return val
 
 currentTransformerEnv :: Expand TEnv

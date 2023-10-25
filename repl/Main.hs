@@ -4,11 +4,9 @@
 {-# LANGUAGE ViewPatterns #-}
 module Main where
 
-import Control.Exception
+import Control.Exception hiding (evaluate)
 import Control.Lens hiding (argument)
 import Control.Monad
-import Control.Monad.Trans.Reader
-import Control.Monad.Trans.Except
 
 import Data.Foldable (for_)
 import Data.IORef
@@ -148,7 +146,6 @@ repl ctx startWorld = do
                         prettyPrint expr
                         putStrLn ""
                         currentWorld <- readIORef theWorld
-                        runExceptT (runReaderT (runEval (eval expr)) (phaseEnv runtime currentWorld)) >>=
-                          \case
-                            Left evalErr -> print evalErr
-                            Right val -> prettyPrintLn val
+                        case evaluateIn (phaseEnv runtime currentWorld) expr of
+                            Left evalErr -> print $ erroneousValue $ projectError evalErr
+                            Right val    -> prettyPrintLn val
