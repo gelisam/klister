@@ -26,7 +26,7 @@ import Binding.Info
 import Core
 import Datatype
 import Env
-import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
+import CEKEvaluator (EvalResult(..), EvalError(..), TypeError(..))
 import Kind
 import Module
 import ModuleName

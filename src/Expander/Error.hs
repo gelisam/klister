@@ -19,7 +19,7 @@ import Data.Foldable
 
 import Core
 import Datatype
-import Evaluator
+import CEKEvaluator
 import Expander.Task
 import Kind
 import KlisterPath

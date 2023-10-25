@@ -13,7 +13,7 @@ import Data.Maybe (fromMaybe)
 import Core (MacroVar, Var)
 import Datatype
 import Env
-import Evaluator (EvalResult)
+import CEKEvaluator (EvalResult)
 import Module
 import ModuleName
 import Phase

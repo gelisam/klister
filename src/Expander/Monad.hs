@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE ViewPatterns       #-}
 {-# LANGUAGE DerivingStrategies #-}
+{-# LANGUAGE FlexibleContexts   #-}
 
 {-# OPTIONS_GHC -funbox-strict-fields #-}
 {-# LANGUAGE BangPatterns #-}
@@ -176,7 +177,7 @@ import Control.Lens.IORef
 import Core
 import Datatype
 import Env
-import Evaluator
+import CEKEvaluator
 import Expander.DeclScope
 import Expander.Error
 import Expander.Task
@@ -860,10 +861,10 @@ setTasks = modifyState . set expanderTasks
 clearTasks :: Expand ()
 clearTasks = modifyState $ set expanderTasks []
 
-expandEval :: Eval a -> Expand a
+expandEval :: Core -> Expand Value
 expandEval evalAction = do
   env <- currentEnv
-  out <- liftIO $ runExceptT $ runReaderT (runEval evalAction) env
+  let out = Right $ evaluateIn env evalAction
   case out of
     Left err -> do
       p <- currentPhase
