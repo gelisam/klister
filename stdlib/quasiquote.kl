@@ -99,7 +99,8 @@
               (nil)))))))
   (example (the (-> (Syntax)
                     (Syntax-Generator))
-                stx->stx-gen)))
+                stx->stx-gen))
+)
 (define-macros
   -- (example-syntax-generator (stx->stx-gen '(1 2 3)))
   -- =>
@@ -178,75 +179,130 @@
                                (nil)))))
                      (nil)))))))]))]))
 (example-syntax-generator (stx->stx-gen '(1 2 3)))
---(meta
---
---  -- A version of :: for syntax generators.
---  (defun generator-cons (stx-gen stxs-gen)
---    (syntax-list-generator
---      -- `(:: ,stx-gen ,stxs-gen)
---      (close-syntax generator-scope generator-loc
---        (list-contents
---          (:: '::
---            (:: (un-syntax-generator stx-gen)
---              (:: (un-syntax-list-generator stxs-gen)
---                (nil))))))))
---  (example (the (-> (Syntax-Generator)
---                    (Syntax-List-Generator)
---                    (Syntax-List-Generator))
---                generator-cons))
---
---  -- A version of list-append for syntax generators.
---  (defun generator-append (stxs-gen1 stxs-gen2)
---    (syntax-list-generator
---      -- `(list-append ,stxs-gen1 ,stxs-gen2)
---      (close-syntax generator-scope generator-loc
---        (list-contents
---          (:: 'list-append
---            (:: (un-syntax-list-generator stxs-gen1)
---              (:: (un-syntax-list-generator stxs-gen2)
---                (nil))))))))
---  (example (the (-> (Syntax-List-Generator)
---                    (Syntax-List-Generator)
---                    (Syntax-List-Generator))
---                generator-append))
---
---  -- A version of (close-syntax _ _ (list-contents _)) for
---  -- syntax generators.
---  (defun generator-list (scope loc stxs-gen)
---    (syntax-generator
---      -- `(close-syntax ,(stx->stx-gen scope) ,(stx->stx-gen loc)
---      --    (list-contents ,stxs-gen))
---      (close-syntax generator-scope generator-loc
---        (list-contents
---          (:: 'close-syntax
---            (:: (un-syntax-generator (stx->stx-gen scope))
---              (:: (un-syntax-generator (stx->stx-gen loc))
---                (:: (close-syntax generator-scope generator-loc
---                      (list-contents
---                        (:: 'list-contents
---                          (:: (un-syntax-list-generator stxs-gen)
---                            (nil)))))
---                  (nil)))))))))
---  (example (the (-> (Syntax)
---                    (Syntax)
---                    (Syntax-List-Generator)
---                    (Syntax-Generator))
---                generator-list))
---
---  -- Turn a generator list into a list generator.
---  (defun generator-sequence (stx-gens)
---    (case stx-gens
---      [(nil)
---       (syntax-list-generator
---         -- '(nil)
---         '(nil))]
---      [(:: stx-gen-head stx-gens-tail)
---       (generator-cons
---         stx-gen-head
---         (generator-sequence stx-gens-tail))]))
---  (example (the (-> (List (Syntax-Generator))
---                    (Syntax-List-Generator))
---                generator-sequence))
+(meta
+
+  (define generator-nil
+    (syntax-list-generator '(nil)))
+  (example (the (Syntax-List-Generator)
+                generator-nil))
+
+  -- A version of :: for syntax generators.
+  (defun generator-cons (stx-gen stxs-gen)
+    (syntax-list-generator
+      -- `(:: ,stx-gen ,stxs-gen)
+      (close-syntax generator-scope generator-loc
+        (list-contents
+          (:: '::
+            (:: (un-syntax-generator stx-gen)
+              (:: (un-syntax-list-generator stxs-gen)
+                (nil))))))))
+  (example (the (-> (Syntax-Generator)
+                    (Syntax-List-Generator)
+                    (Syntax-List-Generator))
+                generator-cons))
+
+  -- A version of list-append for syntax generators.
+  (defun generator-append (stxs-gen1 stxs-gen2)
+    (syntax-list-generator
+      -- `(list-append ,stxs-gen1 ,stxs-gen2)
+      (close-syntax generator-scope generator-loc
+        (list-contents
+          (:: 'list-append
+            (:: (un-syntax-list-generator stxs-gen1)
+              (:: (un-syntax-list-generator stxs-gen2)
+                (nil))))))))
+  (example (the (-> (Syntax-List-Generator)
+                    (Syntax-List-Generator)
+                    (Syntax-List-Generator))
+                generator-append))
+
+  -- A version of (close-syntax _ _ (list-contents _)) for
+  -- syntax generators.
+  (defun close-generator (scope loc stxs-gen)
+    (syntax-generator
+      -- `(close-syntax ,(stx->stx-gen scope) ,(stx->stx-gen loc)
+      --    (list-contents ,stxs-gen))
+      (close-syntax generator-scope generator-loc
+        (list-contents
+          (:: 'close-syntax
+            (:: (un-syntax-generator (stx->stx-gen scope))
+              (:: (un-syntax-generator (stx->stx-gen loc))
+                (:: (close-syntax generator-scope generator-loc
+                      (list-contents
+                        (:: 'list-contents
+                          (:: (un-syntax-list-generator stxs-gen)
+                            (nil)))))
+                  (nil)))))))))
+  (example (the (-> (Syntax)
+                    (Syntax)
+                    (Syntax-List-Generator)
+                    (Syntax-Generator))
+                close-generator))
+
+  -- Turn a generator list into a list generator.
+  (defun generator-list (stx-gens)
+    (case stx-gens
+      [(nil)
+       (syntax-list-generator
+         -- '(nil)
+         '(nil))]
+      [(:: stx-gen-head stx-gens-tail)
+       (generator-cons
+         stx-gen-head
+         (generator-list stx-gens-tail))]))
+  (example (the (-> (List (Syntax-Generator))
+                    (Syntax-List-Generator))
+                generator-list))
+)
+(define-macros
+  -- (example-syntax-list-generator (generator-nil))
+  -- =>
+  -- (example-syntax-generator
+  --   (close-generator 'loc 'loc (generator-nil)))
+  ([example-syntax-list-generator
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: body (nil))))
+         (pure
+           (close-syntax stx stx
+             -- (example-syntax-generator
+             --   (close-generator 'loc 'loc (generator-nil)))
+             (list-contents
+               (:: 'example-syntax-generator
+                 (:: (close-syntax stx stx
+                       -- (close-generator 'loc 'loc (generator-nil))
+                       (list-contents
+                         (:: 'close-generator
+                           (:: ''loc
+                             (:: ''loc
+                               (:: body
+                                 (nil)))))))
+                   (nil))))))]))]))
+(example-syntax-list-generator
+  (generator-nil))
+(example-syntax-list-generator
+  (generator-cons (stx->stx-gen 'hello)
+    (generator-cons (stx->stx-gen 'world)
+      generator-nil)))
+(example-syntax-list-generator
+  (generator-append
+    (generator-cons (stx->stx-gen 'hello)
+      (generator-cons (stx->stx-gen 'world)
+        generator-nil))
+    (generator-cons (stx->stx-gen 'hello2)
+      (generator-cons (stx->stx-gen 'world2)
+        generator-nil))))
+(example-syntax-generator
+  (close-generator 'scope 'loc
+    (generator-cons (stx->stx-gen 'hello)
+      (generator-cons (stx->stx-gen 'world)
+        generator-nil))))
+(example-syntax-list-generator
+  (generator-list
+    (:: (stx->stx-gen 'hello)
+      (:: (stx->stx-gen 'world)
+        (nil)))))
+
 --
 --  ---- A helper function when extracting the x in (keyword x), after the head has
 --  ---- already been checked to be the expected keyword.
