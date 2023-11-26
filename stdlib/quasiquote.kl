@@ -51,12 +51,12 @@
                     (Syntax))
                 un-syntax-list-generator))
 
-  -- We need to be careful to attach the right scope and location to the
+  -- We need to be careful to attach the right location and scope to the
   -- generated syntax objects, as they will be the syntax objects which will be
   -- returned by the macros which make use of quasiquote. For the generators,
   -- the following will suffice.
-  (define generator-scope 'here)
   (define generator-loc 'here)
+  (define generator-scope 'here)
 
   -- Produce the code which reconstructs the given syntax object.
   --
@@ -92,7 +92,7 @@
   (defun stx->stx-gen (stx)
     (syntax-generator
       -- `(quote ,stx)
-      (close-syntax generator-scope generator-loc
+      (close-syntax generator-loc generator-scope
         (list-contents
           (:: 'quote
             (:: stx
@@ -190,7 +190,7 @@
   (defun generator-cons (stx-gen stxs-gen)
     (syntax-list-generator
       -- `(:: ,stx-gen ,stxs-gen)
-      (close-syntax generator-scope generator-loc
+      (close-syntax generator-loc generator-scope
         (list-contents
           (:: '::
             (:: (un-syntax-generator stx-gen)
@@ -205,7 +205,7 @@
   (defun generator-append (stxs-gen1 stxs-gen2)
     (syntax-list-generator
       -- `(list-append ,stxs-gen1 ,stxs-gen2)
-      (close-syntax generator-scope generator-loc
+      (close-syntax generator-loc generator-scope
         (list-contents
           (:: 'list-append
             (:: (un-syntax-list-generator stxs-gen1)
@@ -218,16 +218,16 @@
 
   -- A version of (close-syntax _ _ (list-contents _)) for
   -- syntax generators.
-  (defun close-generator (scope loc stxs-gen)
+  (defun close-generator (loc scope stxs-gen)
     (syntax-generator
-      -- `(close-syntax ,(stx->stx-gen scope) ,(stx->stx-gen loc)
+      -- `(close-syntax ,(stx->stx-gen loc) ,(stx->stx-gen scope)
       --    (list-contents ,stxs-gen))
-      (close-syntax generator-scope generator-loc
+      (close-syntax generator-loc generator-scope
         (list-contents
           (:: 'close-syntax
-            (:: (un-syntax-generator (stx->stx-gen scope))
-              (:: (un-syntax-generator (stx->stx-gen loc))
-                (:: (close-syntax generator-scope generator-loc
+            (:: (un-syntax-generator (stx->stx-gen loc))
+              (:: (un-syntax-generator (stx->stx-gen scope))
+                (:: (close-syntax generator-loc generator-scope
                       (list-contents
                         (:: 'list-contents
                           (:: (un-syntax-list-generator stxs-gen)
@@ -293,7 +293,7 @@
       (generator-cons (stx->stx-gen 'world2)
         generator-nil))))
 (example-syntax-generator
-  (close-generator 'scope 'loc
+  (close-generator 'loc 'scope
     (generator-cons (stx->stx-gen 'hello)
       (generator-cons (stx->stx-gen 'world)
         generator-nil))))
@@ -350,8 +350,8 @@
 --  --                               (nil))))))))))))]))
 --
 --  ------ A helper function for constructing a syntax object of the form (x y).
---  ----(defun syntax-pair (scope loc stx1 stx2)
---  ----  (close-syntax scope loc
+--  ----(defun syntax-pair (loc scope stx1 stx2)
+--  ----  (close-syntax loc scope
 --  ----    (list-contents
 --  ----      (:: stx1
 --  ----        (:: stx2
@@ -364,8 +364,8 @@
 --  ----  (close-syntax ? ?
 --  ----    (list-contents
 --  ----      (:: 'close-syntax ? ?
---  ----        (:: 'scope
---  ----          (:: 'loc
+--  ----        (:: 'loc
+--  ----          (:: 'scope
 --  ----              ...
 --
 --
