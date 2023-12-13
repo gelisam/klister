@@ -16,7 +16,7 @@
 (import (shift "type-eq.kl" 1))
 
 
--- Our strategy to implement implicit arguments is to make every expression a
+-- Our strategy to implement implicit conversions is to make every expression a
 -- (Reader Env _), where Env is a nested tuple of all the implicit functions
 -- which are in scope. Then, at every function application, if there is a type
 -- mismatch, we look through Env for a function of type (-> Actual Expected).
