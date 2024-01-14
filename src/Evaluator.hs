@@ -24,7 +24,25 @@ makes a more advanced debugger possible. Upon an evaluation error we could save
 the kontinuation stack, over write a variable in the environment a la common
 lisp or even rewind the evaluation
 
+See Matthias Felleison's course website for a good reference:
+https://felleisen.org/matthias/4400-s20/lecture23.html
+
 The bird's eye view:
+
+The evaluator crawl's the input AST and progresses in two modes:
+
+-- 'Down': meaning that the evaluator is searching for a redex to evaluate and
+-- therefore moving "down" the AST.
+
+-- 'Up': meaning that the evaluator has evaluated some redex to a value and is
+-- passing that valua "up" the execution stack.
+
+All interesting things happen by matching on 'Kont', the continuation. This
+allows the evaluator to know exactly what needs to happen in order to continue.
+
+-- TODO: describe the how the debugger hooks in
+
+-- TODO: describe error handling
 
 -}
 
