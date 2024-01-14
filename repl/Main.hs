@@ -20,7 +20,7 @@ import System.Exit (exitFailure, exitSuccess)
 import System.IO
 import System.Directory
 
-import CEKEvaluator
+import Evaluator
 import Expander
 import ModuleName
 import Parser

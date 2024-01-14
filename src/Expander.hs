@@ -66,7 +66,7 @@ import Binding
 import Core
 import Datatype
 import qualified Env
-import CEKEvaluator
+import Evaluator
 import qualified Expander.Primitives as Prims
 import Expander.DeclScope
 import Expander.Syntax

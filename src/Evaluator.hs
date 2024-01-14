@@ -28,7 +28,7 @@ The bird's eye view:
 
 -}
 
-module CEKEvaluator
+module Evaluator
   ( EvalError (..)
   , EvalResult (..)
   , TypeError (..)
@@ -57,23 +57,6 @@ import Syntax
 import Syntax.SrcLoc
 import Type
 import Value
-
--- -----------------------------------------------------------------------------
--- Top level API
-
-evaluate :: Core -> Value
-evaluate =  evaluateIn mempty
-
-evaluateIn :: VEnv -> Core -> Value
-evaluateIn e = yield . until final step . start e . unCore
-  where
-    yield (Up v _ Halt) = v
-    yield _                 = error "evaluate: completed impossibly"
-
-evaluateWithExtendedEnv :: VEnv -> [(Ident, Var, Value)] -> Core -> Value
-evaluateWithExtendedEnv env exts = evaluateIn (inserter exts)
-  where
-    inserter = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env
 
 -- -----------------------------------------------------------------------------
 -- Interpreter Data Types
@@ -448,6 +431,9 @@ final _                     = False
 start :: VEnv -> CoreF TypePattern ConstructorPattern Core -> EState
 start e c = Down c e Halt
 
+yield :: EState -> Value
+yield (Up v _ Halt) = v
+yield _             = error "evaluate: completed impossibly"
 
 extend :: Ident -> Var -> Value -> VEnv -> VEnv
 extend i var = Env.insert var i
@@ -552,3 +538,16 @@ doDataCase loc v0 ((pat, rhs) : ps) env kont =
     match fk sk ((PatternVar n x, tgt) : more) =
       match fk (sk . extend n x tgt) more
 
+-- -----------------------------------------------------------------------------
+-- Top level API
+
+evaluate :: Core -> Value
+evaluate =  evaluateIn mempty
+
+evaluateIn :: VEnv -> Core -> Value
+evaluateIn e = yield . until final step . start e . unCore
+
+evaluateWithExtendedEnv :: VEnv -> [(Ident, Var, Value)] -> Core -> Value
+evaluateWithExtendedEnv env exts = evaluateIn (inserter exts)
+  where
+    inserter = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env

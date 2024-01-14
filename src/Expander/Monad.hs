@@ -177,7 +177,7 @@ import Control.Lens.IORef
 import Core
 import Datatype
 import Env
-import CEKEvaluator
+import Evaluator
 import Expander.DeclScope
 import Expander.Error
 import Expander.Task

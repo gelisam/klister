@@ -25,7 +25,7 @@ import System.IO (Handle, openFile, hClose, IOMode(WriteMode))
 import System.IO.Silently (hCapture_)
 import System.Directory
 
-import CEKEvaluator
+import Evaluator
 import Expander
 import Expander.Monad
 import ModuleName

@@ -34,7 +34,7 @@ import qualified Hedgehog.Internal.Property as Prop (forAllT)
 import Alpha
 import Core
 import Core.Builder
-import CEKEvaluator (EvalResult(..))
+import Evaluator (EvalResult(..))
 import Expander
 import Expander.Monad
 import Module
