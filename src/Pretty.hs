@@ -113,6 +113,13 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
            text "in"
          , pp (env <> Env.singleton fv f ()) body
          ]
+  pp env (CoreLetMacroName x@(Stx _ _ y) v def body) =
+    hang 2 $ group $
+    vsep [ text "let-macro-name" <+> hang 2 (group (vsep [ pp env y <+> text "="
+                                                         , pp env def
+                                                         ])) <+> text "in"
+         , pp (env <> Env.singleton v x ()) body
+         ]
   pp env (CoreLam n@(Stx _ _ x) v body) =
     hang 2 $ group $
     text "λ" <> annotate (BindingSite v) (text x) <> "." <> line <>

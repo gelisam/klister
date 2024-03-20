@@ -30,6 +30,7 @@ module Expander.Primitives
   , lambda
   , letExpr
   , letSyntax
+  , letMacroName
   , listSyntax
   , integerSyntax
   , stringSyntax
@@ -293,6 +294,26 @@ flet t dest stx = do
               addScope p psc $
               addScope p fsc body
   linkExpr dest $ CoreLetFun f' coreF x' coreX defDest bodyDest
+
+letMacroName :: ExprPrim
+letMacroName t dest stx = do
+  Stx _ _ (_, b, body) <- mustHaveEntries stx
+  Stx _ _ (macroName, def) <- mustHaveEntries b
+  (sc, x', coreX) <- prepareVar macroName
+  p <- currentPhase
+  psc <- phaseRoot
+  -- note that in (let-macro-name [x def] body),
+  -- def has type (-> Syntax (Macro Syntax))
+  -- but x has type Syntax.
+  let defTy = tFun1 tSyntax (tMacro tSyntax)
+  let xTy = tSyntax
+  defDest <- schedule defTy def
+  sch <- trivialScheme xTy
+  bodyDest <- withLocalVarType x' coreX sch $
+                schedule t $
+                addScope p psc $
+                addScope p sc body
+  linkExpr dest $ CoreLetMacroName x' coreX defDest bodyDest
 
 lambda :: ExprPrim
 lambda t dest stx = do

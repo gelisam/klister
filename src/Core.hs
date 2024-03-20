@@ -158,6 +158,7 @@ data CoreF typePat pat core
   = CoreVar Var
   | CoreLet Ident Var core core
   | CoreLetFun Ident Var Ident Var core core
+  | CoreLetMacroName Ident Var core core
   | CoreLam Ident Var core
   | CoreApp core core
   | CoreCtor Constructor [core] -- ^ Constructor application
@@ -199,6 +200,8 @@ mapCoreF _f _g h (CoreLet n x def body) =
   CoreLet n x (h def) (h body)
 mapCoreF _f _g h (CoreLetFun funN funX n x def body) =
   CoreLetFun funN funX n x (h def) (h body)
+mapCoreF _f _g h (CoreLetMacroName n x def body) =
+  CoreLetMacroName n x (h def) (h body)
 mapCoreF _f _g h (CoreLam n x body) =
   CoreLam n x (h body)
 mapCoreF _f _g h (CoreApp rator rand) =
@@ -255,6 +258,8 @@ traverseCoreF _f _g h (CoreLet n x def body) =
   CoreLet n x <$> h def <*> h body
 traverseCoreF _f _g h (CoreLetFun funN funX n x def body) =
   CoreLetFun funN funX n x <$> h def <*> h body
+traverseCoreF _f _g h (CoreLetMacroName n x def body) =
+  CoreLetMacroName n x <$> h def <*> h body
 traverseCoreF _f _g h (CoreLam n x body) =
   CoreLam n x <$> h body
 traverseCoreF _f _g h (CoreApp rator rand) =
@@ -484,6 +489,14 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
     = "(LetFun "
    ++ shortShow f
    ++ " "
+   ++ shortShow x
+   ++ " "
+   ++ shortShow def
+   ++ " "
+   ++ shortShow body
+   ++ ")"
+  shortShow (CoreLetMacroName _ x def body)
+    = "(LetMacrName "
    ++ shortShow x
    ++ " "
    ++ shortShow def

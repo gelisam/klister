@@ -51,6 +51,7 @@
         the
         let
         flet
+        let-macro-name
         lambda
         #%app
         #%integer-literal

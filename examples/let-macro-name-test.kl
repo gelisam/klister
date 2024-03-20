@@ -1,5 +1,6 @@
 #lang "prelude.kl"
 (import (shift "prelude.kl" 1))
+(import "define-syntax-rule.kl")
 
 -- level 0
 (define-macro (outer-macro)

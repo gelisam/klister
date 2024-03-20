@@ -637,6 +637,7 @@ initializeKernel outputChannel = do
       , ("the", Prims.the)
       , ("let", Prims.letExpr)
       , ("flet", Prims.flet)
+      , ("let-macro-name", Prims.letMacroName)
       , ("lambda", Prims.lambda)
       , ("#%app", Prims.app)
       , ("#%integer-literal", Prims.integerLiteral)

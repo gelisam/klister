@@ -104,6 +104,16 @@ eval (Core (CoreLetFun funIdent funVar argIdent argVar def body)) = do
           , _closureBody = def
           }
   withEnv (Env.insert funVar funIdent vFun env) (eval body)
+eval (Core (CoreLetMacroName ident var def body)) = do
+  val <- eval def
+  env <- ask
+  withEnv (Env.insert var ident val env) (eval body)
+          p <- lift currentPhase
+          lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
+            v <- expandEval (eval e)
+            modifyState $
+              over (expanderWorld . worldTransformerEnvironments . at p) $
+              Just . maybe (Env.singleton n x v) (Env.insert n x v)
 eval (Core (CoreLam ident var body)) = do
   env <- ask
   pure $ ValueClosure $ FO $ FOClosure
