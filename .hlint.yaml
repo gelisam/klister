@@ -1,0 +1,29 @@
+# Warnings currently triggered by your code
+- ignore: {name: "Avoid lambda"} # 1 hint
+- ignore: {name: "Eta reduce"} # 12 hints
+- ignore: {name: "Fuse foldr/map"} # 1 hint
+- ignore: {name: "Move brackets to avoid $"} # 6 hints
+- ignore: {name: "Redundant $"} # 32 hints
+- ignore: {name: "Redundant <$>"} # 17 hints
+- ignore: {name: "Redundant bracket"} # 12 hints
+- ignore: {name: "Replace case with fromMaybe"} # 3 hints
+- ignore: {name: "Unused LANGUAGE pragma"} # 16 hints
+- ignore: {name: "Use $>"} # 2 hints
+- ignore: {name: "Use <&>"} # 1 hint
+- ignore: {name: "Use >=>"} # 1 hint
+- ignore: {name: "Use asks"} # 5 hints
+- ignore: {name: "Use camelCase"} # 2 hints
+- ignore: {name: "Use const"} # 4 hints
+- ignore: {name: "Use evalState"} # 2 hints
+- ignore: {name: "Use fold"} # 1 hint
+- ignore: {name: "Use for"} # 1 hint
+- ignore: {name: "Use fromMaybe"} # 1 hint
+- ignore: {name: "Use id"} # 6 hints
+- ignore: {name: "Use newtype instead of data"} # 3 hints
+- ignore: {name: "Use record patterns"} # 4 hints
+- ignore: {name: "Use tuple-section"} # 2 hints
+- ignore: {name: "Use uncurry"} # 2 hints
+- ignore: {name: "Use unless"} # 3 hints
+- ignore: {name: "Use unwords"} # 1 hint
+- ignore: {name: "Use void"} # 5 hints
+- ignore: {name: "Use when"} # 2 hints
