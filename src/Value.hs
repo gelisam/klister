@@ -52,7 +52,11 @@ primitiveCtor name args =
   in ValueCtor ctor args
 
 valueText :: Value -> Text
-valueText (ValueClosure _) = "#<closure>"
+valueText (ValueClosure c) = "#<" <> the_closure <> ">"
+  where
+    the_closure = case c of
+                    (FO fo) -> _stxValue $ _closureIdent fo
+                    (HO n _) -> n
 valueText (ValueSyntax stx) = "'" <> syntaxText stx
 valueText (ValueMacroAction _) = "#<macro>"
 valueText (ValueIOAction _) = "#<IO>"
@@ -84,10 +88,11 @@ data FOClosure = FOClosure
   , _closureBody  :: Core
   }
 
-data Closure = FO FOClosure | HO (Value -> Value)
+data Closure = FO FOClosure | HO Text (Value -> Value)
 
 instance Show Closure where
-  show _ = "Closure {...}"
+  show (FO fo)     = "Closure {" <> show (_closureIdent fo) <> "}"
+  show (HO name _) = "Closure {" <> show name <> "}"
 
 makePrisms ''MacroAction
 makePrisms ''Value

@@ -1,0 +1,1 @@
+pure #[error-in-bind-tail.kl:4.15-4.28]<hello-go-boom> >>= #<x> : ∀(α : *). (Macro α)

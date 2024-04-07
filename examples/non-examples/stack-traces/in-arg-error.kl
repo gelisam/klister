@@ -1,0 +1,5 @@
+#lang "prelude.kl"
+
+(define fail (lambda (something) (+ something 1)))
+
+(example (fail (error "in-arg-error!")))
