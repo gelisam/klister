@@ -1,0 +1,15 @@
+#lang "prelude.kl"
+
+(import "lambda-case.kl")
+
+(datatype (Alphabet)
+  (a) (b) (c) (d) (e) (f) (g) (h) (i) (j) (k) (l) (m) (n)
+  (o) (p) (q) (r) (s) (t) (u) (v) (w) (x) (y) (z) (æ) (ø) (å))
+
+(define fail
+  (lambda (thing)
+    (case thing
+      [(l) (error 'Im-an-error)]
+      [(else the-other) the-other])))
+
+(example (fail (l)))

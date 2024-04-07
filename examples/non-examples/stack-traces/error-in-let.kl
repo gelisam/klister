@@ -1,0 +1,7 @@
+#lang "prelude.kl"
+
+(define fail (lambda (thing)
+               (let (go (+ thing (error 'Im-an-error)))
+                 go)))
+
+(example (fail 23))

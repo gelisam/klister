@@ -1,0 +1,7 @@
+In Phase: p0
+Not a macro monad value: error-in-bind-head.kl:7.28-7.39: Im-an-error
+stack trace:
+---- in pure macro
+---- in bind macro head
+λx. pure x
+---- Halt

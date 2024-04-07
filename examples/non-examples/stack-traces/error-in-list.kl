@@ -1,0 +1,12 @@
+#lang "prelude.kl"
+
+(import "defun.kl")
+(import "list.kl")
+
+(define thing 'nothing)
+(define the-error (error 'Im-an-error))
+
+(defun fail (thing) (+ 1 thing))
+
+-- (example `(list-syntax (,thing (fail the-error) ()) thing))
+(example `('a 'b ,the-error))

@@ -1,0 +1,7 @@
+In Phase: p0:
+    error-in-constructor.kl:17.45-17.56: Im-an-error
+    stack trace:
+    ---- in constructor pair
+                        in field 2
+    ---- in let #[error-in-constructor.kl:17.22-17.24]<go>
+    ---- Halt

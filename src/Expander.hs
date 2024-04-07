@@ -38,7 +38,6 @@ import Control.Applicative
 import Control.Lens hiding (List, children)
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Except (MonadError(catchError, throwError))
 import Control.Monad.Reader (MonadReader(local))
 import Control.Monad.Trans.Class (MonadTrans(lift))
 import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
@@ -59,6 +58,7 @@ import System.IO (Handle)
 import Binding
 import Core
 import Datatype
+import Debugger
 import qualified Env
 import Evaluator
 import qualified Expander.Primitives as Prims
@@ -150,10 +150,11 @@ loadModuleFile modName =
          return (KernelModule p, es)
     Left file ->
       do existsp <- liftIO $ doesFileExist file
-         when (not existsp) $ throwError $ NoSuchFile $ show file
+         when (not existsp) $
+           eDebug $ NoSuchFile $ show file
          stx <- liftIO (readModule file) >>=
                 \case
-                  Left err -> throwError $ ReaderError err
+                  Left err  -> eDebug $ ReaderError err
                   Right stx -> return stx
          startExports <- view expanderModuleExports <$> getState
          modifyState $ set expanderModuleExports noExports
@@ -196,7 +197,7 @@ getImports (ImportOnly spec idents) = do
   -- Check that all the identifiers are actually exported
   for_ idents $ \x ->
     case getExport p (view stxValue x) imports of
-      Nothing -> throwError $ NotExported x p
+      Nothing -> eDebug $ NotExported x
       Just _ -> pure ()
   return $ filterExports (\_ x -> x `elem` (map (view stxValue) idents)) imports
 getImports (ShiftImports spec i) = do
@@ -306,10 +307,12 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
             \case
               (ValueIOAction act) ->
                 modify' (:|> (IOResult . void $ act))
-              _ -> throwError $ InternalError $
-                   "While running an action at " ++
-                   T.unpack (pretty loc) ++
-                   " an unexpected non-IO value was encountered."
+              _                   ->
+                lift $ eDebug
+                  $ InternalError
+                  $ "While running an action at "
+                  ++ T.unpack (pretty loc)
+                  ++ " an unexpected non-IO value was encountered."
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
@@ -331,7 +334,7 @@ getEValue b = do
   ExpansionEnv env <- view expanderExpansionEnv <$> getState
   case S.lookup b env of
     Just v -> return v
-    Nothing -> throwError (InternalError ("No such binding: " ++ show b))
+    Nothing -> eDebug $ InternalError ("No such binding: " ++ show b)
 
 
 visibleBindings :: Expand BindingTable
@@ -357,7 +360,7 @@ checkUnambiguous best candidates blame =
      let bestSize = ScopeSet.size p best
      let candidateSizes = map (ScopeSet.size p) (nub $ toList candidates)
      if length (filter (== bestSize) candidateSizes) > 1
-       then throwError (Ambiguous p blame candidates)
+       then debug $ expansionError p $ Ambiguous blame candidates
        else return ()
 
 resolve :: Ident -> Expand Binding
@@ -365,8 +368,7 @@ resolve stx@(Stx scs srcLoc x) = do
   p <- currentPhase
   bs <- allMatchingBindings x scs
   case bs of
-    Seq.Empty ->
-      throwError (Unknown (Stx scs srcLoc x))
+    Seq.Empty -> eDebug $ Unknown (Stx scs srcLoc x)
     candidates ->
       let
         check = ScopeSet.size p . fst
@@ -404,7 +406,7 @@ initializeKernel outputChannel = do
     funPrims =
       [ ( "open-syntax"
         , Scheme [] $ tFun [tSyntax] (Prims.primitiveDatatype "Syntax-Contents" [tSyntax])
-        , ValueClosure $ HO $
+        , ValueClosure $ HO "open-syntax" $
           \(ValueSyntax stx) ->
             case syntaxE stx of
               Id name ->
@@ -422,11 +424,12 @@ initializeKernel outputChannel = do
       , ( "close-syntax"
         , Scheme [] $
           tFun [tSyntax, tSyntax, Prims.primitiveDatatype "Syntax-Contents" [tSyntax]] tSyntax
-        , ValueClosure $ HO $
+        , let n = "close-syntax"
+          in ValueClosure $ HO n $
           \(ValueSyntax locStx) ->
-            ValueClosure $ HO $
+            ValueClosure $ HO n $
             \(ValueSyntax scopesStx) ->
-              ValueClosure $ HO $
+              ValueClosure $ HO n $
               -- N.B. Assuming correct constructors
               \(ValueCtor ctor [arg]) ->
                 let close x = Syntax $ Stx (view (unSyntax . stxScopeSet) scopesStx) (stxLoc locStx) x
@@ -456,9 +459,9 @@ initializeKernel outputChannel = do
       ] ++
       [ ( "string=?"
         , Scheme [] $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
-        , ValueClosure $ HO $
+        , ValueClosure $ HO "string=?" $
           \(ValueString str1) ->
-            ValueClosure $ HO $
+            ValueClosure $ HO "string=?" $
             \(ValueString str2) ->
               if str1 == str2
                 then primitiveCtor "true" []
@@ -466,26 +469,27 @@ initializeKernel outputChannel = do
         )
       , ( "string-append"
         , Scheme [] $ tFun [tString, tString] tString
-        , ValueClosure $ HO $
+        , ValueClosure $ HO "string-append" $
           \(ValueString str1) ->
-            ValueClosure $ HO $
+            ValueClosure $ HO "string-append" $
             \(ValueString str2) ->
               ValueString (str1 <> str2)
         )
       , ( "integer->string"
         , Scheme [] $ tFun [tInteger] tString
-        , ValueClosure $ HO $
+        , ValueClosure $ HO "integer->string" $
           \(ValueInteger int) ->
             ValueString (T.pack (show int))
         )
       , ( "substring"
         , Scheme [] $
           tFun [tInteger, tInteger, tString] (Prims.primitiveDatatype "Maybe" [tString])
-        , ValueClosure $ HO $
+        , let substring_name = "substring"
+          in ValueClosure $ HO substring_name $
           \(ValueInteger (fromInteger -> start)) ->
-            ValueClosure $ HO $
+            ValueClosure $ HO substring_name $
             \(ValueInteger (fromInteger -> len)) ->
-              ValueClosure $ HO $
+              ValueClosure $ HO substring_name $
               \(ValueString str) ->
                 if | start < 0 || start       >= T.length str -> primitiveCtor "nothing" []
                    | len   < 0 || start + len >  T.length str -> primitiveCtor "nothing" []
@@ -494,53 +498,53 @@ initializeKernel outputChannel = do
         )
       , ( "string-length"
         , Scheme [] $ tFun [tString] tInteger
-        , ValueClosure $ HO $ \(ValueString str) -> ValueInteger $ toInteger $ T.length str
+        , ValueClosure $ HO "string-length" $ \(ValueString str) -> ValueInteger $ toInteger $ T.length str
         )
       , ( "string-downcase"
         , Scheme [] $ tFun [tString] tString
-        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toLower str
+        , ValueClosure $ HO "string-downcase" $ \(ValueString str) -> ValueString $ T.toLower str
         )
       , ( "string-upcase"
         , Scheme [] $ tFun [tString] tString
-        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toUpper str
+        , ValueClosure $ HO "string-upcase" $ \(ValueString str) -> ValueString $ T.toUpper str
         )
       , ( "string-titlecase"
         , Scheme [] $ tFun [tString] tString
-        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toTitle str
+        , ValueClosure $ HO "string-titlecase" $ \(ValueString str) -> ValueString $ T.toTitle str
         )
       , ( "string-foldcase"
         , Scheme [] $ tFun [tString] tString
-        , ValueClosure $ HO $ \(ValueString str) -> ValueString $ T.toCaseFold str
+        , ValueClosure $ HO "string-foldcase" $ \(ValueString str) -> ValueString $ T.toCaseFold str
         )
       ] ++
       [ ( "string" <> name <> "?"
         , Scheme [] $ tFun [tString, tString] (Prims.primitiveDatatype "Bool" [])
-        , Prims.binaryStringPred fun
+        , Prims.binaryStringPred name fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
       [
         ( name
         , Scheme [] $ tFun [tInteger] tInteger
-        , Prims.unaryIntegerPrim fun
+        , Prims.unaryIntegerPrim name fun
         )
       | (name, fun) <- [("abs", abs), ("negate", negate)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] tInteger
-        , Prims.binaryIntegerPrim fun
+        , Prims.binaryIntegerPrim name fun
         )
       | (name, fun) <- [("+", (+)), ("-", (-)), ("*", (*)), ("/", div)]
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] (Prims.primitiveDatatype "Bool" [])
-        , Prims.binaryIntegerPred fun
+        , Prims.binaryIntegerPred name fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
       [ ("pure-IO"
         , Scheme [KStar, KStar] $ tFun [tSchemaVar 0 []] (tIO (tSchemaVar 0 []))
-        , ValueClosure $ HO $ \v -> ValueIOAction (pure v)
+        , ValueClosure $ HO "pure-IO" $ \v -> ValueIOAction (pure v)
         )
       , ("bind-IO"
         , Scheme [KStar, KStar] $
@@ -548,19 +552,19 @@ initializeKernel outputChannel = do
                , tFun [tSchemaVar 0 []] (tIO (tSchemaVar 1 []))
                ]
                (tIO (tSchemaVar 1 []))
-        , ValueClosure $ HO $ \(ValueIOAction mx) -> do
-            ValueClosure $ HO $ \(ValueClosure f) -> do
+        , ValueClosure $ HO "bind-IO" $ \(ValueIOAction mx) -> do
+            ValueClosure $ HO "bind-IO" $ \(ValueClosure f) -> do
               ValueIOAction $ do
                 vx <- mx
                 vioy <- case f of
-                  HO fun -> pure (fun vx)
+                  HO _str fun -> pure (fun vx)
                   FO clos -> do
                     let env = view closureEnv clos
                         var = view closureVar clos
                         ident = view closureIdent clos
                         body = view closureBody clos
                     case (evaluateWithExtendedEnv env [(ident, var, vx)] body) of
-                      Left err -> error (T.unpack (pretty $ projectError err))
+                      Left err -> error (T.unpack (pretty err))
                       Right vioy -> pure vioy
                 let ValueIOAction my = vioy
                 my
@@ -571,9 +575,9 @@ initializeKernel outputChannel = do
         )
       , ( "write"
         , Scheme [] $ tFun [tOutputPort, tString] (tIO (Prims.primitiveDatatype "Unit" []))
-        , ValueClosure $ HO $
+        , ValueClosure $ HO "write" $
           \(ValueOutputPort h) ->
-            ValueClosure $ HO $
+            ValueClosure $ HO "write" $
             \(ValueString str) ->
               ValueIOAction $ do
                 T.hPutStr h str
@@ -789,7 +793,7 @@ primImportModule dest outScopesDest importStx = do
         subSpec <- importSpec spec
         Stx _ _ p <- mustBeIdent prefix
         return $ PrefixImports subSpec p
-      | otherwise = throwError $ NotImportSpec stx
+      | otherwise = eDebug $ NotImportSpec stx
     importSpec modStx = ImportModule <$> mustBeModName modStx
     getRename s = do
       Stx _ _ (old', new') <- mustHaveEntries s
@@ -816,24 +820,24 @@ primExport dest outScopesDest stx = do
                   pairs <- getRenames blame rens
                   spec <- exportSpec blame more
                   return $ ExportRenamed spec pairs
-                _ -> throwError $ NotExportSpec blame
+                _ -> eDebug $ NotExportSpec blame
             "prefix" ->
               case args of
                 ((syntaxE -> String pref) : more) -> do
                   spec <- exportSpec blame more
                   return $ ExportPrefixed spec pref
-                _ -> throwError $ NotExportSpec blame
+                _ -> eDebug $ NotExportSpec blame
             "shift" ->
               case args of
                 (Syntax (Stx _ _ (Integer i)) : more) -> do
                   spec <- exportSpec (Syntax (Stx scs' srcloc' (List more))) more
                   if i >= 0
                     then return $ ExportShifted spec (fromIntegral i)
-                    else throwError $ NotExportSpec blame
-                _ -> throwError $ NotExportSpec blame
-            _ -> throwError $ NotExportSpec blame
+                    else eDebug $ NotExportSpec blame
+                _ -> eDebug $ NotExportSpec blame
+            _ -> eDebug $ NotExportSpec blame
       | Just xs <- traverse getIdent elts = return (ExportIdents xs)
-      | otherwise = throwError $ NotExportSpec blame
+      | otherwise = eDebug $ NotExportSpec blame
 
 
     getIdent (Syntax (Stx scs loc (Id x))) = pure (Stx scs loc x)
@@ -845,7 +849,7 @@ primExport dest outScopesDest stx = do
         Stx _ _ x' <- mustBeIdent x
         Stx _ _ y' <- mustBeIdent y
         pure (x', y')
-    getRenames blame _ = throwError $ NotExportSpec blame
+    getRenames blame _ = eDebug $ NotExportSpec blame
 
 identifierHeaded :: Syntax -> Maybe Ident
 identifierHeaded (Syntax (Stx scs srcloc (Id x))) = Just (Stx scs srcloc x)
@@ -911,13 +915,10 @@ runTask (tid, localData, task) = withLocal localData $ do
               forkInterpretMacroAction dest nextStep kont
             otherVal -> do
               p <- currentPhase
-              throwError $ MacroEvaluationError p $ evalErrorType "macro action" otherVal
-          Left err -> do
-            -- an error occurred in the evaluator, so just report it
-            p <- currentPhase
-            throwError
-              $ MacroEvaluationError p
-              $ projectError err
+              debug
+                $ expansionError p
+                $ MacroEvaluationError $ constructErrorType "macro action" otherVal
+          Left err -> eDebug $ MacroEvaluationError err
     AwaitingMacro dest (TaskAwaitMacro b v x deps mdest stx) -> do
       newDeps <- concat <$> traverse dependencies deps
       case newDeps of
@@ -982,23 +983,25 @@ runTask (tid, localData, task) = withLocal localData $ do
           forkExpandSyntax dest syntax
         other -> do
           p <- currentPhase
-          throwError $ MacroEvaluationError p $ evalErrorType "syntax" other
+          debug
+            $ expansionError p
+            $ MacroEvaluationError $ constructErrorType "syntax" other
     ContinueMacroAction dest value (closure:kont) -> do
       case apply closure value of
         Left err -> do
           p <- currentPhase
-          throwError
-            $ MacroEvaluationError p
-            $ evalErrorType "macro action"
-            $ erroneousValue
-            $ projectError err
+          debug
+            $ expansionError p
+            $ MacroEvaluationError err
         Right v ->
           case v of
             ValueMacroAction macroAction -> do
               forkInterpretMacroAction dest macroAction kont
             other -> do
               p <- currentPhase
-              throwError $ MacroEvaluationError p $ evalErrorType "macro action" other
+              debug
+                $ expansionError p
+                $ MacroEvaluationError $ constructErrorType "macro action" other
     EvalDefnAction x n p expr ->
       linkedCore expr >>=
       \case
@@ -1016,7 +1019,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         then do
           st <- getState
           case view (expanderExpressionTypes . at edest) st of
-            Nothing -> throwError $ InternalError "Type not found during generalization"
+            Nothing -> eDebug $ InternalError "Type not found during generalization"
             Just _ -> do
               sch <- generalizeType ty
               linkScheme schdest sch
@@ -1055,8 +1058,7 @@ runTask (tid, localData, task) = withLocal localData $ do
           let getVarInfo ptr =
                 (view (expanderPatternBinders . at ptr) <$> getState) >>=
                 \case
-                  Nothing ->
-                    throwError $ InternalError "Pattern info not added"
+                  Nothing -> eDebug $ InternalError "Pattern info not added"
                   Just (Right found) ->
                     pure [found]
                   Just (Left ptrs) ->
@@ -1078,10 +1080,10 @@ runTask (tid, localData, task) = withLocal localData $ do
         then stillStuck tid task
         else do
           varInfo <- view (expanderTypePatternBinders . at patPtr) <$> getState
+          p <- currentPhase
           case varInfo of
-            Nothing -> throwError $ InternalError "Type pattern info not added"
+            Nothing -> eDebug $ InternalError "Type pattern info not added"
             Just vars -> do
-              p <- currentPhase
               let rhs' = foldr (addScope p) stx
                            [ sc'
                            | (sc', _, _, _) <- vars
@@ -1178,30 +1180,38 @@ problemCategory (TypePatternDest {}) = TypePatternCaseCat
 
 requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
 requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
-requireDeclarationCat stx other =
-  throwError $
-  WrongSyntacticCategory stx (tenon DeclarationCat) (mortise $ problemCategory other)
+requireDeclarationCat stx other = do
+  p <- currentPhase
+  debug
+    $ expansionError p
+    $ WrongSyntacticCategory stx (tenon DeclarationCat) (mortise $ problemCategory other)
 
 requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
 requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
-requireTypeCat stx other =
-  throwError $
-  WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory other)
+requireTypeCat stx other = do
+  p <- currentPhase
+  debug
+    $ expansionError p
+    $ WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory other)
 
 requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
 requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
-requireExpressionCat stx other =
-  throwError $
-  WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+requireExpressionCat stx other = do
+  p <- currentPhase
+  debug
+    $ expansionError p
+    $ WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
 
 requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
 requirePatternCat _ (PatternDest scrutTy dest) =
   return $ Left (scrutTy, dest)
 requirePatternCat _ (TypePatternDest dest) =
   return $ Right dest
-requirePatternCat stx other =
-  throwError $
-  WrongSyntacticCategory stx (tenon PatternCaseCat) (mortise $ problemCategory other)
+requirePatternCat stx other = do
+  p <- currentPhase
+  debug
+    $ expansionError p
+    $ WrongSyntacticCategory stx (tenon PatternCaseCat) (mortise $ problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1226,8 +1236,11 @@ expandOneForm prob stx
               _ <- mustBeIdent foundName
               argDests <-
                 if length foundArgs /= length args'
-                  then throwError $
-                       WrongArgCount stx ctor (length args') (length foundArgs)
+                  then do
+                    p <- currentPhase
+                    debug
+                      $ expansionError p
+                      $ WrongArgCount stx ctor (length args') (length foundArgs)
                   else for (zip args' foundArgs) (uncurry schedule)
               linkExpr dest (CoreCtor ctor argDests)
               saveExprType dest t
@@ -1238,7 +1251,11 @@ expandOneForm prob stx
                             inst loc (Scheme argKinds a) tyArgs
               unify loc (tDatatype dt tyArgs) patTy
               if length subPats /= length argTypes
-                then throwError $ WrongArgCount stx ctor (length argTypes) (length subPats)
+                then do
+                  p <- currentPhase
+                  debug
+                    $ expansionError p
+                    $  WrongArgCount stx ctor (length argTypes) (length subPats)
                 else do
                   subPtrs <- for (zip subPats argTypes) \(sp, t) -> do
                     ptr <- liftIO newPatternPtr
@@ -1248,16 +1265,20 @@ expandOneForm prob stx
                   modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
                   linkPattern dest $
                     CtorPattern ctor subPtrs
-            other ->
-              throwError $
-              WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+            other -> do
+              p <- currentPhase
+              debug
+                $ expansionError p
+                $ WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
         EPrimModuleMacro impl ->
           case prob of
             ModuleDest dest -> do
               impl dest stx
-            other ->
-              throwError $
-              WrongSyntacticCategory stx (tenon ModuleCat) (mortise $ problemCategory other)
+            other -> do
+              p <- currentPhase
+              debug
+                $ expansionError p
+                $ WrongSyntacticCategory stx (tenon ModuleCat) (mortise $ problemCategory other)
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
@@ -1267,9 +1288,11 @@ expandOneForm prob stx
               implT k dest stx
             TypePatternDest dest ->
               implP dest stx
-            otherDest ->
-              throwError $
-              WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory otherDest)
+            otherDest -> do
+              p <- currentPhase
+              debug
+                $ expansionError p
+                $ WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory otherDest)
         EPrimPatternMacro impl -> do
           dest <- requirePatternCat stx prob
           impl dest stx
@@ -1297,7 +1320,7 @@ expandOneForm prob stx
             Id _ -> do
               equateKinds stx k k'
               linkType dest $ tSchemaVar i []
-            _ -> throwError $ NotValidType stx
+            _ -> eDebug $ NotValidType stx
 
         EIncompleteDefn x n d -> do
           (t, dest) <- requireExpressionCat stx prob
@@ -1316,10 +1339,7 @@ expandOneForm prob stx
                           $ ValueSyntax
                           $ addScope p stepScope stx
               case macroVal of
-                Left err -> throwError
-                            $ ValueNotMacro
-                            $ erroneousValue
-                            $ projectError err
+                Left err -> eDebug $ ValueNotMacro err
                 Right mv  -> case mv of
                   ValueMacroAction act ->
                     interpretMacroAction prob act >>= \case
@@ -1329,32 +1349,30 @@ expandOneForm prob stx
                       case expanded of
                         ValueSyntax expansionResult ->
                           forkExpandSyntax prob (flipScope p stepScope expansionResult)
-                        other -> throwError $ ValueNotSyntax other
-                  other ->
-                    throwError $ ValueNotMacro other
-            Nothing ->
-              throwError $ InternalError $
+                        other -> eDebug $ ValueNotSyntax other
+                  other -> eDebug $ ValueNotMacro $ constructErrorType "error in user macro" other
+            Nothing -> eDebug $ InternalError $
               "No transformer yet created for " ++ shortShow ident ++
               " (" ++ show transformerName ++ ") at phase " ++ shortShow p
-            Just other -> throwError $ ValueNotMacro other
+            Just other -> eDebug $ ValueNotMacro $ constructErrorType "expected macro but got value" other
   | otherwise =
-    case prob of
-      ModuleDest {} ->
-        throwError $ InternalError "All modules should be identifier-headed"
-      DeclTreeDest {} ->
-        throwError $ InternalError "All declarations should be identifier-headed"
-      TypeDest {} ->
-        throwError $ NotValidType stx
-      ExprDest t dest ->
-        case syntaxE stx of
-          List xs -> expandOneExpression t dest (addApp stx xs)
-          Integer n -> expandOneExpression t dest (addIntegerLiteral stx n)
-          String s -> expandOneExpression t dest (addStringLiteral stx s)
-          Id _ -> error "Impossible happened - identifiers are identifier-headed!"
-      PatternDest {} ->
-        throwError $ InternalError "All patterns should be identifier-headed"
-      TypePatternDest {} ->
-        throwError $ InternalError "All type patterns should be identifier-headed"
+      case prob of
+        ModuleDest {} ->
+          eDebug $ InternalError "All modules should be identifier-headed"
+        DeclTreeDest {} ->
+          eDebug $ InternalError "All declarations should be identifier-headed"
+        TypeDest {} ->
+          eDebug $ NotValidType stx
+        ExprDest t dest ->
+          case syntaxE stx of
+            List xs -> expandOneExpression t dest (addApp stx xs)
+            Integer n -> expandOneExpression t dest (addIntegerLiteral stx n)
+            String s -> expandOneExpression t dest (addStringLiteral stx s)
+            Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+        PatternDest {} ->
+          eDebug $ InternalError "All patterns should be identifier-headed"
+        TypePatternDest {} ->
+          eDebug $ InternalError "All type patterns should be identifier-headed"
 
 
 expandModuleForm :: DeclTreePtr -> Syntax -> Expand ()
@@ -1414,31 +1432,31 @@ interpretMacroAction prob =
         Done boundResult -> do
           case apply closure boundResult of
             -- FIXME DYG: what error to throw here
-            Left err -> throwError
-              $ ValueNotMacro
-              $ erroneousValue
-              $ projectError err
+            Left err -> eDebug $ ValueNotMacro err
             Right v  ->
               case v of
                 ValueMacroAction act -> interpretMacroAction prob act
-                other -> throwError $ ValueNotMacro other
+                other -> do
+                  p <- currentPhase
+                  debug $ expansionError p $ ValueNotMacro (Up other Halt)
     MacroActionSyntaxError syntaxError ->
-      throwError $ MacroRaisedSyntaxError syntaxError
+      eDebug $ MacroRaisedSyntaxError syntaxError
     MacroActionIdentEq how v1 v2 -> do
       id1 <- getIdent v1
       id2 <- getIdent v2
       case how of
         Free ->
           compareFree id1 id2
-            `catchError`
-            \case
-              -- Ambiguous bindings should not crash the comparison -
-              -- they're just not free-identifier=?.
-              Ambiguous _ _ _ -> return $ Done $ primitiveCtor "false" []
-              -- Similarly, things that are not yet bound are just not
-              -- free-identifier=?
-              Unknown _ -> return $ Done $ primitiveCtor "false" []
-              e -> throwError e
+            `catch`
+            (\e ->
+               case unExpansionErr e of
+                -- Ambiguous bindings should not crash the comparison -
+                -- they're just not free-identifier=?.
+                (_, Ambiguous _ _) -> return $ Done $ primitiveCtor "false" []
+                -- Similarly, things that are not yet bound are just not
+                -- free-identifier=?
+                (_, Unknown _) -> return $ Done $ primitiveCtor "false" []
+                (p,er) -> debug $ expansionError p er)
         Bound ->
           return $ Done $ flip primitiveCtor [] $
             if view stxValue id1 == view stxValue id2 &&
@@ -1446,7 +1464,8 @@ interpretMacroAction prob =
               then "true" else "false"
       where
         getIdent (ValueSyntax stx) = mustBeIdent stx
-        getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
+        getIdent _other =
+          eDebug $ InternalError $ "Not a syntax object in " ++ opName
         compareFree id1 id2 = do
           b1 <- resolve id1
           b2 <- resolve id2
@@ -1463,7 +1482,7 @@ interpretMacroAction prob =
     MacroActionIntroducer -> do
       sc <- freshScope "User introduction scope"
       pure $ Done $
-        ValueClosure $ HO \(ValueCtor ctor []) -> ValueClosure $ HO \(ValueSyntax stx) ->
+        ValueClosure $ HO "MacroActionValue" \(ValueCtor ctor []) -> ValueClosure $ HO "MacroActionContinuation" \(ValueSyntax stx) ->
         ValueSyntax
           case view (constructorName . constructorNameText) ctor of
             "add" -> addScope' sc stx

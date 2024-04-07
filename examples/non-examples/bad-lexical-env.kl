@@ -1,0 +1,6 @@
+#lang kernel
+
+(define f (lambda (ff) y))
+(define g (lambda (y) (f)))
+
+(example (g 2))

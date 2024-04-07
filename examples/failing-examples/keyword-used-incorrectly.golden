@@ -1,2 +1,3 @@
-Syntax error from macro:
+In Phase: p0
+    Syntax error from macro:
     #[keyword.kl:9.22-9.64]<(Keyword my-then cannot appear on its own)>

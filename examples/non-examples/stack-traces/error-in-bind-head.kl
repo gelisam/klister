@@ -1,0 +1,10 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+
+(define-macros
+  [(m (lambda (stx)
+        (>>= (pure (error 'Im-an-error))
+          (lambda (x) (pure x)))))])
+
+(m 'a)
