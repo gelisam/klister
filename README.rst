@@ -215,3 +215,41 @@ Imports
 The ``import`` form will search for modules in the same directory as the
 importing module, and in directories listed in the ``KLISTERPATH`` environment
 variable, a ``:``-separated list of directories.
+
+Setting ``KLISTERPATH`` is needed for all tests to pass, as some rely on modules
+from the ``examples`` directory;
+
+::
+
+  $ cabal test
+
+  Test suite klister-tests: RUNNING...
+  All tests
+    Golden tests
+      keyword-used-incorrectly:                          FAIL
+        ...
+        +Module not found: keyword-test.kl
+        +Searched in directory at /.../examples/failing-examples
+        +And on $KLISTERPATH:
+        ...
+      wrong-keyword:                                     FAIL
+        ...
+        +Module not found: keyword-test.kl
+        +Searched in directory at /.../examples/failing-examples
+        +And on $KLISTERPATH:
+        ...
+      bound-vs-free:                                     FAIL
+        ...
+        +Module not found: do.kl
+        +Searched in directory at /.../examples/failing-examples
+        +And on $KLISTERPATH:
+        ...
+
+  3 out of 132 tests failed
+  Test suite klister-tests: FAIL
+
+::
+
+  $ KLISTERPATH=examples cabal test
+  ...
+  Test suite klister-tests: PASS
