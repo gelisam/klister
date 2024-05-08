@@ -45,6 +45,7 @@ module Expander.Monad
   , getDecl
   , getState
   , inEarlierPhase
+  , inLaterPhase
   , inPhase
   , isExprChecked
   , importing
@@ -406,6 +407,10 @@ inPhase p act = Expand $ local (over (expanderLocal . expanderPhase) (const p)) 
 inEarlierPhase :: Expand a -> Expand a
 inEarlierPhase act =
   Expand $ local (over (expanderLocal . expanderPhase) prior) $ runExpand act
+
+inLaterPhase :: Expand a -> Expand a
+inLaterPhase act =
+  Expand $ local (over (expanderLocal . expanderPhase) posterior) $ runExpand act
 
 moduleScope :: ModuleName -> Expand Scope
 moduleScope mn = moduleScope' mn

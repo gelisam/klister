@@ -1306,7 +1306,7 @@ expandOneForm prob stx
                           ValueSyntax $ addScope p stepScope stx
               case macroVal of
                 ValueMacroAction act -> do
-                  res <- interpretMacroAction prob act
+                  res <- inEarlierPhase $ interpretMacroAction prob act
                   case res of
                     StuckOnType loc ty env cases kont ->
                       forkAwaitingTypeCase loc prob ty env cases kont
@@ -1432,8 +1432,8 @@ interpretMacroAction prob =
         getIdent (ValueSyntax stx) = mustBeIdent stx
         getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
         compareFree id1 id2 = do
-          b1 <- resolve id1
-          b2 <- resolve id2
+          b1 <- inLaterPhase $ resolve id1
+          b2 <- inLaterPhase $ resolve id2
           return $ Done $
             flip primitiveCtor [] $
             if b1 == b2 then "true" else "false"

@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 
-module Phase (Phase(..), runtime, prior, Phased(..)) where
+module Phase (Phase(..), runtime, prior, posterior, Phased(..)) where
 
 import Control.Lens
 import Data.Data (Data)
@@ -33,6 +33,9 @@ runtime = Phase 0
 
 prior :: Phase -> Phase
 prior (Phase i) = Phase (i + 1)
+
+posterior :: Phase -> Phase
+posterior (Phase i) = Phase (i - 1)
 
 class Phased a where
   shift :: Natural -> a -> a
