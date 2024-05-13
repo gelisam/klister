@@ -1309,7 +1309,7 @@ expandOneForm prob stx
                   res <- inEarlierPhase $ interpretMacroAction prob act
                   case res of
                     StuckOnType loc ty env cases kont ->
-                      forkAwaitingTypeCase loc prob ty env cases kont
+                      inEarlierPhase $ forkAwaitingTypeCase loc prob ty env cases kont
                     Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
