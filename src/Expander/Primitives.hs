@@ -47,7 +47,7 @@ module Expander.Primitives
   , elsePattern
   -- * Module primitives
   , makeModule
-  -- * Anywhere primitives
+  -- * Poly-Problem primitives
   , makeLocalType
   -- * Primitive values
   , unaryIntegerPrim
@@ -567,13 +567,59 @@ makeModule expandDeclForms bodyPtr stx =
 
       pure ()
 
---------------
--- Anywhere --
---------------
+------------------
+-- Poly-Problem --
+------------------
 
--- | with-unknown-type's implementation: create a named fresh
--- unification variable for macros that only can annotate part of a
--- type.
+-- | with-unknown-type binds a fresh unification variable.
+--
+-- with-unknown-type works in any Problem. In a type, it acts like a named
+-- wildcard in Haskell. That is,
+--
+-- > (example
+-- >   (the (with-unknown-type [_i]
+-- >          (-> (Pair Integer _i)
+-- >              (Pair _i Integer)))
+-- >        id))
+--
+-- infers to
+--
+-- > (example
+-- >   (the (-> (Pair Integer Integer)
+-- >            (Pair Integer Integer))
+-- >        id))
+--
+-- In an expression, with-unknown-type makes it possible to specify that
+-- multiple parts of that expression must have related types. For example,
+--
+-- > (example
+-- >   (with-unknown-type [_i2i]
+-- >      (pair (the _i2i negate)
+-- >            (the _i2i id))))
+--
+-- infers to
+--
+-- > (example
+-- >   (pair (the (-> Integer Integer) negate)
+-- >         (the (-> Integer Integer) id)))
+--
+-- And in a declaration block, with-unknown-type makes it possible to specify
+-- that multiple declarations must have related types. For example,
+--
+-- > (with-unknown-type [_i2i]
+-- >   (group
+-- >     (example (the _i2i negate))
+-- >     (example (the _i2i id))))
+--
+-- infers to
+--
+-- > (group
+-- >   (example (the (-> Integer Integer) negate))
+-- >   (example (the (-> Integer Integer) id)))
+--
+-- If there were pattern macros which took a type as an argument,
+-- with-unknown-type would be useful in those Problems as well, to bind a
+-- unification variable whose scope is limited to a portion of that pattern.
 makeLocalType :: MacroDest -> Syntax -> Expand ()
 makeLocalType dest stx = do
   Stx _ _ (_, binder, body) <- mustHaveEntries stx
