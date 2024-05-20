@@ -1,7 +1,9 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Expander.Error
   ( ExpansionErr(..)
   , SyntacticCategory(..)
@@ -12,6 +14,7 @@ module Expander.Error
 
 import Control.Lens
 import Numeric.Natural
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Text (Text)
 import Data.Sequence (Seq)
 import qualified Data.Text as T
@@ -44,7 +47,7 @@ data ExpansionErr
   | NotInteger Syntax
   | NotString Syntax
   | NotModName Syntax
-  | NotRightLength [Natural] Syntax
+  | NotRightLength (NonEmpty Natural) Syntax
   | NotVec Syntax
   | NotImportSpec Syntax
   | NotExportSpec Syntax
@@ -89,7 +92,7 @@ tenon :: a -> Tenon a
 tenon = Tenon
 
 notRightLength :: Natural -> Syntax -> ExpansionErr
-notRightLength n = NotRightLength [n]
+notRightLength n = NotRightLength (n :| [])
 
 data TypeCheckError
   = TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
@@ -106,6 +109,17 @@ data SyntacticCategory
   | PatternCaseCat
   | TypePatternCaseCat
   deriving Show
+
+alts
+  :: NonEmpty (Doc ann) -> Doc ann
+alts (x :| [])
+  = x
+alts (x :| y : [])
+  = x <> " or " <> y
+alts (x :| y : z : [])
+  = x <> ", " <> y <> ", or " <> z
+alts (x1 :| x2 : xs)
+  = x1 <> ", " <> alts (x2 :| xs)
 
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
@@ -148,19 +162,9 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotRightLength lengths0 stx) =
     hang 2 $ group $
-    vsep [ text "Expected" <+> alts lengths0 <+> text "entries between parentheses, but got"
+    vsep [ text "Expected" <+> alts (fmap viaShow lengths0) <+> text "entries between parentheses, but got"
          , pp env stx
          ]
-    where
-      alts :: [Natural] -> Doc ann
-      alts []
-        = error "internal error: NotRightLength doesn't offer any acceptable lengths"
-      alts [len]
-        = viaShow len
-      alts [len1, len2]
-        = viaShow len1 <+> "or" <+> viaShow len2
-      alts (len:lengths)
-        = viaShow len <> "," <+> alts lengths
   pp env (NotVec stx) =
     hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
   pp env (NotImportSpec stx) =
