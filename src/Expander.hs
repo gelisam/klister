@@ -51,6 +51,7 @@ import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
 import Data.Foldable
 import Data.Function (on)
 import Data.List (nub)
+import Data.List.NonEmpty (NonEmpty((:|)))
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import Data.Sequence (Seq(..))
@@ -1171,19 +1172,19 @@ requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputS
 requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
 requireDeclarationCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon DeclarationCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon DeclarationCat :| []) (mortise $ problemCategory other)
 
 requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
 requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
 requireTypeCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon TypeCat :| []) (mortise $ problemCategory other)
 
 requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
 requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
 requireExpressionCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)
 
 requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
 requirePatternCat _ (PatternDest scrutTy dest) =
@@ -1192,7 +1193,9 @@ requirePatternCat _ (TypePatternDest dest) =
   return $ Right dest
 requirePatternCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon PatternCaseCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx
+    (tenon PatternCaseCat :| tenon TypePatternCaseCat : [])
+    (mortise $ problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1241,14 +1244,14 @@ expandOneForm prob stx
                     CtorPattern ctor subPtrs
             other ->
               throwError $
-              WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+              WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)
         EPrimModuleMacro impl ->
           case prob of
             ModuleDest dest -> do
               impl dest stx
             other ->
               throwError $
-              WrongSyntacticCategory stx (tenon ModuleCat) (mortise $ problemCategory other)
+              WrongSyntacticCategory stx (tenon ModuleCat :| []) (mortise $ problemCategory other)
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
@@ -1260,7 +1263,7 @@ expandOneForm prob stx
               implP dest stx
             otherDest ->
               throwError $
-              WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory otherDest)
+              WrongSyntacticCategory stx (tenon TypeCat :| []) (mortise $ problemCategory otherDest)
         EPrimPatternMacro impl -> do
           dest <- requirePatternCat stx prob
           impl dest stx

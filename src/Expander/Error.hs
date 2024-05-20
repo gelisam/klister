@@ -62,7 +62,7 @@ data ExpansionErr
   | NotExported Ident Phase
   | ReaderError Text
   | WrongSyntacticCategory Syntax
-      (Tenon SyntacticCategory)
+      (NonEmpty (Tenon SyntacticCategory))
       (Mortise SyntacticCategory)
   | NotValidType Syntax
   | TypeCheckError TypeCheckError
@@ -204,16 +204,16 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
-  pp env (WrongSyntacticCategory stx is shouldBe) =
+  pp env (WrongSyntacticCategory stx tenons _mortise) =
     hang 2 $ group $
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
                           vsep [ text "Used in a position expecting"
-                               , pp env (unMortise shouldBe)
+                               , pp env $ unMortise _mortise
                                ]
                         , group $ hang 2 $
                           vsep [ text "but is valid in a position expecting"
-                               , pp env (unTenon is)
+                               , alts $ fmap (pp env . unTenon) tenons
                                ]
                         ]
          ]
