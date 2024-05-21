@@ -388,9 +388,10 @@ initializeKernel outputChannel = do
   traverse_ (uncurry addDeclPrimitive) declPrims
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
+  traverse_ (uncurry addTypePatternPrimitive) typePatternPrims
+  traverse_ (uncurry addPolyProblemPrimitive) polyProblemPrims
   traverse_ addDatatypePrimitive datatypePrims
   traverse_ addFunPrimitive funPrims
-  addUniversalPrimitive "with-unknown-type" Prims.makeLocalType
 
 
   where
@@ -616,10 +617,10 @@ initializeKernel outputChannel = do
         )
       ]
 
-    modPrims :: [(Text, DeclTreePtr -> Syntax -> Expand ())]
+    modPrims :: [(Text, Prims.ModulePrim)]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
-    declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, Prims.DeclPrim)]
     declPrims =
       [ ("define", Prims.define)
       , ("datatype", Prims.datatype)
@@ -632,7 +633,7 @@ initializeKernel outputChannel = do
       , ("group", Prims.group expandDeclForms)
       ]
 
-    exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
+    exprPrims :: [(Text, Prims.ExprPrim)]
     exprPrims =
       [ ("error", Prims.err)
       , ("the", Prims.the)
@@ -664,8 +665,17 @@ initializeKernel outputChannel = do
       , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())]
-    patternPrims = [("else", Prims.elsePattern)]
+    patternPrims :: [(Text, Prims.PatternPrim)]
+    patternPrims = []
+
+    typePatternPrims :: [(Text, Prims.TypePatternPrim)]
+    typePatternPrims = []
+
+    polyProblemPrims :: [(Text, Prims.PolyProblemPrim)]
+    polyProblemPrims =
+      [ ("else", Prims.elsePattern)
+      , ("with-unknown-type", Prims.makeLocalType)
+      ]
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
@@ -723,9 +733,17 @@ initializeKernel outputChannel = do
 
 
     addPatternPrimitive ::
-      Text -> (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+
+    addTypePatternPrimitive ::
+      Text -> (TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
+    addTypePatternPrimitive name impl = do
+      let val = EPrimTypePatternMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -762,9 +780,9 @@ initializeKernel outputChannel = do
       bind b val
       addToKernel name runtime b
 
-    addUniversalPrimitive :: Text -> (MacroDest -> Syntax -> Expand ()) -> Expand ()
-    addUniversalPrimitive name impl = do
-      let val = EPrimUniversalMacro impl
+    addPolyProblemPrimitive :: Text -> (MacroDest -> Syntax -> Expand ()) -> Expand ()
+    addPolyProblemPrimitive name impl = do
+      let val = EPrimPolyProblemMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -1160,14 +1178,6 @@ addStringLiteral (Syntax (Stx scs loc _)) s =
     stringLiteral = Syntax (Stx scs loc (Id "#%string-literal"))
     s' = Syntax (Stx scs loc (String s))
 
-problemCategory :: MacroDest -> SyntacticCategory
-problemCategory (ModuleDest {}) = ModuleCat
-problemCategory (DeclTreeDest {}) = DeclarationCat
-problemCategory (TypeDest {}) = TypeCat
-problemCategory (ExprDest {}) = ExpressionCat
-problemCategory (PatternDest {}) = PatternCaseCat
-problemCategory (TypePatternDest {}) = TypePatternCaseCat
-
 requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
 requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
 requireDeclarationCat stx other =
@@ -1186,16 +1196,19 @@ requireExpressionCat stx other =
   throwError $
   WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)
 
-requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCat :: Syntax -> MacroDest -> Expand (Ty, PatternPtr)
 requirePatternCat _ (PatternDest scrutTy dest) =
-  return $ Left (scrutTy, dest)
-requirePatternCat _ (TypePatternDest dest) =
-  return $ Right dest
+  return (scrutTy, dest)
 requirePatternCat stx other =
   throwError $
-  WrongSyntacticCategory stx
-    (tenon PatternCaseCat :| tenon TypePatternCaseCat : [])
-    (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon PatternCat :| []) (mortise $ problemCategory other)
+
+requireTypePatternCat :: Syntax -> MacroDest -> Expand TypePatternPtr
+requireTypePatternCat _ (TypePatternDest dest) =
+  return dest
+requireTypePatternCat stx other =
+  throwError $
+  WrongSyntacticCategory stx (tenon TypePatternCat :| []) (mortise $ problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1265,9 +1278,12 @@ expandOneForm prob stx
               throwError $
               WrongSyntacticCategory stx (tenon TypeCat :| []) (mortise $ problemCategory otherDest)
         EPrimPatternMacro impl -> do
-          dest <- requirePatternCat stx prob
+          (scrutTy, dest) <- requirePatternCat stx prob
+          impl scrutTy dest stx
+        EPrimTypePatternMacro impl -> do
+          dest <- requireTypePatternCat stx prob
           impl dest stx
-        EPrimUniversalMacro impl ->
+        EPrimPolyProblemMacro impl ->
           impl prob stx
         EVarMacro var -> do
           (t, dest) <- requireExpressionCat stx prob

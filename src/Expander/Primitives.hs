@@ -8,7 +8,8 @@
 {-# OPTIONS -Wno-name-shadowing #-}
 module Expander.Primitives
   ( -- * Declaration primitives
-    define
+    DeclPrim
+  , define
   , datatype
   , defineMacros
   , example
@@ -16,6 +17,7 @@ module Expander.Primitives
   , group
   , meta
   -- * Expression primitives
+  , ExprPrim
   , app
   , integerLiteral
   , stringLiteral
@@ -44,11 +46,16 @@ module Expander.Primitives
   , the
   , typeCase
   -- * Pattern primitives
-  , elsePattern
+  , PatternPrim
+  -- * Type pattern primitives
+  , TypePatternPrim
   -- * Module primitives
+  , ModulePrim
   , makeModule
   -- * Poly-Problem primitives
+  , PolyProblemPrim
   , makeLocalType
+  , elsePattern
   -- * Primitive values
   , unaryIntegerPrim
   , binaryIntegerPrim
@@ -65,6 +72,7 @@ import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad
 import Control.Monad.Except
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -552,7 +560,9 @@ baseType ctor = typeConstructor ctor []
 -- Modules --
 -------------
 
-makeModule :: DeclExpander -> DeclTreePtr -> Syntax -> Expand ()
+type ModulePrim = DeclTreePtr -> Syntax -> Expand ()
+
+makeModule :: DeclExpander -> ModulePrim
 makeModule expandDeclForms bodyPtr stx =
   view expanderModuleTop <$> getState >>=
   \case
@@ -567,9 +577,23 @@ makeModule expandDeclForms bodyPtr stx =
 
       pure ()
 
+--------------
+-- Patterns --
+--------------
+
+type PatternPrim = Ty -> PatternPtr -> Syntax -> Expand ()
+
+-------------------
+-- Type Patterns --
+-------------------
+
+type TypePatternPrim = TypePatternPtr -> Syntax -> Expand ()
+
 ------------------
 -- Poly-Problem --
 ------------------
+
+type PolyProblemPrim = MacroDest -> Syntax -> Expand ()
 
 -- | with-unknown-type binds a fresh unification variable.
 --
@@ -620,7 +644,7 @@ makeModule expandDeclForms bodyPtr stx =
 -- If there were pattern macros which took a type as an argument,
 -- with-unknown-type would be useful in those Problems as well, to bind a
 -- unification variable whose scope is limited to a portion of that pattern.
-makeLocalType :: MacroDest -> Syntax -> Expand ()
+makeLocalType :: PolyProblemPrim
 makeLocalType dest stx = do
   Stx _ _ (_, binder, body) <- mustHaveEntries stx
   Stx _ _ (Identity theVar) <- mustHaveEntries binder
@@ -642,27 +666,26 @@ makeLocalType dest stx = do
 
   forkExpandSyntax dest (addScope p sc body)
 
---------------
--- Patterns --
---------------
-
-type PatternPrim = Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()
-
-elsePattern :: PatternPrim
-elsePattern (Left (scrutTy, dest)) stx = do
+elsePattern :: PolyProblemPrim
+elsePattern (PatternDest scrutTy dest) stx = do
   Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme scrutTy
   (sc, x, v) <- prepareVar var
   modifyState $ set (expanderPatternBinders . at dest) $
     Just $ Right (sc, x, v, ty)
   linkPattern dest $ PatternVar x v
-elsePattern (Right dest) stx = do
+elsePattern (TypePatternDest dest) stx = do
   Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
   linkTypePattern dest
     (AnyType x v)
     [(sc, x, v, ty)]
+elsePattern other stx = do
+  throwError $
+    WrongSyntacticCategory stx
+      (tenon PatternCat :| tenon TypePatternCat : [])
+      (mortise $ problemCategory other)
 
 -------------
 -- Helpers --

@@ -6,7 +6,7 @@
 {-# LANGUAGE UndecidableInstances #-}
 module Expander.Error
   ( ExpansionErr(..)
-  , SyntacticCategory(..)
+  , SyntacticCategory(..), problemCategory
   , TypeCheckError(..)
   , Tenon, tenon, Mortise, mortise
   , notRightLength
@@ -106,9 +106,17 @@ data SyntacticCategory
   | DeclarationCat
   | TypeCat
   | ExpressionCat
-  | PatternCaseCat
-  | TypePatternCaseCat
+  | PatternCat
+  | TypePatternCat
   deriving Show
+
+problemCategory :: MacroDest -> SyntacticCategory
+problemCategory (ModuleDest {}) = ModuleCat
+problemCategory (DeclTreeDest {}) = DeclarationCat
+problemCategory (TypeDest {}) = TypeCat
+problemCategory (ExprDest {}) = ExpressionCat
+problemCategory (PatternDest {}) = PatternCat
+problemCategory (TypePatternDest {}) = TypePatternCat
 
 alts
   :: NonEmpty (Doc ann) -> Doc ann
@@ -279,5 +287,5 @@ instance Pretty VarInfo SyntacticCategory where
   pp _env ModuleCat = text "a module"
   pp _env TypeCat = text "a type"
   pp _env DeclarationCat = text "a top-level declaration or example"
-  pp _env PatternCaseCat = text "a pattern"
-  pp _env TypePatternCaseCat = text "a typecase pattern"
+  pp _env PatternCat = text "a pattern"
+  pp _env TypePatternCat = text "a typecase pattern"
