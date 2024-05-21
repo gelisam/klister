@@ -546,9 +546,9 @@ typeConstructor ctor argKinds = (implT, implP)
           sch <- trivialScheme tType
           -- FIXME kind check here
           linkTypePattern dest
-            (TypePattern $ TyF ctor [ (varStx, var)
-                                    | (_, varStx, var) <- varInfo
-                                    ])
+            (TypeCtorPattern $ TyF ctor [ (varStx, var)
+                                        | (_, varStx, var) <- varInfo
+                                        ])
             [ (sc, n, x, sch)
             | (sc, n, x) <- varInfo
             ]
@@ -679,7 +679,7 @@ elsePattern (TypePatternDest dest) stx = do
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
   linkTypePattern dest
-    (AnyType x v)
+    (TypePatternVar x v)
     [(sc, x, v, ty)]
 elsePattern other stx = do
   throwError $

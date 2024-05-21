@@ -210,16 +210,16 @@ instance PrettyBinder VarInfo BinderPair where
     (annotate (BindingSite x) (text n), Env.singleton x ident ())
 
 instance PrettyBinder VarInfo TypePattern where
-  ppBind env (TypePattern t) =
+  ppBind env (TypeCtorPattern t) =
     ppBind env (fmap BinderPair t)
-  ppBind env (AnyType ident x) =
+  ppBind env (TypePatternVar ident x) =
     ppBind env (BinderPair (ident, x))
 
 instance PrettyBinder VarInfo ConstructorPattern where
   ppBind env pat = ppBind env (unConstructorPattern pat)
 
 instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) where
-  ppBind env (CtorPattern ctor subPats) =
+  ppBind env (DataCtorPattern ctor subPats) =
     case subPats of
       [] -> (pp env ctor, Env.empty)
       _nonEmpty ->

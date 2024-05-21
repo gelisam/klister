@@ -1254,7 +1254,7 @@ expandOneForm prob stx
                     pure ptr
                   modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
                   linkPattern dest $
-                    CtorPattern ctor subPtrs
+                    DataCtorPattern ctor subPtrs
             other ->
               throwError $
               WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)

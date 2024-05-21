@@ -73,12 +73,12 @@ instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
 data TypePattern
-  = TypePattern (TyF (Ident, Var))
-  | AnyType Ident Var
+  = TypeCtorPattern (TyF (Ident, Var))
+  | TypePatternVar Ident Var
   deriving (Data, Eq, Show)
 
 data ConstructorPatternF pat
-  = CtorPattern !Constructor [pat]
+  = DataCtorPattern !Constructor [pat]
   | PatternVar Ident Var
   deriving (Data, Eq, Foldable, Functor, Show, Traversable)
 makePrisms ''ConstructorPatternF
@@ -391,8 +391,8 @@ instance AlphaEq ConstructorPattern where
     alphaCheck (unConstructorPattern p1) (unConstructorPattern p2)
 
 instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
-  alphaCheck (CtorPattern c1 vars1)
-             (CtorPattern c2 vars2) = do
+  alphaCheck (DataCtorPattern c1 vars1)
+             (DataCtorPattern c2 vars2) = do
     alphaCheck c1 c2
     for_ (zip vars1 vars2) (uncurry alphaCheck)
   alphaCheck (PatternVar _ x1)
@@ -401,11 +401,11 @@ instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
   alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq TypePattern where
-  alphaCheck (TypePattern t1)
-             (TypePattern t2) =
+  alphaCheck (TypeCtorPattern t1)
+             (TypeCtorPattern t2) =
     alphaCheck t1 t2
-  alphaCheck (AnyType _ x1)
-             (AnyType _ x2) =
+  alphaCheck (TypePatternVar _ x1)
+             (TypePatternVar _ x2) =
     alphaCheck x1 x2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -599,7 +599,7 @@ instance ShortShow ConstructorPattern where
   shortShow = shortShow . unConstructorPattern
 
 instance ShortShow a => ShortShow (ConstructorPatternF a) where
-  shortShow (CtorPattern ctor vars) =
+  shortShow (DataCtorPattern ctor vars) =
     "(" ++ shortShow ctor ++
     " " ++ intercalate " " (map shortShow vars) ++
     ")"
@@ -607,10 +607,10 @@ instance ShortShow a => ShortShow (ConstructorPatternF a) where
     "(PatternVar " ++ shortShow ident ++ " )"
 
 instance ShortShow TypePattern where
-  shortShow (TypePattern t) =
+  shortShow (TypeCtorPattern t) =
     "(" ++ shortShow (fmap fst t) ++ ")"
-  shortShow (AnyType ident _var) =
-    "(AnyConstructor " ++ shortShow ident ++ " )"
+  shortShow (TypePatternVar ident _var) =
+    "(TypePatternVar " ++ shortShow ident ++ " )"
 
 
 instance ShortShow SyntaxPattern where
