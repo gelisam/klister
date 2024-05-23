@@ -934,6 +934,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             Ty (TyF (TMetaVar ptr) _) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
         other -> do
+          -- TODO: should this expandEval be 'inEarlierPhase'?
           selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           case selectedBranch of
             ValueMacroAction nextStep -> do
@@ -993,7 +994,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just newScopeSet ->
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes newScopeSet stx)
     InterpretMacroAction dest act outerKont ->
-      interpretMacroAction dest act >>= \case
+      inEarlierPhase (interpretMacroAction dest act) >>= \case
         StuckOnType loc ty env cases innerKont ->
           forkAwaitingTypeCase loc dest ty env cases (innerKont ++ outerKont)
         Done value -> do
@@ -1004,11 +1005,11 @@ runTask (tid, localData, task) = withLocal localData $ do
           forkExpandSyntax dest syntax
         other -> expandEval $ evalErrorType "syntax" other
     ContinueMacroAction dest value (closure:kont) -> do
-      result <- expandEval $ apply closure value
+      result <- inEarlierPhase $ expandEval $ apply closure value
       case result of
         ValueMacroAction macroAction -> do
           forkInterpretMacroAction dest macroAction kont
-        other -> expandEval $ evalErrorType "macro action" other
+        other -> inEarlierPhase $ expandEval $ evalErrorType "macro action" other
     EvalDefnAction x n p expr ->
       linkedCore expr >>=
       \case
@@ -1328,7 +1329,7 @@ expandOneForm prob stx
                   res <- inEarlierPhase $ interpretMacroAction prob act
                   case res of
                     StuckOnType loc ty env cases kont ->
-                      inEarlierPhase $ forkAwaitingTypeCase loc prob ty env cases kont
+                      forkAwaitingTypeCase loc prob ty env cases kont
                     Done expanded ->
                       case expanded of
                         ValueSyntax expansionResult ->
