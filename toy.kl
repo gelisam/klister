@@ -1,0 +1,74 @@
+#lang "prelude.kl"
+(import (shift "prelude.kl" 1))
+(import (shift "prelude.kl" 2))
+
+(datatype (T)
+  (mkT))
+
+--(meta
+--  (define-macros
+--    ([my-else
+--      (lambda (_)
+--        (pure '(else _)))])))
+
+--(define-macros
+--  ([my-macro
+--    (lambda (stx)
+--      (>>= (which-problem)
+--        (lambda (problem)
+--          (case problem
+--            [(expression type)
+--             (type-case type
+--               --[(T)
+--               -- (pure '(mkT))]
+--               [(else x)
+--                (type-case x
+--                  [(T)
+--                   (pure '(mkT))]
+--                  [(else _)
+--                   (pure '(mkT))])])]))))]))
+--(example (the (T) (my-macro)))
+
+(define-macros
+  ([my-macro
+    (lambda (stx)
+      (>>= (which-problem)
+        (lambda (problem)
+          (case problem
+            [(expression type)
+             (type-case type
+               [(else _)
+                (pure '(mkT))])]))))]))
+(example (the (T) (my-macro)))
+
+
+
+--                           | e | ee | eee | run
+-- (error _)                   p1  p1   p1   p1   (should be p1)
+-- (which-problem) (error _)   p0  p0   p1   p1   (should be p1)
+-- '(mkT)                      p0  p0   p0   p0   (found in p0)
+-- (which-problem) '(mkT)      p0  p0   p1   p1   (found in p0)
+-- (T)                         p1  p1   p1   p1   (found in p0)
+-- (which-problem) (T)         p1  p1   p1   p0   (found in p0)
+-- (which-problem) (else _)    p1  p1   p1   p0   (found in p0)
+
+-- therefore:
+-- [x] eee is needed, we do want the code after (which-problem) to be evaluated and executed at p1.
+-- [ ] eee is incomplete, it should return code from p0, not p1.
+-- [ ] type-case should look at the types from p0, not p1.
+-- [ ] but we can't, because else
+
+---- David thought of this counter-example:
+--(example
+--  (with-unknown-type (String)
+--    (the (-> String String) (lambda (x) 5))))
+--
+--(define-macros
+--  ([my-macro
+--    (lambda (stx)
+--      (>>= (which-problem)
+--        (lambda (problem)
+--          (case problem
+--            [(expression tp)
+--             (pure '(true))]))))]))
+--(example (my-macro my-keyword))
