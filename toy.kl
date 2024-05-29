@@ -37,6 +37,8 @@
           (case problem
             [(expression type)
              (type-case type
+               [(the-type T)
+                (pure '(mkT))]
                [(else _)
                 (pure '(mkT))])]))))]))
 (example (the (T) (my-macro)))
