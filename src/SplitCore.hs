@@ -80,6 +80,21 @@ instance Show TypePatternPtr where
 newTypePatternPtr :: IO TypePatternPtr
 newTypePatternPtr = TypePatternPtr <$> newUnique
 
+newtype TypeCtorPtr = TypeCtorPtr Unique
+  deriving (Eq, Ord)
+
+instance HasKey TypeCtorPtr where
+  getKey (TypeCtorPtr u) = getKey u
+  fromKey i = TypeCtorPtr $! fromKey i
+  {-# INLINE getKey #-}
+  {-# INLINE fromKey #-}
+
+instance Show TypeCtorPtr where
+  show (TypeCtorPtr u) = "(TypeCtorPtr " ++ show (hashUnique u) ++ ")"
+
+newTypeCtorPtr :: IO TypeCtorPtr
+newTypeCtorPtr = TypeCtorPtr <$> newUnique
+
 data SplitCore = SplitCore
   { _splitCoreRoot         :: SplitCorePtr
   , _splitCoreDescendants  :: Store SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr)

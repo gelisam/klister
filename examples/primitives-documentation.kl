@@ -125,6 +125,7 @@
 -- expression : Type -> Problem
 (example (pattern))
 (example (type-pattern))
+(example (type-constructor))
 --
 -- Maybe : Type -> Type
 (example nothing)

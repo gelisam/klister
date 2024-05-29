@@ -240,6 +240,7 @@ data EValue
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
   | EPrimPatternMacro (Ty -> PatternPtr -> Syntax -> Expand ())
   | EPrimTypePatternMacro (TypePatternPtr -> Syntax -> Expand ())
+  | EPrimTypeCtorMacro (TypeCtorPtr -> Syntax -> Expand ())
   | EPrimPolyProblemMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Kind !Natural

@@ -33,6 +33,8 @@ data MacroDest
     -- ^ scrutinee type, destination pointer
   | TypePatternDest TypePatternPtr
     -- ^ destination pointer
+  | TypeCtorDest TypeCtorPtr
+    -- ^ destination pointer
   deriving Show
 
 

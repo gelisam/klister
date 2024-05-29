@@ -49,6 +49,8 @@ module Expander.Primitives
   , PatternPrim
   -- * Type pattern primitives
   , TypePatternPrim
+  -- * Type constructor primitives
+  , TypeCtorPrim
   -- * Module primitives
   , ModulePrim
   , makeModule
@@ -588,6 +590,12 @@ type PatternPrim = Ty -> PatternPtr -> Syntax -> Expand ()
 -------------------
 
 type TypePatternPrim = TypePatternPtr -> Syntax -> Expand ()
+
+-----------------------
+-- Type Constructors --
+-----------------------
+
+type TypeCtorPrim = TypeCtorPtr -> Syntax -> Expand ()
 
 ------------------
 -- Poly-Problem --

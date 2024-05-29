@@ -39,6 +39,7 @@
 (type) : Problem
 (pattern) : Problem
 (type-pattern) : Problem
+(type-constructor) : Problem
 (nothing) : ∀(α : *). (Maybe α)
 (nil) : ∀(α : *). (List α)
 make-introducer : (Macro (ScopeAction → (Syntax → Syntax)))

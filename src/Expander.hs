@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS -Wno-incomplete-uni-patterns #-}
 module Expander (
   -- * Concrete expanders
     expandExpr
@@ -389,6 +390,7 @@ initializeKernel outputChannel = do
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
   traverse_ (uncurry addTypePatternPrimitive) typePatternPrims
+  traverse_ (uncurry addTypeCtorPrimitive) typeCtorPrims
   traverse_ (uncurry addPolyProblemPrimitive) polyProblemPrims
   traverse_ addDatatypePrimitive datatypePrims
   traverse_ addFunPrimitive funPrims
@@ -597,7 +599,15 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("module", []), ("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
+      , ("Problem", [],
+          [ ("module", [])
+          , ("declaration", [])
+          , ("type", [])
+          , ("expression", [tType])
+          , ("pattern", [])
+          , ("type-pattern", [])
+          , ("type-constructor", [])
+          ])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
@@ -670,6 +680,9 @@ initializeKernel outputChannel = do
 
     typePatternPrims :: [(Text, Prims.TypePatternPrim)]
     typePatternPrims = []
+
+    typeCtorPrims :: [(Text, Prims.TypeCtorPrim)]
+    typeCtorPrims = []
 
     polyProblemPrims :: [(Text, Prims.PolyProblemPrim)]
     polyProblemPrims =
@@ -744,6 +757,14 @@ initializeKernel outputChannel = do
       Text -> (TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
     addTypePatternPrimitive name impl = do
       let val = EPrimTypePatternMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+
+    addTypeCtorPrimitive ::
+      Text -> (TypeCtorPtr -> Syntax -> Expand ()) -> Expand ()
+    addTypeCtorPrimitive name impl = do
+      let val = EPrimTypeCtorMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -914,6 +935,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOnePattern scrutT d stx
         TypePatternDest d ->
           expandOneTypePattern d stx
+        TypeCtorDest d ->
+          expandOneTypeCtor d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -1151,6 +1174,10 @@ expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
 expandOneTypePattern dest stx =
   expandOneForm (TypePatternDest dest) stx
 
+expandOneTypeCtor :: TypeCtorPtr -> Syntax -> Expand ()
+expandOneTypeCtor dest stx =
+  expandOneForm (TypeCtorDest dest) stx
+
 
 
 -- | Insert a function application marker with a lexical context from
@@ -1210,6 +1237,13 @@ requireTypePatternCat _ (TypePatternDest dest) =
 requireTypePatternCat stx other =
   throwError $
   WrongSyntacticCategory stx (tenon TypePatternCat :| []) (mortise $ problemCategory other)
+
+requireTypeCtorCat :: Syntax -> MacroDest -> Expand TypeCtorPtr
+requireTypeCtorCat _ (TypeCtorDest dest) =
+  return dest
+requireTypeCtorCat stx other =
+  throwError $
+  WrongSyntacticCategory stx (tenon TypeCtorCat :| []) (mortise $ problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1283,6 +1317,9 @@ expandOneForm prob stx
           impl scrutTy dest stx
         EPrimTypePatternMacro impl -> do
           dest <- requireTypePatternCat stx prob
+          impl dest stx
+        EPrimTypeCtorMacro impl -> do
+          dest <- requireTypeCtorCat stx prob
           impl dest stx
         EPrimPolyProblemMacro impl ->
           impl prob stx
@@ -1360,6 +1397,8 @@ expandOneForm prob stx
         throwError $ InternalError "All patterns should be identifier-headed"
       TypePatternDest {} ->
         throwError $ InternalError "All type patterns should be identifier-headed"
+      TypeCtorDest {} ->
+        throwError $ InternalError "All type constructors should be identifier-headed"
 
 
 expandModuleForm :: DeclTreePtr -> Syntax -> Expand ()
@@ -1482,5 +1521,6 @@ interpretMacroAction prob =
         ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
         PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
         TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
+        TypeCtorDest {} -> pure $ Done $ primitiveCtor "type-constructor" []
     MacroActionTypeCase env loc ty cases -> do
       pure $ StuckOnType loc ty env cases []

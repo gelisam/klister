@@ -108,6 +108,7 @@ data SyntacticCategory
   | ExpressionCat
   | PatternCat
   | TypePatternCat
+  | TypeCtorCat
   deriving Show
 
 problemCategory :: MacroDest -> SyntacticCategory
@@ -117,6 +118,7 @@ problemCategory (TypeDest {}) = TypeCat
 problemCategory (ExprDest {}) = ExpressionCat
 problemCategory (PatternDest {}) = PatternCat
 problemCategory (TypePatternDest {}) = TypePatternCat
+problemCategory (TypeCtorDest {}) = TypeCtorCat
 
 alts
   :: NonEmpty (Doc ann) -> Doc ann
@@ -289,3 +291,4 @@ instance Pretty VarInfo SyntacticCategory where
   pp _env DeclarationCat = text "a top-level declaration or example"
   pp _env PatternCat = text "a pattern"
   pp _env TypePatternCat = text "a typecase pattern"
+  pp _env TypeCtorCat = text "a type constructor"
