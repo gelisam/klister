@@ -6,7 +6,7 @@ import Control.Lens
 import Core
 
 newtype PartialPattern =
-  PartialPattern { unPartialPattern :: Maybe (ConstructorPatternF PartialPattern) }
+  PartialPattern { unPartialPattern :: Maybe (DataPatternF PartialPattern) }
   deriving (Eq, Show)
 
 newtype PartialCore = PartialCore
@@ -20,12 +20,12 @@ nonPartial :: Core -> PartialCore
 nonPartial =
   PartialCore . Just . mapCoreF Just nonPartialPattern nonPartial . unCore
   where
-    nonPartialPattern pat = PartialPattern $ Just $ nonPartialPattern <$> unConstructorPattern pat
+    nonPartialPattern pat = PartialPattern $ Just $ nonPartialPattern <$> unDataPattern pat
 
 runPartialCore :: PartialCore -> Maybe Core
 runPartialCore (PartialCore Nothing) = Nothing
 runPartialCore (PartialCore (Just c)) = Core <$> traverseCoreF id runPartialPattern runPartialCore c
 
-runPartialPattern :: PartialPattern -> Maybe ConstructorPattern
+runPartialPattern :: PartialPattern -> Maybe DataPattern
 runPartialPattern (PartialPattern Nothing) = Nothing
-runPartialPattern (PartialPattern (Just p)) = ConstructorPattern <$> traverse runPartialPattern p
+runPartialPattern (PartialPattern (Just p)) = DataPattern <$> traverse runPartialPattern p

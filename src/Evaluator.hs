@@ -273,15 +273,15 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
+doDataCase :: SrcLoc -> Value -> [(DataPattern, Core)] -> Eval Value
 doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
 doDataCase loc v0 ((pat, rhs) : ps) =
-  match (doDataCase loc v0 ps) (eval rhs) [(unConstructorPattern pat, v0)]
+  match (doDataCase loc v0 ps) (eval rhs) [(unDataPattern pat, v0)]
   where
     match ::
       Eval Value {- ^ Failure continuation -} ->
       Eval Value {- ^ Success continuation, to be used in an extended environment -} ->
-      [(ConstructorPatternF ConstructorPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
+      [(DataPatternF DataPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
       Eval Value
     match _fk sk [] = sk
     match fk sk ((DataCtorPattern ctor subPats, tgt) : more) =
@@ -290,7 +290,7 @@ doDataCase loc v0 ((pat, rhs) : ps) =
           | c == ctor ->
             if length subPats /= length args
               then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
-              else match fk sk (zip (map unConstructorPattern subPats) args ++ more)
+              else match fk sk (zip (map unDataPattern subPats) args ++ more)
         _otherValue -> fk
     match fk sk ((PatternVar n x, tgt) : more) =
       match fk (withExtendedEnv n x tgt $ sk) more

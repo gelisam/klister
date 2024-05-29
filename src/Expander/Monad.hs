@@ -289,7 +289,7 @@ data ExpanderState = ExpanderState
   , _expanderTasks              :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations    :: !(Store SplitCorePtr SrcLoc)
   , _expanderCompletedCore      :: !(Store SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr))
-  , _expanderCompletedPatterns  :: !(Store PatternPtr (ConstructorPatternF PatternPtr))
+  , _expanderCompletedPatterns  :: !(Store PatternPtr (DataPatternF PatternPtr))
   , _expanderCompletedTypePatterns :: !(Store TypePatternPtr TypePattern)
   , _expanderPatternBinders     :: !(Store PatternPtr (Either [PatternPtr] (Scope, Ident, Var, SchemePtr)))
   , _expanderTypePatternBinders :: !(Store TypePatternPtr [(Scope, Ident, Var, SchemePtr)])
@@ -449,7 +449,7 @@ linkExpr :: SplitCorePtr -> CoreF TypePatternPtr PatternPtr SplitCorePtr -> Expa
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> S.singleton dest layer)
 
-linkPattern :: PatternPtr -> ConstructorPatternF PatternPtr -> Expand ()
+linkPattern :: PatternPtr -> DataPatternF PatternPtr -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> S.singleton dest pat)
 

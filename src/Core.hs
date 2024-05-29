@@ -77,22 +77,22 @@ data TypePattern
   | TypePatternVar Ident Var
   deriving (Data, Eq, Show)
 
-data ConstructorPatternF pat
+data DataPatternF pat
   = DataCtorPattern !Constructor [pat]
   | PatternVar Ident Var
   deriving (Data, Eq, Foldable, Functor, Show, Traversable)
-makePrisms ''ConstructorPatternF
+makePrisms ''DataPatternF
 
-newtype ConstructorPattern =
-  ConstructorPattern { unConstructorPattern :: ConstructorPatternF ConstructorPattern }
+newtype DataPattern =
+  DataPattern { unDataPattern :: DataPatternF DataPattern }
   deriving (Data, Eq, Show)
-makePrisms ''ConstructorPattern
+makePrisms ''DataPattern
 
-instance Phased a => Phased (ConstructorPatternF a) where
+instance Phased a => Phased (DataPatternF a) where
   shift i = fmap (shift i)
 
-instance Phased ConstructorPattern where
-  shift i = over _ConstructorPattern (shift i)
+instance Phased DataPattern where
+  shift i = over _DataPattern (shift i)
 
 instance Phased TypePattern where
   shift _ = id
@@ -316,7 +316,7 @@ instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat 
 
 -- | A fully-expanded expression, ready to be evaluated.
 newtype Core = Core
-  { unCore :: CoreF TypePattern ConstructorPattern Core }
+  { unCore :: CoreF TypePattern DataPattern Core }
   deriving (Data, Eq, Show)
 makePrisms ''Core
 
@@ -386,11 +386,11 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
   alphaCheck _ _ = notAlphaEquivalent
 
 
-instance AlphaEq ConstructorPattern where
+instance AlphaEq DataPattern where
   alphaCheck p1 p2 =
-    alphaCheck (unConstructorPattern p1) (unConstructorPattern p2)
+    alphaCheck (unDataPattern p1) (unDataPattern p2)
 
-instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
+instance AlphaEq a => AlphaEq (DataPatternF a) where
   alphaCheck (DataCtorPattern c1 vars1)
              (DataCtorPattern c2 vars2) = do
     alphaCheck c1 c2
@@ -595,10 +595,10 @@ instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
 instance ShortShow Core where
   shortShow (Core x) = shortShow x
 
-instance ShortShow ConstructorPattern where
-  shortShow = shortShow . unConstructorPattern
+instance ShortShow DataPattern where
+  shortShow = shortShow . unDataPattern
 
-instance ShortShow a => ShortShow (ConstructorPatternF a) where
+instance ShortShow a => ShortShow (DataPatternF a) where
   shortShow (DataCtorPattern ctor vars) =
     "(" ++ shortShow ctor ++
     " " ++ intercalate " " (map shortShow vars) ++

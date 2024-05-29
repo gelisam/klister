@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS -Wno-name-shadowing #-}
+{-# OPTIONS -Wno-incomplete-uni-patterns #-}
 module Expander.Primitives
   ( -- * Declaration primitives
     DeclPrim

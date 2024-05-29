@@ -215,10 +215,10 @@ instance PrettyBinder VarInfo TypePattern where
   ppBind env (TypePatternVar ident x) =
     ppBind env (BinderPair (ident, x))
 
-instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env pat = ppBind env (unConstructorPattern pat)
+instance PrettyBinder VarInfo DataPattern where
+  ppBind env pat = ppBind env (unDataPattern pat)
 
-instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) where
+instance PrettyBinder VarInfo a => PrettyBinder VarInfo (DataPatternF a) where
   ppBind env (DataCtorPattern ctor subPats) =
     case subPats of
       [] -> (pp env ctor, Env.empty)
