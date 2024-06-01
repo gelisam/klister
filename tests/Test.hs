@@ -46,7 +46,6 @@ import Pretty
 import Scope
 import qualified ScopeSet
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import Syntax.SrcLoc
 import Syntax

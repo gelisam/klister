@@ -81,7 +81,6 @@ import Parser
 import Phase
 import Pretty
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax

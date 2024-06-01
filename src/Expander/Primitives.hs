@@ -96,7 +96,6 @@ import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import qualified ScopeSet
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax

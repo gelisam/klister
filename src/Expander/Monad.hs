@@ -188,7 +188,6 @@ import KlisterPath
 import PartialCore
 import PartialType
 import Phase
-import ShortShow
 import SplitCore
 import SplitType
 import Scope
