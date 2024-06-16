@@ -1,0 +1,420 @@
+#lang "prelude.kl"
+-- in response to https://x.com/Iceland_jack/status/1800683375629676942
+
+(import "list.kl")
+(import "pair-datatype.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "list.kl" 1))
+(import (shift "pair-datatype.kl" 1))
+(import (shift "temporaries.kl" 1))
+
+
+-- Just like Haskell, Klister supports pattern-matching.
+--
+--   listToPair :: [a] -> Pair a [a]
+--   listToPair (x:xs) = Pair x xs
+--   listToPair [] = Pair 0 []
+(defun list-to-pair (xs0)
+  (case xs0
+    [(:: x xs)
+     (pair x xs)]
+    [(nil)
+     (pair 0 (nil))]))
+
+(example (list-to-pair (list)))
+-- =>
+--   (pair 0 (nil))
+
+(example (list-to-pair (list 1 2 3)))
+-- =>
+--   (pair 1 (list 2 3))
+
+-- Note how the [(:: x xs) (pair x xs)] branch has the same arguments on the
+-- left-hand side and on the right-hand side. If this was a function
+-- (lambda (x xs) (pair x xs)), we would consider eta-reducing the function to
+-- just (pair).
+--
+-- Iceland Jack imagines: what if we could eta-reduce branches as well?
+--
+--   (defun eta-list-to-pair (xs0)
+--     (eta-case xs0
+--       [(::)     -- x and xs are missing here
+--        (pair)]  -- and here
+--       [(nil)
+--        (pair 0 (nil))]))
+--
+-- In Haskell, adding this feature would require support from the compiler,
+-- probably in the form of a new LANGUAGE pragma. In Klister, it can be
+-- implemented as a library, thanks to a feature call a "type-aware macro".
+-- Here is the game plan.
+--
+--   -- eta-case and an eta-reduced branch [(::) (pair)]
+--   (eta-case (list 1 2 3)
+--     [(::) (pair)]
+--     [(nil) (pair 0 (nil))])
+-- =>
+--   -- an auxiliary function applied to (::)
+--   ((eta-case-aux (list 1 2 3)
+--      (::)
+--      (pair)
+--      [(nil) (pair 0 (nil))])
+--    (::))
+-- =>
+--   -- eta-case-aux is a macro expanding to this lambda
+--   ((lambda (_)
+--      (case (list 1 2 3)
+--        [(:: x1 x2) (pair x1 x2)]
+--        [(else scrutinee)
+--         (eta-case scrutinee
+--           [(nil) (pair 0 (nil))])]))
+--    (::))
+-- =>
+--   -- result: eta-case and its eta-reduced branch have desugared into case
+--   -- and the eta-expanded branch [(:: x1 x2) (pair x1 x2)]
+--   (case (list 1 2 3)
+--     [(:: x1 x2) (pair x1 x2)]
+--     [(else scrutinee)
+--      (eta-case scrutinee
+--        [(nil) (pair 0 (nil))])])
+--
+-- eta-case is going to be a macro which expands to a function application. The
+-- function is eta-case-aux, another macro, and the argument is (::), the
+-- pattern which we want to eta-expand. Except it's an expression now, not a
+-- pattern.
+--
+-- Most of the work is inside eta-case-aux, which is a type-aware macro. This
+-- means it can figure out that (::) has type
+--   (-> a (list a) (list a))
+-- and thus the corresponding pattern expects two arguments. Its job is then to
+-- "eta-expand" the pattern by adding those two arguments to both (::) and
+-- (pair), and then to generate a call to case, the builtin version of eta-case
+-- which does not support eta-expansion.
+--
+-- Let's break this work into smaller pieces.
+
+(meta  -- meta makes the definitions in this block available inside of macro
+       -- definitions, such as the definition of eta-case-aux.
+
+  -- First, let's extract the type of (::). We are working in the Macro monad,
+  -- whose (which-problem) primitive allows us to figure out the type of the
+  -- function
+  --   (eta-case-aux ...)
+  -- in the context of this function application.
+  --   ((eta-case-aux ...) (::))
+  -- The type of (eta-case-aux ...) must thus be
+  --   (-> <the-type-of-::> <some-output-type>)
+  -- And from that we can extract the type of (::).
+  --
+  --   (>>= get-type-of-lhs
+  --     (lambda (type) ...))
+  -- =>
+  --   type = (-> a (list a) (list a))
+  (define get-type-of-lhs
+    (the (Macro Type)  -- An optional type ascription, for clarity.
+                       -- get-type-of-lhs is a Macro action which
+                       -- returns a value of type Type.
+         (>>= (which-problem)
+           (lambda (problem)
+             (case problem
+               [(expression type)
+                (type-case type
+                  [(-> the-type-of-lhs _some-output-type)
+                   (pure the-type-of-lhs)])])))))
+
+  -- Second, let's count how many arguments the type of (::) has.
+  --
+  --   (type-arity (-> a (list a) (list a)))
+  -- =>
+  --   2
+  (defun type-arity (type)
+    (type-case type
+      [(-> _input-type output-type)
+       (>>= (type-arity output-type)
+         (lambda (n)
+           (pure (+ n 1))))]
+      [(else _)
+       (pure 0)]))
+
+  -- Next, let's add the missing arguments to (::) and (pair).
+  --
+  --   (add-temporaries-list 2 (list '::) (list 'pair))
+  -- =>
+  --   (pair (list ':: 'x1 'x2) (list 'pair 'x1 'x2))
+  (defun add-temporaries-list (n lhs rhs)
+    (if (<= n 0)
+      (pure (pair lhs rhs))
+      (>>= (make-temporary 'x)
+        (lambda (varname)
+          (>>= (add-temporaries-list (- n 1) lhs rhs)
+            (lambda (extended-lhs-and-rhs)
+              (case extended-lhs-and-rhs
+                [(pair extended-lhs extended-rhs)
+                (pure (pair (snoc extended-lhs varname)
+                            (snoc extended-rhs varname)))])))))))
+
+  -- It will be more convenient to have a version of add-temporaries-list which
+  -- operates on Syntax objects instead of lists of Syntax objects.
+  --
+  --   (add-temporaries-stx 2 '(::) '(pair))
+  -- =>
+  --   (pair '(:: x1 x2) '(pair x1 x2))
+  (define add-temporaries-stx
+    (the (-> Integer Syntax Syntax (Macro (Pair Syntax Syntax)))
+         (lambda (n lhs-stx rhs-stx)
+           (case (open-syntax lhs-stx)
+             [(list-contents lhs-list)
+              (case (open-syntax rhs-stx)
+                [(list-contents rhs-list)
+                 (>>= (add-temporaries-list n lhs-list rhs-list)
+                   (lambda (extended-lhs-and-rhs)
+                     (case extended-lhs-and-rhs
+                       [(pair extended-lhs extended-rhs)
+                        (pure (pair (close-syntax lhs-stx lhs-stx
+                                      (list-contents extended-lhs))
+                                    (close-syntax rhs-stx rhs-stx
+                                      (list-contents extended-rhs))))])))])]))))
+
+  -- Next, let's generate the call to case.
+  --
+  -- The stx argument is used to attach the line number of the eta-case call, so
+  -- that error messages point at that call site instead of this mk-case-call
+  -- definition.
+  --
+  -- The eta-case argument is the name of the eta-case macro, which will be in
+  -- scope at the call site of mk-case-call but is not in scope here.
+  (define mk-case-call
+    (the (-> Syntax Syntax Syntax Syntax Syntax (List Syntax) Syntax)
+         (lambda (stx eta-case scrutinee lhs rhs patterns)
+           `(case ,scrutinee
+              [,lhs ,rhs]
+              [(else evaluated-scrutinee)
+               ,(close-syntax stx stx
+                 (list-contents
+                   (:: eta-case
+                     (:: 'evaluated-scrutinee
+                       patterns))))]))))
+
+  (example
+    (mk-case-call 'stx 'eta-case '(list 1 2 3)
+      '(:: x xs) '(pair x xs)
+      (list '[(nil) (pair 0 (nil))])))
+  -- =>
+  --   '(case '(list 1 2 3)
+  --      [(:: x xs) (pair x xs)]
+  --      [(else evaluated-scrutinee)
+  --       (eta-case evaluated-scrutinee
+  --         [(nil) (pair 0 (nil))])])
+
+  -- Let's wrap that case expression inside a lambda which ignores the (::)
+  -- argument, as that argument was only useful to let eta-case-aux figure out
+  -- the type of (::).
+  (define mk-lambda
+    (the (-> Syntax Syntax)
+         (lambda (body)
+           `(lambda (_)
+             ,body))))
+
+  (example (mk-lambda '(case (list 1 2 3) ...)))
+  -- =>
+  --   '(lambda (_) (case (list 1 2 3) ...))
+
+  -- For eta-case, let's create a function application.
+  (define mk-apply
+    (the (-> Syntax Syntax Syntax)
+         (lambda (f x)
+           `(,f ,x))))
+
+  (example (mk-apply '(eta-case-aux ...) '(::)))
+  -- =>
+  --   '((eta-case-aux ...) (::))
+
+  -- And a call to eta-case-aux.
+  (define mk-aux-call
+    (the (-> Syntax Syntax Syntax Syntax Syntax (List Syntax) Syntax)
+         (lambda (stx eta-case-aux scrutinee lhs rhs branches)
+           (close-syntax stx stx
+             (list-contents
+               (:: eta-case-aux
+                 (:: scrutinee
+                   (:: lhs
+                     (:: rhs branches)))))))))
+
+  (example
+    (mk-aux-call 'stx 'eta-case-aux '(list 1 2 3)
+      '(::) '(pair)
+      (list
+        '[(nil) (pair 0 (nil))])))
+  -- =>
+  --   '(eta-case-aux '(list 1 2 3)
+  --      (::)
+  --      (pair)
+  --      [(nil) (pair 0 (nil))])
+)
+
+-- We can finally combine all of those parts into the eta-case and eta-case-aux
+-- macros.
+(define-macros (
+  --   (eta-case (list 1 2 3)
+  --     [(::) (pair)]
+  --     [(nil) (pair 0 (nil))])
+  -- =>
+  --   (eta-case-aux (list 1 2 3)
+  --     (::)
+  --     (pair)
+  --     [(nil) (pair 0 (nil))])
+  [eta-case
+   (lambda (stx)
+     (case (open-syntax stx)
+       [(list-contents
+          (:: _eta-case (:: scrutinee (nil))))
+        (pure `(case ,scrutinee))]
+       [(list-contents
+          (:: _eta-case (:: scrutinee (:: branch branches))))
+        (case (open-syntax branch)
+          [(list-contents
+             (:: lhs (:: rhs (nil))))
+           (pure (mk-apply
+                   (mk-aux-call stx 'eta-case-aux scrutinee lhs rhs branches)
+                   lhs))])]))]
+
+  --   ((eta-case-aux (list 1 2 3)
+  --      (::)
+  --      (pair)
+  --      [(nil) (pair 0 (nil))])
+  --    (::))
+  -- =>
+  --   ((lambda (_)
+  --      (case (list 1 2 3)
+  --        [(:: x1 x2) (pair x1 x2)]
+  --        [(else scrutinee)
+  --         (eta-case scrutinee
+  --           [(nil) (pair 0 (nil))])]))
+  --    (::))
+  [eta-case-aux
+   (lambda (stx)
+     (>>= get-type-of-lhs
+       (lambda (type)
+         (>>= (type-arity type)
+           (lambda (n)
+             (case (open-syntax stx)
+               [(list-contents
+                  (:: _eta-case-aux (:: scrutinee (:: lhs (:: rhs branches)))))
+                (>>= (add-temporaries-stx n lhs rhs)
+                  (lambda (extended-lhs-and-rhs)
+                    (case extended-lhs-and-rhs
+                      [(pair extended-lhs extended-rhs)
+                       (pure (mk-lambda
+                               (mk-case-call stx 'eta-case scrutinee
+                                 extended-lhs extended-rhs
+                                 branches)))])))]))))))]))
+
+-- There's just one tiny problem: (::) is not a valid expression in Klister.
+-- It's a macro which expects to always be called with two arguments.
+--
+--   (example
+--     ((eta-case-aux (list 1 2 3)
+--        (::)
+--        (pair)
+--        [(nil) (pair 0 (nil))])
+--      (::)))
+-- =>
+--   Wrong number of arguments for constructor ::
+--     Wanted 2
+--     Got 0
+
+-- We can fix that by defining cons as a lambda expression, because unlike a
+-- macro, a lambda expression supports being called with a smaller number of
+-- arguments.
+(defun cons-lambda (x xs)
+  (:: x xs))
+
+(example (cons-lambda))
+-- =>
+--   (lambda (x xs) (:: x xs))
+
+(example (cons-lambda 1))
+-- =>
+--   (lambda (xs) (:: 1 xs))
+
+(example (cons-lambda 1 (list 2 3)))
+-- =>
+--   (list 1 2 3)
+
+-- Unfortunately, this lambda expression only defines an expression, not a
+-- pattern.
+--
+--   (example
+--     (case (list 1 2 3)
+--       [(cons-lambda x xs)
+--        (pair x xs)]))
+-- =>
+--   (cons-lambda x xs):
+--     Used in a position expecting a pattern
+--     but is valid in a position expecting an expression
+
+-- This means we cannot use the trick of taking the pattern (::) and
+-- reinterpreting it as an expression in order to obtain its type. To allow
+-- eta-case to use that trick, we must instead define a macro which expands to
+-- the lambda expression in the expression context (that is, when the problem
+-- which needs to be solved is to produce an expression) and which leaves
+-- (:: x xs) alone in the pattern context.
+(define-macros (
+  [cons
+   (lambda (stx)
+     (>>= (which-problem)
+       (lambda (problem)
+         (case problem
+           [(expression _)
+            -- keep the same number of arguments, replacing cons with cons-lambda
+            (case (open-syntax stx)
+              [(list-contents (:: _cons args))
+               (pure (close-syntax stx stx
+                       (list-contents (:: 'cons-lambda args))))])]
+           [(pattern)
+            -- keep the same number of arguments, replacing cons with ::
+            (case (open-syntax stx)
+              [(list-contents (:: _cons args))
+               (pure (close-syntax stx stx
+                       (list-contents (:: ':: args))))])]))))]))
+
+(example (cons))
+-- =>
+--   (lambda (x xs) (:: x xs))
+
+(example (cons 1))
+-- =>
+--   (lambda (xs) (:: 1 xs))
+
+(example (cons 1 (list 2 3)))
+-- =>
+--   (list 1 2 3)
+
+(example
+  (case (list 1 2 3)
+    [(cons x xs)
+     (pair x xs)]))
+-- =>
+--   (pair 1 (list 2 3))
+
+-- All right, we can finally test eta-case and eta-case-aux!
+(example
+  ((eta-case-aux (list 1 2 3)
+     (cons)
+     (pair)
+     [(nil) (pair 0 (nil))])
+   (cons)))
+-- =>
+--   (pair 1 (list 2 3))
+
+(defun eta-list-to-pair (xs0)
+  (eta-case xs0
+    [(cons) (pair)]
+    [(nil) (pair 0 (nil))]))
+
+(example (eta-list-to-pair (list)))
+-- =>
+--   (pair 0 (nil))
+
+(example (eta-list-to-pair (list 1 2 3)))
+-- =>
+--   (pair 1 (list 2 3))
