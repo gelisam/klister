@@ -1,0 +1,23 @@
+name: hlint
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  hlint:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: haskell-actions/hlint-setup@v2
+        with:
+          version: "3.8"
+
+      - uses: haskell-actions/hlint-run@v2
+        with:
+          path: '["src/", "repl/", "tests/"]'
+          fail-on: suggestion
