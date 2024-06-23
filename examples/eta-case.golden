@@ -1,0 +1,22 @@
+(pair 0 (nil)) : (Pair Integer (List Integer))
+(pair 1 (:: 2 (:: 3 (nil)))) : (Pair Integer (List Integer))
+#[eta-case.kl:188.13-195.38]
+ <(case
+   (list 1 2 3)
+   ((:: x xs) (pair x xs))
+   ((else evaluated-scrutinee)
+    (eta-case evaluated-scrutinee ((nil) (pair 0 (nil))))))> : Syntax
+#[eta-case.kl:214.13-215.20]<(lambda (_) (case (list 1 2 3) ...))> : Syntax
+#[eta-case.kl:225.13-225.20]<((eta-case-aux ...) (::))> : Syntax
+#[eta-case.kl:243.19-243.22]
+ <(eta-case-aux (list 1 2 3) (::) (pair) ((nil) (pair 0 (nil))))> : Syntax
+#<closure> : ∀(α : *). (α → ((List α) → (List α)))
+#<closure> : ((List Integer) → (List Integer))
+(:: 1 (:: 2 (:: 3 (nil)))) : (List Integer)
+#<closure> : ∀(α : *). (α → ((List α) → (List α)))
+#<closure> : ((List Integer) → (List Integer))
+(:: 1 (:: 2 (:: 3 (nil)))) : (List Integer)
+(pair 1 (:: 2 (:: 3 (nil)))) : (Pair Integer (List Integer))
+(pair 1 (:: 2 (:: 3 (nil)))) : (Pair Integer (List Integer))
+(pair 0 (nil)) : (Pair Integer (List Integer))
+(pair 1 (:: 2 (:: 3 (nil)))) : (Pair Integer (List Integer))
