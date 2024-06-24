@@ -26,6 +26,7 @@ import Binding.Info
 import Core
 import Datatype
 import Env
+import Expander.Task
 import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
 import Kind
 import Module
@@ -34,6 +35,7 @@ import KlisterPath
 import Phase
 import Scope
 import ScopeSet
+import SplitCore
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -210,16 +212,16 @@ instance PrettyBinder VarInfo BinderPair where
     (annotate (BindingSite x) (text n), Env.singleton x ident ())
 
 instance PrettyBinder VarInfo TypePattern where
-  ppBind env (TypePattern t) =
+  ppBind env (TypeCtorPattern t) =
     ppBind env (fmap BinderPair t)
-  ppBind env (AnyType ident x) =
+  ppBind env (TypePatternVar ident x) =
     ppBind env (BinderPair (ident, x))
 
-instance PrettyBinder VarInfo ConstructorPattern where
-  ppBind env pat = ppBind env (unConstructorPattern pat)
+instance PrettyBinder VarInfo DataPattern where
+  ppBind env pat = ppBind env (unDataPattern pat)
 
-instance PrettyBinder VarInfo a => PrettyBinder VarInfo (ConstructorPatternF a) where
-  ppBind env (CtorPattern ctor subPats) =
+instance PrettyBinder VarInfo a => PrettyBinder VarInfo (DataPatternF a) where
+  ppBind env (DataCtorPattern ctor subPats) =
     case subPats of
       [] -> (pp env ctor, Env.empty)
       _nonEmpty ->
@@ -674,3 +676,71 @@ instance Pretty VarInfo ScopeSet where
 
 instance Pretty VarInfo KlisterPathError where
   pp _ = ppKlisterPathError
+
+
+instance Pretty VarInfo TaskAwaitMacro where
+  pp env (TaskAwaitMacro _ _ x deps _ stx) =
+    "(TaskAwaitMacro" <+>
+    pp env x <+>
+    vec (hsep $ map (pp env) deps) <+>
+    pp env stx <>
+    ")"
+
+instance Pretty VarInfo TaskAwaitMacroType where
+  pp env (TaskAwaitMacroType _ _ x _ stx) =
+    "(TaskAwaitMacroType" <+> pp env x <+> pp env stx <> ")"
+
+instance Pretty VarInfo ExpanderTask where
+  pp env (ExpandSyntax _dest stx) =
+    "(ExpandSyntax" <+> pp env stx <> ")"
+  pp env (AwaitingTypeCase loc _ _ _ _ _) =
+    "(AwaitingTypeCase" <+> pp env loc <+> "_)"
+  pp env (AwaitingDefn _x n _b _defn _t _dest stx) =
+    "(AwaitingDefn" <+> pp env n <+> pp env stx <> ")"
+  pp env (AwaitingMacro dest t) =
+    "(AwaitingMacro" <+> pp env dest <+> pp env t <> ")"
+  pp env (AwaitingType tdest tasks) =
+    "(AwaitingType" <+> pp env tdest <+>
+    vec (hsep $ map (pp env) tasks) <>
+    ")"
+  pp env (ExpandDeclForms _dest _scs waitingOn outScopesDest stx) =
+    "(ExpandDeclForms _" <+> pp env waitingOn <+> pp env outScopesDest <+> pp env stx <> ")"
+  pp env (InterpretMacroAction _dest act konts) =
+    "(InterpretMacroAction" <+>
+    pp env act <+>
+    vec (hsep $ map (pp env) konts) <>
+    ")"
+  pp env (ContinueMacroAction _dest value konts) =
+    "(ContinueMacroAction" <+>
+    pp env value <+>
+    vec (hsep $ map (pp env) konts) <>
+    ")"
+  pp env (EvalDefnAction var name phase _expr) =
+    "(EvalDefnAction" <+> pp env var <+> pp env name <+> pp env phase <> ")"
+  pp env (GeneralizeType e _ _) =
+    "(GeneralizeType" <+> pp env e <+> "_ _)"
+  pp env (ExpandVar t d x v) =
+    "(ExpandVar" <+> pp env t <+> pp env d <+> pp env x <+> pp env v <> ")"
+  pp env (EstablishConstructors _ _ dt _) =
+    "(EstablishConstructors" <+> pp env dt <> ")"
+  pp env (AwaitingPattern _ _ _ _) =
+    "(AwaitingPattern _)"
+  pp env (AwaitingTypePattern _ _ _ _) =
+    "(AwaitingTypePattern _)"
+
+-- SplitCorePtr
+-- PatternPtr
+-- TypePatternPtr
+-- TypeCtorPtr
+
+instance Pretty VarInfo SplitCorePtr where
+  pp _ = viaShow
+
+instance Pretty VarInfo PatternPtr where
+  pp _ = viaShow
+
+instance Pretty VarInfo TypePatternPtr where
+  pp _ = viaShow
+
+instance Pretty VarInfo TypeCtorPtr where
+  pp _ = viaShow

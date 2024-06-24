@@ -17,7 +17,6 @@ import qualified Data.Text as T
 
 import Core
 import Env
-import ShortShow
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -40,16 +39,6 @@ data EvalError
   | EvalErrorUser Syntax
   deriving (Show)
 makePrisms ''EvalError
-
-evalErrorText :: EvalError -> Text
-evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
-evalErrorText (EvalErrorType (TypeError expected got)) =
-  "Wrong type. Expected a " <> expected <> " but got a " <> got
-evalErrorText (EvalErrorCase loc val) =
-  "Didn't match any pattern at " <> T.pack (shortShow loc) <> ": " <> valueText val
-evalErrorText (EvalErrorUser what) =
-  T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
-  syntaxText what
 
 newtype Eval a = Eval
    { runEval :: ReaderT VEnv (ExceptT EvalError IO) a }
@@ -273,24 +262,24 @@ withScopeOf scope expr = do
     Syntax (Stx scopeSet loc _) ->
       pure $ ValueSyntax $ Syntax $ Stx scopeSet loc expr
 
-doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> Eval Value
+doDataCase :: SrcLoc -> Value -> [(DataPattern, Core)] -> Eval Value
 doDataCase loc v0 [] = throwError (EvalErrorCase loc v0)
 doDataCase loc v0 ((pat, rhs) : ps) =
-  match (doDataCase loc v0 ps) (eval rhs) [(unConstructorPattern pat, v0)]
+  match (doDataCase loc v0 ps) (eval rhs) [(unDataPattern pat, v0)]
   where
     match ::
       Eval Value {- ^ Failure continuation -} ->
       Eval Value {- ^ Success continuation, to be used in an extended environment -} ->
-      [(ConstructorPatternF ConstructorPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
+      [(DataPatternF DataPattern, Value)] {- ^ Subpatterns and their scrutinees -} ->
       Eval Value
     match _fk sk [] = sk
-    match fk sk ((CtorPattern ctor subPats, tgt) : more) =
+    match fk sk ((DataCtorPattern ctor subPats, tgt) : more) =
       case tgt of
         ValueCtor c args
           | c == ctor ->
             if length subPats /= length args
               then error $ "Type checker bug: wrong number of pattern vars for constructor " ++ show c
-              else match fk sk (zip (map unConstructorPattern subPats) args ++ more)
+              else match fk sk (zip (map unDataPattern subPats) args ++ more)
         _otherValue -> fk
     match fk sk ((PatternVar n x, tgt) : more) =
       match fk (withExtendedEnv n x tgt $ sk) more
@@ -300,7 +289,7 @@ doTypeCase blameLoc v0 [] = throwError (EvalErrorCase blameLoc (ValueType v0))
 doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0) ps) p rhs0 v0
   where
     match :: Eval Value -> TypePattern -> Core -> TyF Ty -> Eval Value
-    match next (TypePattern t) rhs scrut =
+    match next (TypeCtorPattern t) rhs scrut =
       case (t, scrut) of
         -- unification variables never match; instead, type-case remains stuck
         -- until the variable is unified with a concrete type constructor or a
@@ -315,7 +304,7 @@ doTypeCase blameLoc (Ty v0) ((p, rhs0) : ps) = match (doTypeCase blameLoc (Ty v0
                                 | arg <- args2]
                                 (eval rhs)
         (_, _) -> next
-    match _next (AnyType n x) rhs scrut =
+    match _next (TypePatternVar n x) rhs scrut =
       withExtendedEnv n x (ValueType (Ty scrut)) (eval rhs)
 
 doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> Eval Value

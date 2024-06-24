@@ -13,6 +13,7 @@
 {-# LANGUAGE TypeApplications #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE ViewPatterns #-}
+{-# OPTIONS -Wno-incomplete-uni-patterns #-}
 module Expander (
   -- * Concrete expanders
     expandExpr
@@ -51,6 +52,7 @@ import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
 import Data.Foldable
 import Data.Function (on)
 import Data.List (nub)
+import Data.List.NonEmpty (NonEmpty((:|)))
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import Data.Sequence (Seq(..))
@@ -79,7 +81,6 @@ import Parser
 import Phase
 import Pretty
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax
@@ -387,9 +388,11 @@ initializeKernel outputChannel = do
   traverse_ (uncurry addDeclPrimitive) declPrims
   traverse_ (uncurry addTypePrimitive) typePrims
   traverse_ (uncurry addPatternPrimitive) patternPrims
+  traverse_ (uncurry addTypePatternPrimitive) typePatternPrims
+  traverse_ (uncurry addTypeCtorPrimitive) typeCtorPrims
+  traverse_ (uncurry addPolyProblemPrimitive) polyProblemPrims
   traverse_ addDatatypePrimitive datatypePrims
   traverse_ addFunPrimitive funPrims
-  addUniversalPrimitive "with-unknown-type" Prims.makeLocalType
 
 
   where
@@ -595,7 +598,15 @@ initializeKernel outputChannel = do
       [ ("ScopeAction", [], [("flip", []), ("add", []), ("remove", [])])
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
-      , ("Problem", [], [("module", []), ("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
+      , ("Problem", [],
+          [ ("module", [])
+          , ("declaration", [])
+          , ("type", [])
+          , ("expression", [tType])
+          , ("pattern", [])
+          , ("type-pattern", [])
+          , ("type-constructor", [])
+          ])
       , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
       , ("List"
         , [KStar]
@@ -615,10 +626,10 @@ initializeKernel outputChannel = do
         )
       ]
 
-    modPrims :: [(Text, DeclTreePtr -> Syntax -> Expand ())]
+    modPrims :: [(Text, Prims.ModulePrim)]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
-    declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
+    declPrims :: [(Text, Prims.DeclPrim)]
     declPrims =
       [ ("define", Prims.define)
       , ("datatype", Prims.datatype)
@@ -631,7 +642,7 @@ initializeKernel outputChannel = do
       , ("group", Prims.group expandDeclForms)
       ]
 
-    exprPrims :: [(Text, Ty -> SplitCorePtr -> Syntax -> Expand ())]
+    exprPrims :: [(Text, Prims.ExprPrim)]
     exprPrims =
       [ ("error", Prims.err)
       , ("the", Prims.the)
@@ -663,8 +674,20 @@ initializeKernel outputChannel = do
       , ("type-case", Prims.typeCase)
       ]
 
-    patternPrims :: [(Text, Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())]
-    patternPrims = [("else", Prims.elsePattern)]
+    patternPrims :: [(Text, Prims.PatternPrim)]
+    patternPrims = []
+
+    typePatternPrims :: [(Text, Prims.TypePatternPrim)]
+    typePatternPrims = []
+
+    typeCtorPrims :: [(Text, Prims.TypeCtorPrim)]
+    typeCtorPrims = []
+
+    polyProblemPrims :: [(Text, Prims.PolyProblemPrim)]
+    polyProblemPrims =
+      [ ("else", Prims.elsePattern)
+      , ("with-unknown-type", Prims.makeLocalType)
+      ]
 
     addToKernel name p b =
       modifyState $ over expanderKernelExports $ addExport p name b
@@ -722,9 +745,25 @@ initializeKernel outputChannel = do
 
 
     addPatternPrimitive ::
-      Text -> (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
+      Text -> (Ty -> PatternPtr -> Syntax -> Expand ()) -> Expand ()
     addPatternPrimitive name impl = do
       let val = EPrimPatternMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+
+    addTypePatternPrimitive ::
+      Text -> (TypePatternPtr -> Syntax -> Expand ()) -> Expand ()
+    addTypePatternPrimitive name impl = do
+      let val = EPrimTypePatternMacro impl
+      b <- freshBinding
+      bind b val
+      addToKernel name runtime b
+
+    addTypeCtorPrimitive ::
+      Text -> (TypeCtorPtr -> Syntax -> Expand ()) -> Expand ()
+    addTypeCtorPrimitive name impl = do
+      let val = EPrimTypeCtorMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -761,9 +800,9 @@ initializeKernel outputChannel = do
       bind b val
       addToKernel name runtime b
 
-    addUniversalPrimitive :: Text -> (MacroDest -> Syntax -> Expand ()) -> Expand ()
-    addUniversalPrimitive name impl = do
-      let val = EPrimUniversalMacro impl
+    addPolyProblemPrimitive :: Text -> (MacroDest -> Syntax -> Expand ()) -> Expand ()
+    addPolyProblemPrimitive name impl = do
+      let val = EPrimPolyProblemMacro impl
       b <- freshBinding
       bind b val
       addToKernel name runtime b
@@ -895,6 +934,8 @@ runTask (tid, localData, task) = withLocal localData $ do
           expandOnePattern scrutT d stx
         TypePatternDest d ->
           expandOneTypePattern d stx
+        TypeCtorDest d ->
+          expandOneTypeCtor d stx
     AwaitingType tdest after ->
       linkedType tdest >>=
       \case
@@ -915,6 +956,7 @@ runTask (tid, localData, task) = withLocal localData $ do
             Ty (TyF (TMetaVar ptr) _) | ptr == ptr' -> stillStuck tid task
             _ -> forkAwaitingTypeCase loc dest (tMetaVar ptr') env cases kont
         other -> do
+          -- TODO: should this expandEval be 'inEarlierPhase'?
           selectedBranch <- expandEval $ withEnv env $ doTypeCase loc (Ty other) cases
           case selectedBranch of
             ValueMacroAction nextStep -> do
@@ -974,7 +1016,7 @@ runTask (tid, localData, task) = withLocal localData $ do
         Just newScopeSet ->
           expandDeclForms dest (earlierScopeSet <> newScopeSet) outScopesDest (addScopes newScopeSet stx)
     InterpretMacroAction dest act outerKont ->
-      interpretMacroAction dest act >>= \case
+      inEarlierPhase (interpretMacroAction dest act) >>= \case
         StuckOnType loc ty env cases innerKont ->
           forkAwaitingTypeCase loc dest ty env cases (innerKont ++ outerKont)
         Done value -> do
@@ -985,11 +1027,11 @@ runTask (tid, localData, task) = withLocal localData $ do
           forkExpandSyntax dest syntax
         other -> expandEval $ evalErrorType "syntax" other
     ContinueMacroAction dest value (closure:kont) -> do
-      result <- expandEval $ apply closure value
+      result <- inEarlierPhase $ expandEval $ apply closure value
       case result of
         ValueMacroAction macroAction -> do
           forkInterpretMacroAction dest macroAction kont
-        other -> expandEval $ evalErrorType "macro action" other
+        other -> inEarlierPhase $ expandEval $ evalErrorType "macro action" other
     EvalDefnAction x n p expr ->
       linkedCore expr >>=
       \case
@@ -1131,6 +1173,10 @@ expandOneTypePattern :: TypePatternPtr -> Syntax -> Expand ()
 expandOneTypePattern dest stx =
   expandOneForm (TypePatternDest dest) stx
 
+expandOneTypeCtor :: TypeCtorPtr -> Syntax -> Expand ()
+expandOneTypeCtor dest stx =
+  expandOneForm (TypeCtorDest dest) stx
+
 
 
 -- | Insert a function application marker with a lexical context from
@@ -1159,40 +1205,44 @@ addStringLiteral (Syntax (Stx scs loc _)) s =
     stringLiteral = Syntax (Stx scs loc (Id "#%string-literal"))
     s' = Syntax (Stx scs loc (String s))
 
-problemCategory :: MacroDest -> SyntacticCategory
-problemCategory (ModuleDest {}) = ModuleCat
-problemCategory (DeclTreeDest {}) = DeclarationCat
-problemCategory (TypeDest {}) = TypeCat
-problemCategory (ExprDest {}) = ExpressionCat
-problemCategory (PatternDest {}) = PatternCaseCat
-problemCategory (TypePatternDest {}) = TypePatternCaseCat
-
 requireDeclarationCat :: Syntax -> MacroDest -> Expand (DeclTreePtr, DeclOutputScopesPtr)
 requireDeclarationCat _ (DeclTreeDest dest outScopesDest) = return (dest, outScopesDest)
 requireDeclarationCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon DeclarationCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon DeclarationCat :| []) (mortise $ problemCategory other)
 
 requireTypeCat :: Syntax -> MacroDest -> Expand (Kind, SplitTypePtr)
 requireTypeCat _ (TypeDest kind dest) = return (kind, dest)
 requireTypeCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon TypeCat :| []) (mortise $ problemCategory other)
 
 requireExpressionCat :: Syntax -> MacroDest -> Expand (Ty, SplitCorePtr)
 requireExpressionCat _ (ExprDest ty dest) = return (ty, dest)
 requireExpressionCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)
 
-requirePatternCat :: Syntax -> MacroDest -> Expand (Either (Ty, PatternPtr) TypePatternPtr)
+requirePatternCat :: Syntax -> MacroDest -> Expand (Ty, PatternPtr)
 requirePatternCat _ (PatternDest scrutTy dest) =
-  return $ Left (scrutTy, dest)
-requirePatternCat _ (TypePatternDest dest) =
-  return $ Right dest
+  return (scrutTy, dest)
 requirePatternCat stx other =
   throwError $
-  WrongSyntacticCategory stx (tenon PatternCaseCat) (mortise $ problemCategory other)
+  WrongSyntacticCategory stx (tenon PatternCat :| []) (mortise $ problemCategory other)
+
+requireTypePatternCat :: Syntax -> MacroDest -> Expand TypePatternPtr
+requireTypePatternCat _ (TypePatternDest dest) =
+  return dest
+requireTypePatternCat stx other =
+  throwError $
+  WrongSyntacticCategory stx (tenon TypePatternCat :| []) (mortise $ problemCategory other)
+
+requireTypeCtorCat :: Syntax -> MacroDest -> Expand TypeCtorPtr
+requireTypeCtorCat _ (TypeCtorDest dest) =
+  return dest
+requireTypeCtorCat stx other =
+  throwError $
+  WrongSyntacticCategory stx (tenon TypeCtorCat :| []) (mortise $ problemCategory other)
 
 
 expandOneForm :: MacroDest -> Syntax -> Expand ()
@@ -1238,17 +1288,17 @@ expandOneForm prob stx
                     pure ptr
                   modifyState $ set (expanderPatternBinders . at dest) $ Just $ Left subPtrs
                   linkPattern dest $
-                    CtorPattern ctor subPtrs
+                    DataCtorPattern ctor subPtrs
             other ->
               throwError $
-              WrongSyntacticCategory stx (tenon ExpressionCat) (mortise $ problemCategory other)
+              WrongSyntacticCategory stx (tenon ExpressionCat :| []) (mortise $ problemCategory other)
         EPrimModuleMacro impl ->
           case prob of
             ModuleDest dest -> do
               impl dest stx
             other ->
               throwError $
-              WrongSyntacticCategory stx (tenon ModuleCat) (mortise $ problemCategory other)
+              WrongSyntacticCategory stx (tenon ModuleCat :| []) (mortise $ problemCategory other)
         EPrimDeclMacro impl -> do
           (dest, outScopesDest) <- requireDeclarationCat stx prob
           impl dest outScopesDest stx
@@ -1260,11 +1310,17 @@ expandOneForm prob stx
               implP dest stx
             otherDest ->
               throwError $
-              WrongSyntacticCategory stx (tenon TypeCat) (mortise $ problemCategory otherDest)
+              WrongSyntacticCategory stx (tenon TypeCat :| []) (mortise $ problemCategory otherDest)
         EPrimPatternMacro impl -> do
-          dest <- requirePatternCat stx prob
+          (scrutTy, dest) <- requirePatternCat stx prob
+          impl scrutTy dest stx
+        EPrimTypePatternMacro impl -> do
+          dest <- requireTypePatternCat stx prob
           impl dest stx
-        EPrimUniversalMacro impl ->
+        EPrimTypeCtorMacro impl -> do
+          dest <- requireTypeCtorCat stx prob
+          impl dest stx
+        EPrimPolyProblemMacro impl ->
           impl prob stx
         EVarMacro var -> do
           (t, dest) <- requireExpressionCat stx prob
@@ -1306,7 +1362,7 @@ expandOneForm prob stx
                           ValueSyntax $ addScope p stepScope stx
               case macroVal of
                 ValueMacroAction act -> do
-                  res <- interpretMacroAction prob act
+                  res <- inEarlierPhase $ interpretMacroAction prob act
                   case res of
                     StuckOnType loc ty env cases kont ->
                       forkAwaitingTypeCase loc prob ty env cases kont
@@ -1340,6 +1396,8 @@ expandOneForm prob stx
         throwError $ InternalError "All patterns should be identifier-headed"
       TypePatternDest {} ->
         throwError $ InternalError "All type patterns should be identifier-headed"
+      TypeCtorDest {} ->
+        throwError $ InternalError "All type constructors should be identifier-headed"
 
 
 expandModuleForm :: DeclTreePtr -> Syntax -> Expand ()
@@ -1432,8 +1490,8 @@ interpretMacroAction prob =
         getIdent (ValueSyntax stx) = mustBeIdent stx
         getIdent _other = throwError $ InternalError $ "Not a syntax object in " ++ opName
         compareFree id1 id2 = do
-          b1 <- resolve id1
-          b2 <- resolve id2
+          b1 <- inLaterPhase $ resolve id1
+          b2 <- inLaterPhase $ resolve id2
           return $ Done $
             flip primitiveCtor [] $
             if b1 == b2 then "true" else "false"
@@ -1462,5 +1520,6 @@ interpretMacroAction prob =
         ExprDest t _stx -> pure $ Done $ primitiveCtor "expression" [ValueType t]
         PatternDest {} -> pure $ Done $ primitiveCtor "pattern" []
         TypePatternDest {} -> pure $ Done $ primitiveCtor "type-pattern" []
+        TypeCtorDest {} -> pure $ Done $ primitiveCtor "type-constructor" []
     MacroActionTypeCase env loc ty cases -> do
       pure $ StuckOnType loc ty env cases []

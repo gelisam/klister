@@ -31,7 +31,6 @@ import Alpha
 import Datatype
 import ModuleName
 import Phase
-import ShortShow
 import Syntax
 import Syntax.SrcLoc
 import Type
@@ -73,26 +72,26 @@ instance Show MacroVar where
   show (MacroVar i) = "(MacroVar " ++ show (hashUnique i) ++ ")"
 
 data TypePattern
-  = TypePattern (TyF (Ident, Var))
-  | AnyType Ident Var
+  = TypeCtorPattern (TyF (Ident, Var))
+  | TypePatternVar Ident Var
   deriving (Data, Eq, Show)
 
-data ConstructorPatternF pat
-  = CtorPattern !Constructor [pat]
+data DataPatternF pat
+  = DataCtorPattern !Constructor [pat]
   | PatternVar Ident Var
   deriving (Data, Eq, Foldable, Functor, Show, Traversable)
-makePrisms ''ConstructorPatternF
+makePrisms ''DataPatternF
 
-newtype ConstructorPattern =
-  ConstructorPattern { unConstructorPattern :: ConstructorPatternF ConstructorPattern }
+newtype DataPattern =
+  DataPattern { unDataPattern :: DataPatternF DataPattern }
   deriving (Data, Eq, Show)
-makePrisms ''ConstructorPattern
+makePrisms ''DataPattern
 
-instance Phased a => Phased (ConstructorPatternF a) where
+instance Phased a => Phased (DataPatternF a) where
   shift i = fmap (shift i)
 
-instance Phased ConstructorPattern where
-  shift i = over _ConstructorPattern (shift i)
+instance Phased DataPattern where
+  shift i = over _DataPattern (shift i)
 
 instance Phased TypePattern where
   shift _ = id
@@ -316,7 +315,7 @@ instance (Phased typePat, Phased pat, Phased core) => Phased (CoreF typePat pat 
 
 -- | A fully-expanded expression, ready to be evaluated.
 newtype Core = Core
-  { unCore :: CoreF TypePattern ConstructorPattern Core }
+  { unCore :: CoreF TypePattern DataPattern Core }
   deriving (Data, Eq, Show)
 makePrisms ''Core
 
@@ -386,13 +385,13 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
   alphaCheck _ _ = notAlphaEquivalent
 
 
-instance AlphaEq ConstructorPattern where
+instance AlphaEq DataPattern where
   alphaCheck p1 p2 =
-    alphaCheck (unConstructorPattern p1) (unConstructorPattern p2)
+    alphaCheck (unDataPattern p1) (unDataPattern p2)
 
-instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
-  alphaCheck (CtorPattern c1 vars1)
-             (CtorPattern c2 vars2) = do
+instance AlphaEq a => AlphaEq (DataPatternF a) where
+  alphaCheck (DataCtorPattern c1 vars1)
+             (DataCtorPattern c2 vars2) = do
     alphaCheck c1 c2
     for_ (zip vars1 vars2) (uncurry alphaCheck)
   alphaCheck (PatternVar _ x1)
@@ -401,11 +400,11 @@ instance AlphaEq a => AlphaEq (ConstructorPatternF a) where
   alphaCheck _ _ = notAlphaEquivalent
 
 instance AlphaEq TypePattern where
-  alphaCheck (TypePattern t1)
-             (TypePattern t2) =
+  alphaCheck (TypeCtorPattern t1)
+             (TypeCtorPattern t2) =
     alphaCheck t1 t2
-  alphaCheck (AnyType _ x1)
-             (AnyType _ x2) =
+  alphaCheck (TypePatternVar _ x1)
+             (TypePatternVar _ x2) =
     alphaCheck x1 x2
   alphaCheck _ _ = notAlphaEquivalent
 
@@ -453,227 +452,3 @@ instance AlphaEq core => AlphaEq (ScopedList core) where
              (ScopedList elements2 scope2) = do
     alphaCheck elements1 elements2
     alphaCheck scope1    scope2
-
-
-instance ShortShow a => ShortShow (SyntaxError a) where
-  shortShow (SyntaxError locations message)
-    = "(SyntaxError "
-   ++ shortShow locations
-   ++ " "
-   ++ shortShow message
-   ++ ")"
-
-instance ShortShow Var where
-  shortShow (Var x) = shortShow x
-
-instance (ShortShow typePat, ShortShow pat, ShortShow core) =>
-         ShortShow (CoreF typePat pat core) where
-  shortShow (CoreVar var)
-    = "(Var "
-   ++ shortShow var
-   ++ ")"
-  shortShow (CoreLet _ x def body)
-    = "(Let "
-   ++ shortShow x
-   ++ " "
-   ++ shortShow def
-   ++ " "
-   ++ shortShow body
-   ++ ")"
-  shortShow (CoreLetFun _ f _ x def body)
-    = "(LetFun "
-   ++ shortShow f
-   ++ " "
-   ++ shortShow x
-   ++ " "
-   ++ shortShow def
-   ++ " "
-   ++ shortShow body
-   ++ ")"
-  shortShow (CoreLam _ x body)
-    = "(Lam "
-   ++ shortShow x
-   ++ " "
-   ++ shortShow body
-   ++ ")"
-  shortShow (CoreApp fun arg)
-    = "(App "
-   ++ shortShow fun
-   ++ " "
-   ++ shortShow arg
-   ++ ")"
-  shortShow (CoreCtor ctor args)
-    = "(Ctor "
-   ++ shortShow ctor
-   ++ " "
-   ++ shortShow args
-   ++ ")"
-  shortShow (CoreDataCase _ scrut cases)
-    = "(DataCase "
-   ++ shortShow scrut
-   ++ " "
-   ++ intercalate ", " (map shortShow cases)
-   ++ ")"
-  shortShow (CoreInteger i)
-    = show i
-  shortShow (CoreString str)
-    = "(String " ++ show str ++ ")"
-  shortShow (CoreError what)
-    = "(Error "
-   ++ shortShow what
-   ++ ")"
-  shortShow (CorePureMacro x)
-    = "(PureMacro "
-   ++ shortShow x
-   ++ ")"
-  shortShow (CoreBindMacro hd tl)
-    = "(BindMacro "
-   ++ shortShow hd
-   ++ " "
-   ++ shortShow tl
-   ++ ")"
-  shortShow (CoreSyntaxError syntaxError)
-    = "(SyntaxError "
-   ++ shortShow syntaxError
-   ++ ")"
-  shortShow (CoreIdentEq how e1 e2)
-    = "(CoreIdentEq " ++ show how
-    ++ " " ++ shortShow e1
-    ++ " " ++ shortShow e2 ++ ")"
-  shortShow (CoreLog msg)
-    = "(CoreLog " ++ shortShow msg ++ ")"
-  shortShow CoreMakeIntroducer
-    = "(CoreMakeIntroducer)"
-  shortShow CoreWhichProblem
-    = "(CoreWhichProblem)"
-  shortShow (CoreSyntax syntax)
-    = "(Syntax "
-   ++ shortShow syntax
-   ++ ")"
-  shortShow (CoreCase _ scrutinee cases)
-    = "(Case "
-   ++ shortShow scrutinee
-   ++ " "
-   ++ shortShow cases
-   ++ ")"
-  shortShow (CoreIdent scopedIdent)
-    = "(Ident "
-   ++ shortShow scopedIdent
-   ++ ")"
-  shortShow (CoreEmpty scopedEmpty)
-    = "(Empty "
-   ++ shortShow scopedEmpty
-   ++ ")"
-  shortShow (CoreCons scopedCons)
-    = "(Cons "
-   ++ shortShow scopedCons
-   ++ ")"
-  shortShow (CoreList scopedVec)
-    = "(List "
-   ++ shortShow scopedVec
-   ++ ")"
-  shortShow (CoreIntegerSyntax scopedStr)
-    = "(IntegerSyntax "
-   ++ shortShow scopedStr
-   ++ ")"
-  shortShow (CoreStringSyntax scopedStr)
-    = "(StringSyntax "
-   ++ shortShow scopedStr
-   ++ ")"
-  shortShow (CoreReplaceLoc loc stx)
-    = "(ReplaceLoc "
-   ++ shortShow loc ++ " "
-   ++ shortShow stx ++ ")"
-  shortShow (CoreTypeCase _ scrut pats)
-    = "(TypeCase "
-   ++ shortShow scrut
-   ++ " "
-   ++ intercalate ", " (map shortShow pats)
-   ++ ")"
-
-
-instance ShortShow Core where
-  shortShow (Core x) = shortShow x
-
-instance ShortShow ConstructorPattern where
-  shortShow = shortShow . unConstructorPattern
-
-instance ShortShow a => ShortShow (ConstructorPatternF a) where
-  shortShow (CtorPattern ctor vars) =
-    "(" ++ shortShow ctor ++
-    " " ++ intercalate " " (map shortShow vars) ++
-    ")"
-  shortShow (PatternVar ident _var) =
-    "(PatternVar " ++ shortShow ident ++ " )"
-
-instance ShortShow TypePattern where
-  shortShow (TypePattern t) =
-    "(" ++ shortShow (fmap fst t) ++ ")"
-  shortShow (AnyType ident _var) =
-    "(AnyConstructor " ++ shortShow ident ++ " )"
-
-
-instance ShortShow SyntaxPattern where
-  shortShow (SyntaxPatternIdentifier _ x) = shortShow x
-  shortShow (SyntaxPatternInteger _ x) = "(Integer " ++ shortShow x ++ ")"
-  shortShow (SyntaxPatternString _ x) = "(String " ++ shortShow x ++ ")"
-  shortShow SyntaxPatternEmpty = "Empty"
-  shortShow (SyntaxPatternCons _ x _ xs)
-    = "(Cons "
-   ++ shortShow x
-   ++ " "
-   ++ shortShow xs
-   ++ ")"
-  shortShow (SyntaxPatternList xs)
-    = "(List "
-   ++ shortShow (map snd xs)
-   ++ ")"
-  shortShow SyntaxPatternAny = "_"
-
-instance ShortShow core => ShortShow (ScopedIdent core) where
-  shortShow (ScopedIdent ident scope)
-    = "(ScopedIdent "
-   ++ shortShow ident
-   ++ " "
-   ++ shortShow scope
-   ++ ")"
-
-instance ShortShow core => ShortShow (ScopedEmpty core) where
-  shortShow (ScopedEmpty scope)
-    = "(ScopedEmpty "
-   ++ shortShow scope
-   ++ ")"
-
-instance ShortShow core => ShortShow (ScopedCons core) where
-  shortShow (ScopedCons hd tl scope)
-    = "(ScopedCons "
-   ++ shortShow hd
-   ++ " "
-   ++ shortShow tl
-   ++ " "
-   ++ shortShow scope
-   ++ ")"
-
-instance ShortShow core => ShortShow (ScopedList core) where
-  shortShow (ScopedList elements scope)
-    = "(ScopedList "
-   ++ shortShow elements
-   ++ " "
-   ++ shortShow scope
-   ++ ")"
-
-instance ShortShow core => ShortShow (ScopedInteger core) where
-  shortShow (ScopedInteger str scope)
-    = "(ScopedInteger "
-   ++ shortShow str
-   ++ " "
-   ++ shortShow scope
-   ++ ")"
-
-instance ShortShow core => ShortShow (ScopedString core) where
-  shortShow (ScopedString str scope)
-    = "(ScopedString "
-   ++ shortShow str
-   ++ " "
-   ++ shortShow scope
-   ++ ")"

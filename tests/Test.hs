@@ -46,7 +46,6 @@ import Pretty
 import Scope
 import qualified ScopeSet
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
@@ -608,8 +607,8 @@ genSyntaxError subgen =
   <*> subgen
 
 genLam ::
-  (CoreF TypePattern ConstructorPattern Bool -> GenT IO a) ->
-  GenT IO (CoreF TypePattern ConstructorPattern a)
+  (CoreF TypePattern DataPattern Bool -> GenT IO a) ->
+  GenT IO (CoreF TypePattern DataPattern a)
 genLam subgen = do
   ident <- Gen.generalize genIdent
   var <- genVar
@@ -621,21 +620,21 @@ genLam subgen = do
 -- which subtree of 'CoreF' they're being asked to generate.
 genCoreF ::
   forall a.
-  (Maybe (GenT IO Var) -> CoreF TypePattern ConstructorPattern Bool ->
+  (Maybe (GenT IO Var) -> CoreF TypePattern DataPattern Bool ->
    GenT IO a) {- ^ Generic sub-generator -} ->
   Maybe (GenT IO Var) {- ^ Variable generator -} ->
-  GenT IO (CoreF TypePattern ConstructorPattern a)
+  GenT IO (CoreF TypePattern DataPattern a)
 genCoreF subgen varGen =
   let sameVars = subgen varGen
       -- A unary constructor with no binding
       unary ::
-        (forall b. b -> CoreF TypePattern ConstructorPattern b) ->
-        GenT IO (CoreF TypePattern ConstructorPattern a)
+        (forall b. b -> CoreF TypePattern DataPattern b) ->
+        GenT IO (CoreF TypePattern DataPattern a)
       unary constructor = constructor <$> sameVars (constructor True)
       -- A binary constructor with no binding
       binary ::
-        (forall b. b -> b -> CoreF TypePattern ConstructorPattern b) ->
-        GenT IO (CoreF TypePattern ConstructorPattern a)
+        (forall b. b -> b -> CoreF TypePattern DataPattern b) ->
+        GenT IO (CoreF TypePattern DataPattern a)
       binary constructor =
         constructor
         <$> sameVars (constructor True False)
@@ -653,7 +652,7 @@ genCoreF subgen varGen =
         -- , CoreIdentEq _ <$> sameVars <*> sameVars
         -- , CoreSyntax Syntax
         -- , CoreCase sameVars [(Pattern, core)]
-        -- , CoreDataCase core [(ConstructorPattern, core)]
+        -- , CoreDataCase core [(DataPattern, core)]
         -- , CoreIdent (ScopedIdent core)
         -- , CoreEmpty (ScopedEmpty core)
         -- , CoreCons (ScopedCons core)

@@ -45,6 +45,7 @@ module Expander.Monad
   , getDecl
   , getState
   , inEarlierPhase
+  , inLaterPhase
   , inPhase
   , isExprChecked
   , importing
@@ -187,7 +188,6 @@ import KlisterPath
 import PartialCore
 import PartialType
 import Phase
-import ShortShow
 import SplitCore
 import SplitType
 import Scope
@@ -237,8 +237,10 @@ data EValue
     -- ^ For type-level special forms - first as types, then as type patterns
   | EPrimModuleMacro (DeclTreePtr -> Syntax -> Expand ())
   | EPrimDeclMacro (DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())
-  | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
-  | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
+  | EPrimPatternMacro (Ty -> PatternPtr -> Syntax -> Expand ())
+  | EPrimTypePatternMacro (TypePatternPtr -> Syntax -> Expand ())
+  | EPrimTypeCtorMacro (TypeCtorPtr -> Syntax -> Expand ())
+  | EPrimPolyProblemMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
   | ETypeVar !Kind !Natural
   -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
@@ -286,7 +288,7 @@ data ExpanderState = ExpanderState
   , _expanderTasks              :: [(TaskID, ExpanderLocal, ExpanderTask)]
   , _expanderOriginLocations    :: !(Store SplitCorePtr SrcLoc)
   , _expanderCompletedCore      :: !(Store SplitCorePtr (CoreF TypePatternPtr PatternPtr SplitCorePtr))
-  , _expanderCompletedPatterns  :: !(Store PatternPtr (ConstructorPatternF PatternPtr))
+  , _expanderCompletedPatterns  :: !(Store PatternPtr (DataPatternF PatternPtr))
   , _expanderCompletedTypePatterns :: !(Store TypePatternPtr TypePattern)
   , _expanderPatternBinders     :: !(Store PatternPtr (Either [PatternPtr] (Scope, Ident, Var, SchemePtr)))
   , _expanderTypePatternBinders :: !(Store TypePatternPtr [(Scope, Ident, Var, SchemePtr)])
@@ -407,6 +409,10 @@ inEarlierPhase :: Expand a -> Expand a
 inEarlierPhase act =
   Expand $ local (over (expanderLocal . expanderPhase) prior) $ runExpand act
 
+inLaterPhase :: Expand a -> Expand a
+inLaterPhase act =
+  Expand $ local (over (expanderLocal . expanderPhase) posterior) $ runExpand act
+
 moduleScope :: ModuleName -> Expand Scope
 moduleScope mn = moduleScope' mn
 
@@ -442,7 +448,7 @@ linkExpr :: SplitCorePtr -> CoreF TypePatternPtr PatternPtr SplitCorePtr -> Expa
 linkExpr dest layer =
   modifyState $ over expanderCompletedCore (<> S.singleton dest layer)
 
-linkPattern :: PatternPtr -> ConstructorPatternF PatternPtr -> Expand ()
+linkPattern :: PatternPtr -> DataPatternF PatternPtr -> Expand ()
 linkPattern dest pat =
   modifyState $ over expanderCompletedPatterns (<> S.singleton dest pat)
 

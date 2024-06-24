@@ -38,7 +38,6 @@ import Data.Typeable
 import Alpha
 import Phase
 import Scope
-import ShortShow
 
 import Util.Store (Store)
 import qualified Util.Store as St
@@ -52,10 +51,6 @@ data ScopeSet = ScopeSet
   }
   deriving (Data, Eq, Ord, Show)
 makeLenses ''ScopeSet
-
-instance ShortShow ScopeSet where
-  shortShow (ScopeSet always phased) =
-    "{" ++ show (Set.toList always) ++ " | " ++ show (St.toList phased) ++ "}"
 
 instance Semigroup ScopeSet where
   scs1 <> scs2 =

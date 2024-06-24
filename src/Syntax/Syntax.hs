@@ -20,7 +20,6 @@ import ModuleName
 import Phase
 import Scope
 import ScopeSet
-import ShortShow
 import Syntax.SrcLoc
 
 import qualified Util.Set   as Set
@@ -108,18 +107,6 @@ instance AlphaEq Syntax where
              (Syntax x2) = do
     alphaCheck x1 x2
 
-
-instance ShortShow a => ShortShow (Stx a) where
-  shortShow (Stx _ _ x) = shortShow x
-
-instance ShortShow a => ShortShow (ExprF a) where
-  shortShow (Id x) = shortShow x
-  shortShow (String s) = show s
-  shortShow (List xs) = shortShow xs
-  shortShow (Integer s) = show s
-
-instance ShortShow Syntax where
-  shortShow (Syntax x) = shortShow x
 
 addScopes' :: HasScopes p => ScopeSet -> p -> p
 #ifndef KDEBUG

@@ -1,10 +1,12 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings     #-}
+{-# LANGUAGE UndecidableInstances #-}
 module Expander.Error
   ( ExpansionErr(..)
-  , SyntacticCategory(..)
+  , SyntacticCategory(..), problemCategory
   , TypeCheckError(..)
   , Tenon, tenon, Mortise, mortise
   , notRightLength
@@ -12,6 +14,7 @@ module Expander.Error
 
 import Control.Lens
 import Numeric.Natural
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Text (Text)
 import Data.Sequence (Seq)
 import qualified Data.Text as T
@@ -44,7 +47,7 @@ data ExpansionErr
   | NotInteger Syntax
   | NotString Syntax
   | NotModName Syntax
-  | NotRightLength [Natural] Syntax
+  | NotRightLength (NonEmpty Natural) Syntax
   | NotVec Syntax
   | NotImportSpec Syntax
   | NotExportSpec Syntax
@@ -59,7 +62,7 @@ data ExpansionErr
   | NotExported Ident Phase
   | ReaderError Text
   | WrongSyntacticCategory Syntax
-      (Tenon SyntacticCategory)
+      (NonEmpty (Tenon SyntacticCategory))
       (Mortise SyntacticCategory)
   | NotValidType Syntax
   | TypeCheckError TypeCheckError
@@ -89,7 +92,7 @@ tenon :: a -> Tenon a
 tenon = Tenon
 
 notRightLength :: Natural -> Syntax -> ExpansionErr
-notRightLength n = NotRightLength [n]
+notRightLength n = NotRightLength (n :| [])
 
 data TypeCheckError
   = TypeMismatch (Maybe SrcLoc) Ty Ty (Maybe (Ty, Ty))
@@ -103,9 +106,30 @@ data SyntacticCategory
   | DeclarationCat
   | TypeCat
   | ExpressionCat
-  | PatternCaseCat
-  | TypePatternCaseCat
+  | PatternCat
+  | TypePatternCat
+  | TypeCtorCat
   deriving Show
+
+problemCategory :: MacroDest -> SyntacticCategory
+problemCategory (ModuleDest {}) = ModuleCat
+problemCategory (DeclTreeDest {}) = DeclarationCat
+problemCategory (TypeDest {}) = TypeCat
+problemCategory (ExprDest {}) = ExpressionCat
+problemCategory (PatternDest {}) = PatternCat
+problemCategory (TypePatternDest {}) = TypePatternCat
+problemCategory (TypeCtorDest {}) = TypeCtorCat
+
+alts
+  :: NonEmpty (Doc ann) -> Doc ann
+alts (x :| [])
+  = x
+alts (x :| y : [])
+  = x <> " or " <> y
+alts (x :| y : z : [])
+  = x <> ", " <> y <> ", or " <> z
+alts (x1 :| x2 : xs)
+  = x1 <> ", " <> alts (x2 :| xs)
 
 instance Pretty VarInfo ExpansionErr where
   pp env (Ambiguous p x candidates) =
@@ -148,19 +172,9 @@ instance Pretty VarInfo ExpansionErr where
          ]
   pp env (NotRightLength lengths0 stx) =
     hang 2 $ group $
-    vsep [ text "Expected" <+> alts lengths0 <+> text "entries between parentheses, but got"
+    vsep [ text "Expected" <+> alts (fmap viaShow lengths0) <+> text "entries between parentheses, but got"
          , pp env stx
          ]
-    where
-      alts :: [Natural] -> Doc ann
-      alts []
-        = error "internal error: NotRightLength doesn't offer any acceptable lengths"
-      alts [len]
-        = viaShow len
-      alts [len1, len2]
-        = viaShow len1 <+> "or" <+> viaShow len2
-      alts (len:lengths)
-        = viaShow len <> "," <+> alts lengths
   pp env (NotVec stx) =
     hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
   pp env (NotImportSpec stx) =
@@ -200,16 +214,16 @@ instance Pretty VarInfo ExpansionErr where
     text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
     vsep (map text (T.lines txt))
-  pp env (WrongSyntacticCategory stx is shouldBe) =
+  pp env (WrongSyntacticCategory stx tenons _mortise) =
     hang 2 $ group $
     vsep [ pp env stx <> text ":"
          , group $ vsep [ group $ hang 2 $
                           vsep [ text "Used in a position expecting"
-                               , pp env (unMortise shouldBe)
+                               , pp env $ unMortise _mortise
                                ]
                         , group $ hang 2 $
                           vsep [ text "but is valid in a position expecting"
-                               , pp env (unTenon is)
+                               , alts $ fmap (pp env . unTenon) tenons
                                ]
                         ]
          ]
@@ -275,5 +289,6 @@ instance Pretty VarInfo SyntacticCategory where
   pp _env ModuleCat = text "a module"
   pp _env TypeCat = text "a type"
   pp _env DeclarationCat = text "a top-level declaration or example"
-  pp _env PatternCaseCat = text "a pattern"
-  pp _env TypePatternCaseCat = text "a typecase pattern"
+  pp _env PatternCat = text "a pattern"
+  pp _env TypePatternCat = text "a typecase pattern"
+  pp _env TypeCtorCat = text "a type constructor"

@@ -10,7 +10,8 @@ module Expander.Syntax where
 import Control.Monad.Except
 import Control.Monad.IO.Class
 import Data.Functor.Identity (Identity(Identity))
-import Data.List (nub, sort)
+import Data.List.NonEmpty (NonEmpty((:|)))
+import qualified Data.List.NonEmpty as NonEmpty
 import Data.Text (Text)
 import qualified Data.Text as T
 import Numeric.Natural
@@ -79,7 +80,7 @@ mustHaveEntries other = do
   throwError (NotList other)
 
 class FixedLengthList item r where
-  checkLength :: [item] -> Either [Natural] r
+  checkLength :: [item] -> Either (NonEmpty Natural) r
 
 instance ( FixedLengthList item a
          , FixedLengthList item b
@@ -92,43 +93,43 @@ instance ( FixedLengthList item a
         (_, Right b)
           -> pure (Right b)
         (Left lengths1, Left lengths2)
-          -> Left $ nub $ sort (lengths1 ++ lengths2)
+          -> Left $ NonEmpty.nub $ NonEmpty.sort (lengths1 <> lengths2)
 
 instance FixedLengthList item () where
   checkLength []
     = pure ()
   checkLength _
-    = Left [0]
+    = Left (0 :| [])
 
 instance a ~ item => FixedLengthList item (Identity a) where
   checkLength [x]
     = pure (Identity x)
   checkLength _
-    = Left [1]
+    = Left (1 :| [])
 
 instance (a ~ item, b ~ item) => FixedLengthList item (a, b) where
   checkLength [x, y]
     = return (x, y)
   checkLength _
-    = Left [2]
+    = Left (2 :| [])
 
 instance (a ~ item, b ~ item, c ~ item) => FixedLengthList item (a, b, c) where
   checkLength [x, y, z]
     = pure (x, y, z)
   checkLength _
-    = Left [3]
+    = Left (3 :| [])
 
 instance (a ~ item, b ~ item, c ~ item, d ~ item) => FixedLengthList item (a, b, c, d) where
   checkLength [w, x, y, z]
     = pure (w, x, y, z)
   checkLength _
-    = Left [4]
+    = Left (4 :| [])
 
 instance (a ~ item, b ~ item, c ~ item, d ~ item, e ~ item) => FixedLengthList item (a, b, c, d, e) where
   checkLength [v, w, x, y, z]
     = pure (v, w, x, y, z)
   checkLength _
-    = Left [5]
+    = Left (5 :| [])
 
 
 class MustHaveShape a where

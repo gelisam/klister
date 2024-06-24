@@ -6,9 +6,11 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS -Wno-name-shadowing #-}
+{-# OPTIONS -Wno-incomplete-uni-patterns #-}
 module Expander.Primitives
   ( -- * Declaration primitives
-    define
+    DeclPrim
+  , define
   , datatype
   , defineMacros
   , example
@@ -16,6 +18,7 @@ module Expander.Primitives
   , group
   , meta
   -- * Expression primitives
+  , ExprPrim
   , app
   , integerLiteral
   , stringLiteral
@@ -44,11 +47,18 @@ module Expander.Primitives
   , the
   , typeCase
   -- * Pattern primitives
-  , elsePattern
+  , PatternPrim
+  -- * Type pattern primitives
+  , TypePatternPrim
+  -- * Type constructor primitives
+  , TypeCtorPrim
   -- * Module primitives
+  , ModulePrim
   , makeModule
-  -- * Anywhere primitives
+  -- * Poly-Problem primitives
+  , PolyProblemPrim
   , makeLocalType
+  , elsePattern
   -- * Primitive values
   , unaryIntegerPrim
   , binaryIntegerPrim
@@ -65,6 +75,7 @@ import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad
 import Control.Monad.Except
+import Data.List.NonEmpty (NonEmpty((:|)))
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -85,7 +96,6 @@ import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import qualified ScopeSet
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax
@@ -538,9 +548,9 @@ typeConstructor ctor argKinds = (implT, implP)
           sch <- trivialScheme tType
           -- FIXME kind check here
           linkTypePattern dest
-            (TypePattern $ TyF ctor [ (varStx, var)
-                                    | (_, varStx, var) <- varInfo
-                                    ])
+            (TypeCtorPattern $ TyF ctor [ (varStx, var)
+                                        | (_, varStx, var) <- varInfo
+                                        ])
             [ (sc, n, x, sch)
             | (sc, n, x) <- varInfo
             ]
@@ -552,7 +562,9 @@ baseType ctor = typeConstructor ctor []
 -- Modules --
 -------------
 
-makeModule :: DeclExpander -> DeclTreePtr -> Syntax -> Expand ()
+type ModulePrim = DeclTreePtr -> Syntax -> Expand ()
+
+makeModule :: DeclExpander -> ModulePrim
 makeModule expandDeclForms bodyPtr stx =
   view expanderModuleTop <$> getState >>=
   \case
@@ -568,13 +580,79 @@ makeModule expandDeclForms bodyPtr stx =
       pure ()
 
 --------------
--- Anywhere --
+-- Patterns --
 --------------
 
--- | with-unknown-type's implementation: create a named fresh
--- unification variable for macros that only can annotate part of a
--- type.
-makeLocalType :: MacroDest -> Syntax -> Expand ()
+type PatternPrim = Ty -> PatternPtr -> Syntax -> Expand ()
+
+-------------------
+-- Type Patterns --
+-------------------
+
+type TypePatternPrim = TypePatternPtr -> Syntax -> Expand ()
+
+-----------------------
+-- Type Constructors --
+-----------------------
+
+type TypeCtorPrim = TypeCtorPtr -> Syntax -> Expand ()
+
+------------------
+-- Poly-Problem --
+------------------
+
+type PolyProblemPrim = MacroDest -> Syntax -> Expand ()
+
+-- | with-unknown-type binds a fresh unification variable.
+--
+-- with-unknown-type works in any Problem. In a type, it acts like a named
+-- wildcard in Haskell. That is,
+--
+-- > (example
+-- >   (the (with-unknown-type [_i]
+-- >          (-> (Pair Integer _i)
+-- >              (Pair _i Integer)))
+-- >        id))
+--
+-- infers to
+--
+-- > (example
+-- >   (the (-> (Pair Integer Integer)
+-- >            (Pair Integer Integer))
+-- >        id))
+--
+-- In an expression, with-unknown-type makes it possible to specify that
+-- multiple parts of that expression must have related types. For example,
+--
+-- > (example
+-- >   (with-unknown-type [_i2i]
+-- >      (pair (the _i2i negate)
+-- >            (the _i2i id))))
+--
+-- infers to
+--
+-- > (example
+-- >   (pair (the (-> Integer Integer) negate)
+-- >         (the (-> Integer Integer) id)))
+--
+-- And in a declaration block, with-unknown-type makes it possible to specify
+-- that multiple declarations must have related types. For example,
+--
+-- > (with-unknown-type [_i2i]
+-- >   (group
+-- >     (example (the _i2i negate))
+-- >     (example (the _i2i id))))
+--
+-- infers to
+--
+-- > (group
+-- >   (example (the (-> Integer Integer) negate))
+-- >   (example (the (-> Integer Integer) id)))
+--
+-- If there were pattern macros which took a type as an argument,
+-- with-unknown-type would be useful in those Problems as well, to bind a
+-- unification variable whose scope is limited to a portion of that pattern.
+makeLocalType :: PolyProblemPrim
 makeLocalType dest stx = do
   Stx _ _ (_, binder, body) <- mustHaveEntries stx
   Stx _ _ (Identity theVar) <- mustHaveEntries binder
@@ -596,27 +674,26 @@ makeLocalType dest stx = do
 
   forkExpandSyntax dest (addScope p sc body)
 
---------------
--- Patterns --
---------------
-
-type PatternPrim = Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ()
-
-elsePattern :: PatternPrim
-elsePattern (Left (scrutTy, dest)) stx = do
+elsePattern :: PolyProblemPrim
+elsePattern (PatternDest scrutTy dest) stx = do
   Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme scrutTy
   (sc, x, v) <- prepareVar var
   modifyState $ set (expanderPatternBinders . at dest) $
     Just $ Right (sc, x, v, ty)
   linkPattern dest $ PatternVar x v
-elsePattern (Right dest) stx = do
+elsePattern (TypePatternDest dest) stx = do
   Stx _ _ (_, var) <- mustHaveEntries stx
   ty <- trivialScheme tType
   (sc, x, v) <- prepareVar var
   linkTypePattern dest
-    (AnyType x v)
+    (TypePatternVar x v)
     [(sc, x, v, ty)]
+elsePattern other stx = do
+  throwError $
+    WrongSyntacticCategory stx
+      (tenon PatternCat :| tenon TypePatternCat : [])
+      (mortise $ problemCategory other)
 
 -------------
 -- Helpers --

@@ -16,7 +16,6 @@ import Data.Sequence (Seq)
 
 import Binding.Info
 import Phase
-import ShortShow
 import Syntax.SrcLoc
 import Unique
 
@@ -34,9 +33,6 @@ instance HasKey Binding where
 
 instance Show Binding where
   show (Binding b) = "(Binding " ++ show (hashUnique b) ++ ")"
-
-instance ShortShow Binding where
-  shortShow (Binding b) = "b" ++ show (hashUnique b)
 
 newtype BindingTable = BindingTable { _bindings :: HashMap Text (Seq (ScopeSet, Binding, BindingInfo SrcLoc)) }
   deriving (Data, Show)
