@@ -42,6 +42,7 @@ common deps
     megaparsec           >= 7.0.5 && < 9.7,
     mtl                  >= 2.2.2 && < 2.4,
     prettyprinter        >= 1.2 && < 1.8,
+    terminal-size        >= 0.2 && < 0.4,
     text                 >= 1.2,
     transformers         ^>= 0.6
 

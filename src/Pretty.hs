@@ -20,10 +20,9 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Foldable as F
-import System.Environment (lookupEnv)
+import qualified System.Console.Terminal.Size as TerminalSize
 import System.FilePath (takeFileName)
 import System.IO.Unsafe (unsafePerformIO)
-import Text.Read (readMaybe)
 
 import Binding
 import Binding.Info
@@ -64,13 +63,9 @@ vec doc = text "[" <> align (group doc) <> "]"
 
 customLayoutOptions :: LayoutOptions
 customLayoutOptions = unsafePerformIO $ do
-  columnsMaybeString <- lookupEnv "COLUMNS"
-  let columnsMaybeInt :: Maybe Int
-      columnsMaybeInt = do
-        str <- columnsMaybeString
-        readMaybe str
+  columnsMay <- fmap TerminalSize.width <$> TerminalSize.size
   let columns :: Int
-      columns = fromMaybe 80 columnsMaybeInt
+      columns = fromMaybe 80 columnsMay
 
   pure $ defaultLayoutOptions
     {layoutPageWidth = AvailablePerLine columns 1.0}
