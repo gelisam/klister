@@ -11,6 +11,7 @@ module Pretty (Doc, Pretty(..), string, text, viaShow, (<+>), (<>), align, hang,
 import Control.Lens hiding (List)
 import Control.Monad.State
 import qualified Data.HashMap.Strict as HM
+import Data.Maybe (fromMaybe)
 import qualified Util.Set as Set
 import Prettyprinter hiding (Pretty(..), angles, parens)
 import qualified Prettyprinter as PP
@@ -19,7 +20,10 @@ import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Foldable as F
+import System.Environment (lookupEnv)
 import System.FilePath (takeFileName)
+import System.IO.Unsafe (unsafePerformIO)
+import Text.Read (readMaybe)
 
 import Binding
 import Binding.Info
@@ -58,8 +62,21 @@ angles doc = text "⟨" <> align (group doc) <> "⟩"
 vec :: Doc ann -> Doc ann
 vec doc = text "[" <> align (group doc) <> "]"
 
+customLayoutOptions :: LayoutOptions
+customLayoutOptions = unsafePerformIO $ do
+  columnsMaybeString <- lookupEnv "COLUMNS"
+  let columnsMaybeInt :: Maybe Int
+      columnsMaybeInt = do
+        str <- columnsMaybeString
+        readMaybe str
+  let columns :: Int
+      columns = fromMaybe 80 columnsMaybeInt
+
+  pure $ defaultLayoutOptions
+    {layoutPageWidth = AvailablePerLine columns 1.0}
+
 pretty :: Pretty ann a => a -> Text
-pretty x = renderStrict (layoutPretty defaultLayoutOptions (pp Env.empty x))
+pretty x = renderStrict (layoutPretty customLayoutOptions (pp Env.empty x))
 
 prettyPrint :: Pretty ann a => a -> IO ()
 prettyPrint x = putDoc (pp Env.empty x)
@@ -69,7 +86,7 @@ prettyPrintLn x = putDoc (pp Env.empty x) >> putStrLn ""
 
 prettyEnv :: Pretty ann a => Env Var v -> a -> Text
 prettyEnv env x =
-  renderStrict (layoutPretty defaultLayoutOptions (pp (fmap (const ()) env) x))
+  renderStrict (layoutPretty customLayoutOptions (pp (fmap (const ()) env) x))
 
 prettyPrintEnv :: Pretty ann a => Env Var v -> a -> IO ()
 prettyPrintEnv env x =
@@ -201,7 +218,7 @@ class PrettyBinder ann a | a -> ann where
 instance PrettyBinder VarInfo a => PrettyBinder VarInfo (TyF a) where
   ppBind env t =
     let subs = ppBind env <$> t
-    in (pp env (fst <$> subs), foldMap snd subs) 
+    in (pp env (fst <$> subs), foldMap snd subs)
 
 newtype BinderPair = BinderPair (Ident, Var)
 
