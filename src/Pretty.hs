@@ -15,13 +15,14 @@ import Data.Maybe (fromMaybe)
 import qualified Util.Set as Set
 import Prettyprinter hiding (Pretty(..), angles, parens)
 import qualified Prettyprinter as PP
-import Prettyprinter.Render.Text (putDoc, renderStrict)
+import Prettyprinter.Render.Text (renderIO, renderStrict)
 import Data.Sequence (Seq)
 import Data.Text (Text)
 import qualified Data.Text as T
 import qualified Data.Foldable as F
 import qualified System.Console.Terminal.Size as TerminalSize
 import System.FilePath (takeFileName)
+import System.IO (stdout)
 import System.IO.Unsafe (unsafePerformIO)
 
 import Binding
@@ -69,6 +70,9 @@ customLayoutOptions = unsafePerformIO $ do
 
   pure $ defaultLayoutOptions
     {layoutPageWidth = AvailablePerLine columns 1.0}
+
+putDoc :: Doc ann -> IO ()
+putDoc doc = renderIO stdout (layoutPretty customLayoutOptions doc)
 
 pretty :: Pretty ann a => a -> Text
 pretty x = renderStrict (layoutPretty customLayoutOptions (pp Env.empty x))
