@@ -306,15 +306,31 @@ typeVarKind ptr =
     Just v -> pure $ view varKind v
 
 
-setKindVar :: KindVar -> Kind -> Expand ()
-setKindVar v k@(KMetaVar v') =
-  (view (expanderKindStore . at v') <$> getState) >>=
-  \case
-    Nothing -> modifyState $ set (expanderKindStore . at v) (Just k)
-    -- Path compression step
-    Just k' -> setKindVar v k'
-setKindVar v k = modifyState $ set (expanderKindStore . at v) (Just k)
+-- pre-condition: 'v' zonks to itself.
+-- post-condition: @KMetaVar v@, 'k', and the return value all zonk to the same
+-- kind.
+setKindVar :: KindVar -> Kind -> Expand Kind
+setKindVar v k@(KMetaVar v')
+  | v == v' =
+      pure k
+  | otherwise =
+      (view (expanderKindStore . at v') <$> getState) >>=
+      \case
+        Nothing -> do
+          modifyState $ set (expanderKindStore . at v) (Just k)
+          pure k
+        Just k' -> do
+          -- Recur to the root, both to compress the path from 'v' and to
+          -- make sure we don't make 'v' point indirectly to itself.
+          k'' <- setKindVar v k'
+          -- Also compress v'
+          modifyState $ set (expanderKindStore . at v') (Just k'')
+          pure k''
+setKindVar v k = do
+  modifyState $ set (expanderKindStore . at v) (Just k)
+  pure k
 
+-- post-condition: 'kind1' and 'kind2' both zonk to the same kind.
 equateKinds :: UnificationErrorBlame blame => blame -> Kind -> Kind -> Expand ()
 equateKinds blame kind1 kind2 =
   equateKinds' kind1 kind2 >>=
