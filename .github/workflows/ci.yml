@@ -31,10 +31,6 @@ jobs:
             ghc: "9.2.5"
             os: ubuntu-latest
 
-          - cabal: "3.2"
-            ghc: "8.10.7"
-            os: ubuntu-latest
-
             # latest GHC, non-default OS
           - cabal: "3.8"
             ghc: "9.6"
