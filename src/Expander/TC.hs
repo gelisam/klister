@@ -306,6 +306,30 @@ typeVarKind ptr =
     Just v -> pure $ view varKind v
 
 
+kindMetas :: Kind -> Expand [KindVar]
+kindMetas k = do
+  k' <- zonkKind k
+  case k' of
+    KMetaVar v' ->
+      (view (expanderKindStore . at v') <$> getState) >>=
+      \case
+        Nothing -> pure [v']
+        Just k'' -> kindMetas k''
+    KStar -> pure []
+    KFun k1 k2 -> (++) <$> kindMetas k1 <*> kindMetas k2
+
+
+-- pre-condition: 'v' zonks to itself.
+-- post-condition: 'k' zonks to a kind which does not contain 'v'.
+kindOccursCheck :: KindVar -> Kind -> Expand ()
+kindOccursCheck v k = do
+  free <- kindMetas k
+  if v `elem` free
+    then do
+      k' <- zonkKind k
+      throwError $ KindCheckError $ KindOccursCheckFailed v k'
+    else pure ()
+
 -- pre-condition: 'v' zonks to itself.
 -- post-condition: @KMetaVar v@, 'k', and the return value all zonk to the same
 -- kind.
@@ -317,6 +341,7 @@ setKindVar v k@(KMetaVar v')
       (view (expanderKindStore . at v') <$> getState) >>=
       \case
         Nothing -> do
+          kindOccursCheck v k
           modifyState $ set (expanderKindStore . at v) (Just k)
           pure k
         Just k' -> do
@@ -327,6 +352,7 @@ setKindVar v k@(KMetaVar v')
           modifyState $ set (expanderKindStore . at v') (Just k'')
           pure k''
 setKindVar v k = do
+  kindOccursCheck v k
   modifyState $ set (expanderKindStore . at v) (Just k)
   pure k
 
@@ -340,7 +366,7 @@ equateKinds blame kind1 kind2 =
       k1' <- zonkKind kind1
       k2' <- zonkKind kind2
       loc <- getBlameLoc blame
-      throwError $ KindMismatch loc k1' k2'
+      throwError $ KindCheckError $ KindMismatch loc k1' k2'
   where
     -- Rigid-rigid cases
     equateKinds' KStar KStar = pure True
