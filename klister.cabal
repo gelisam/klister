@@ -81,6 +81,7 @@ library
       PartialType
       Phase
       Pretty
+      Pretty.Renumber
       Scope
       ScopeSet
       ShortShow

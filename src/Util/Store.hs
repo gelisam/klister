@@ -24,6 +24,8 @@ module Util.Store
   , unionWith
   , mapKeys
   , mapMaybeWithKey
+  , empty
+  , size
   )
 where
 
@@ -95,3 +97,9 @@ mapMaybeWithKey f s = Store $! IM.mapMaybeWithKey (f . fromKey) (unStore s)
 
 mapKeys :: HasKey p => (p -> p) -> Store p v -> Store p v
 mapKeys f s = Store $! IM.mapKeys (getKey . f . fromKey) (unStore s)
+
+empty :: Store p v
+empty = Store IM.empty
+
+size :: Store p v -> Int
+size = IM.size . unStore
