@@ -277,9 +277,9 @@ instance Pretty VarInfo KindCheckError where
                           , group $ vsep [pp env k1, text "≠", pp env k2]
                           ]
 
-  pp env (KindOccursCheckFailed ptr ty) =
+  pp env (KindOccursCheckFailed v k) =
     hang 2 $ group $ vsep [ text "Infinite kind detected:"
-                          , group (vsep [viaShow ptr, "=", pp env ty])
+                          , group (vsep [viaShow v, "=", pp env k])
                           ]
 
 instance Pretty VarInfo SyntacticCategory where
