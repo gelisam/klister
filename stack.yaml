@@ -1,9 +1,8 @@
-resolver: lts-20.25
+resolver: lts-22.39
 packages:
 - .
 extra-deps:
-  - transformers-0.6.1.0@sha256:7e7feea5fc9071375a973a48290fee6664e3eba38eb7028ce04850911f1ad0d4,3146
-  - mtl-2.3.1
-  - exceptions-0.10.7
-  - hedgehog-1.2
-  - tasty-hedgehog-1.4.0.0@sha256:d29ba1e363d9d41da5b34d4f320ab761cbc9c19fda6091d2d650351604c2d9aa,1795
+
+# mark nix as disable. Nix users can use cabal and the nix flake
+nix:
+  enable: false
