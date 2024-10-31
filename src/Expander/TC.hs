@@ -14,6 +14,7 @@ import Control.Monad
 import Control.Monad.Except
 import Control.Monad.State
 import Data.Foldable
+import Data.Traversable (for)
 import Numeric.Natural
 
 import Expander.Monad
@@ -107,12 +108,14 @@ freshMeta kind = do
   return ptr
 
 
-inst :: UnificationErrorBlame blame => blame -> Scheme Ty -> [Ty] -> Expand Ty
+inst :: UnificationErrorBlame blame => blame -> Scheme Ty -> Store SchemeVar Ty -> Expand Ty
 inst blame (Scheme argKinds ty) ts
   | length ts /= length argKinds =
     throwError $ InternalError "Mismatch in number of type vars"
   | otherwise = do
-      traverse_ (uncurry $ checkKind blame) (zip argKinds ts)
+      let tys :: [Ty]
+          tys = fmap snd $ St.toAscList ts
+      traverse_ (uncurry $ checkKind blame) (zip argKinds tys)
       instTy ty
   where
     instTy :: Ty -> Expand Ty
@@ -131,13 +134,17 @@ inst blame (Scheme argKinds ty) ts
       pure $ TyF ctor' (tArgsPrefix ++ tArgsSuffix)
 
     instCtor :: TypeConstructor -> TyF Ty
-    instCtor (TSchemaVar i) = unTy $ ts !! fromIntegral i
+    instCtor (TSchemaVar v) = unTy $ ts St.! v
     instCtor ctor           = TyF ctor []
 
 
 specialize :: UnificationErrorBlame blame => blame -> Scheme Ty -> Expand Ty
 specialize blame sch@(Scheme argKinds _) = do
-  freshVars <- traverse makeTypeMeta argKinds
+  pairs <- for (zip [firstSchemeVar..] argKinds) $ \(v, k) -> do
+    meta <- makeTypeMeta k
+    pure (v, meta)
+  let freshVars :: Store SchemeVar Ty
+      freshVars = St.fromList pairs
   inst blame sch freshVars
 
 varType :: Var -> Expand (Maybe (Scheme Ty))
@@ -162,35 +169,35 @@ notFreeInCtx var = do
 generalizeType :: Ty -> Expand (Scheme Ty)
 generalizeType ty = do
   canGeneralize <- filterM notFreeInCtx =<< metas ty
-  (body, (_, _, argKinds)) <- flip runStateT (0, mempty, []) $ do
+  (body, (_, _, argKinds)) <- flip runStateT (firstSchemeVar, mempty, []) $ do
     genTyVars canGeneralize ty
   pure $ Scheme argKinds body
 
   where
     genTyVars ::
       [MetaPtr] -> Ty ->
-      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand Ty
+      StateT (SchemeVar, Store MetaPtr SchemeVar, [Kind]) Expand Ty
     genTyVars vars t = do
       (Ty t') <- lift $ normType t
       Ty <$> genVarsTyF vars t'
 
     genVarsTyF ::
       [MetaPtr] -> TyF Ty ->
-      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand (TyF Ty)
+      StateT (SchemeVar, Store MetaPtr SchemeVar, [Kind]) Expand (TyF Ty)
     genVarsTyF vars (TyF ctor args) =
       TyF <$> genVarsCtor vars ctor
           <*> traverse (genTyVars vars) args
 
     genVarsCtor ::
       [MetaPtr] -> TypeConstructor ->
-      StateT (Natural, Store MetaPtr Natural, [Kind]) Expand TypeConstructor
+      StateT (SchemeVar, Store MetaPtr SchemeVar, [Kind]) Expand TypeConstructor
     genVarsCtor vars (TMetaVar v)
       | v `elem` vars = do
           (i, indices, argKinds) <- get
           case St.lookup v indices of
             Nothing -> do
               k <- lift $ typeVarKind v
-              put (i + 1, St.insert v i indices, argKinds ++ [k])
+              put (succ i, St.insert v i indices, argKinds ++ [k])
               pure $ TSchemaVar i
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
