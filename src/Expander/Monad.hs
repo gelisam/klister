@@ -240,7 +240,7 @@ data EValue
   | EPrimPatternMacro (Either (Ty, PatternPtr) TypePatternPtr -> Syntax -> Expand ())
   | EPrimUniversalMacro (MacroDest -> Syntax -> Expand ())
   | EVarMacro !Var -- ^ For bound variables (the Unique is the binding site of the var)
-  | ETypeVar !Kind !Natural
+  | ETypeVar !Kind !SchemeVar
   -- ^ For bound type variables (user-written Skolem variables or in datatype definitions)
   | EUserMacro !MacroVar -- ^ For user-written macros
   | EIncompleteMacro !MacroVar !Ident !SplitCorePtr -- ^ Macros that are themselves not yet ready to go

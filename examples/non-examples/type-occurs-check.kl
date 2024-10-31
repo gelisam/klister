@@ -1,0 +1,13 @@
+#lang "prelude.kl"
+
+-- accepted, thanks to let-generalization
+(example
+  (let [xs (nil)]
+    (:: xs  -- (the (List A) xs)
+        xs  -- (the (List (List A)) xs)
+        )))
+
+-- causes the type equality ?1 ~ List ?1, which must be rejected by the
+-- occurs-check.
+(defun infinite-type (xs)
+  (:: xs xs))

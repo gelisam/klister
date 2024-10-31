@@ -311,14 +311,14 @@ instance Pretty VarInfo (Scheme Ty) where
     text "∀" <>
     (align $ group $
      vsep [ group $
-            vsep (zipWith ppArgKind typeVarNames argKinds) <> text "."
+            vsep (zipWith ppArgKind schemeVarNames argKinds) <> text "."
           , pp env t
           ])
     where
       ppArgKind varName kind = parens (text varName <+> text ":" <+> pp env kind)
 
-typeVarNames :: [Text]
-typeVarNames =
+schemeVarNames :: [Text]
+schemeVarNames =
   greek ++
   [ base <> T.pack (show i)
   | (base, i) <- greekNum
@@ -332,6 +332,8 @@ typeVarNames =
                , base <- greek
                ]
 
+schemeVarName :: SchemeVar -> Text
+schemeVarName (SchemeVar n) = schemeVarNames !! fromIntegral n
 
 instance Pretty VarInfo TypeConstructor where
   pp _   TSyntax        = text "Syntax"
@@ -343,7 +345,7 @@ instance Pretty VarInfo TypeConstructor where
   pp _   TIO            = text "IO"
   pp _   TType          = text "Type"
   pp env (TDatatype t)  = pp env t
-  pp _   (TSchemaVar n) = text $ typeVarNames !! fromIntegral n
+  pp _   (TSchemaVar v) = text $ schemeVarName v
   pp _   (TMetaVar v)   = text "META" <> viaShow v -- TODO
 
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
@@ -390,7 +392,7 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
     (hang 2 $ group $
      vsep ( text "data" <+> text x <+>
             hsep [ parens (text α <+> ":" <+> pp env k)
-                 | α <- typeVarNames
+                 | α <- schemeVarNames
                  | k <- argKinds
                  ] <+>
             text "="

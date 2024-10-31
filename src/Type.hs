@@ -36,6 +36,13 @@ newMetaPtr = MetaPtr <$> newUnique
 instance Show MetaPtr where
   show (MetaPtr i) = "(MetaPtr " ++ show (hashUnique i) ++ ")"
 
+newtype SchemeVar = SchemeVar Natural
+  deriving newtype (Enum, Eq, HasKey, Ord, Show)
+  deriving stock   Data
+
+firstSchemeVar :: SchemeVar
+firstSchemeVar = SchemeVar 0
+
 data TypeConstructor
   = TSyntax
   | TInteger
@@ -46,7 +53,7 @@ data TypeConstructor
   | TIO
   | TType
   | TDatatype Datatype
-  | TSchemaVar Natural
+  | TSchemaVar SchemeVar
   | TMetaVar MetaPtr
   deriving (Data, Eq, Show)
 makePrisms ''TypeConstructor
@@ -115,7 +122,7 @@ class TyLike a arg | a -> arg where
   tIO         :: arg -> a
   tType       :: a
   tDatatype   :: Datatype -> [arg] -> a
-  tSchemaVar  :: Natural -> [arg] -> a
+  tSchemaVar  :: SchemeVar -> [arg] -> a
   tMetaVar    :: MetaPtr -> a
 
 instance TyLike (TyF a) a where
