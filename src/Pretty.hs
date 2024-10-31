@@ -624,6 +624,7 @@ instance Pretty VarInfo EvalError where
     group $ hang 2 $ vsep [text "No case matched at" <+> pp env blame <> ":" , pp env val]
   pp env (EvalErrorUser (Syntax (Stx _ loc msg))) =
     group $ hang 2 $ vsep [pp env loc <> ":", pp env msg]
+  pp env (EvalErrorIdent v) = text "Attempt to bind identifier to non-value: " <+> pp env v
 
 instance Pretty VarInfo EvalResult where
   pp env (ExampleResult loc valEnv coreExpr sch val) =
