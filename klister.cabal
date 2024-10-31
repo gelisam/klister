@@ -8,7 +8,7 @@ author:         David Christiansen <david@davidchristiansen.dk>,  Samuel Géline
 maintainer:     David Christiansen <david@davidchristiansen.dk>,  Samuel Gélineau <gelisam@gmail.com>
 license:        BSD-3-Clause
 license-file:   LICENSE
-tested-with:    GHC==8.10.7, GHC==9.2.5, GHC==9.4, GHC==9.6
+tested-with:    GHC==9.2.5, GHC==9.4, GHC==9.6
 build-type:     Simple
 data-files:
     stdlib/defun.kl
