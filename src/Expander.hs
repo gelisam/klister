@@ -540,7 +540,7 @@ initializeKernel outputChannel = do
       ] ++
       [ ("pure-IO"
         , let a = tSchemaVar firstSchemeVar []
-          in Scheme [KStar, KStar] $ tFun [a] (tIO a)
+          in Scheme [KStar] $ tFun [a] (tIO a)
         , ValueClosure $ HO $ \v -> ValueIOAction (pure v)
         )
       , ("bind-IO"
