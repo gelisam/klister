@@ -1,0 +1,17 @@
+#lang "prelude.kl"
+
+(datatype (Phantom A)
+  (mk-phantom))
+
+-- causes the kind equality ?1 ~ ?2 to be unified twice, which previously
+-- caused ?2 to point to itself, thus causing zonking ?2 to run forever.
+-- should be accepted.
+(example
+  (with-unknown-type [A]
+    (the (Phantom A)
+      (mk-phantom))))
+
+-- causes the kind equality ?1 ~ (-> ?1 *).
+-- should be accepted by the occurs-check.
+(datatype (InfiniteKind A)
+  (mk-infinite-kind (Phantom (A A))))

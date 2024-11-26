@@ -68,7 +68,6 @@ import Control.Monad.Except
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
-import Numeric.Natural
 
 import Binding
 import Core
@@ -130,7 +129,7 @@ datatype dest outScopesDest stx = do
   Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
   Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
   Stx _ _ (name, args) <- mustBeCons nameAndArgs
-  typeArgs <- for (zip [0..] args) $ \(i, a) ->
+  typeArgs <- for (zip [firstSchemeVar..] args) $ \(i, a) ->
     prepareTypeVar i a
   sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
   let typeScopes = map (view _1) typeArgs ++ [sc]
@@ -712,7 +711,7 @@ scheduleTypePattern exprTy (Stx _ _ (patStx, rhsStx@(Syntax (Stx _ loc _)))) = d
   forkExpanderTask $ AwaitingTypePattern dest exprTy rhsDest rhsStx
   return (dest, rhsDest)
 
-prepareTypeVar :: Natural -> Syntax -> Expand (Scope, Ident, Kind)
+prepareTypeVar :: SchemeVar -> Syntax -> Expand (Scope, Ident, Kind)
 prepareTypeVar i varStx = do
   (sc, α, b) <- varPrepHelper varStx
   k <- KMetaVar <$> liftIO newKindVar

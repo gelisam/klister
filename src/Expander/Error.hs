@@ -6,6 +6,7 @@ module Expander.Error
   ( ExpansionErr(..)
   , SyntacticCategory(..)
   , TypeCheckError(..)
+  , KindCheckError(..)
   , Tenon, tenon, Mortise, mortise
   , notRightLength
   ) where
@@ -63,10 +64,10 @@ data ExpansionErr
       (Mortise SyntacticCategory)
   | NotValidType Syntax
   | TypeCheckError TypeCheckError
+  | KindCheckError KindCheckError
   | WrongArgCount Syntax Constructor Int Int
   | NotAConstructor Syntax
   | WrongTypeArity Syntax TypeConstructor Natural Int
-  | KindMismatch (Maybe SrcLoc) Kind Kind
   | CircularImports ModuleName [ModuleName]
   deriving (Show)
 
@@ -97,6 +98,10 @@ data TypeCheckError
   | OccursCheckFailed MetaPtr Ty
   deriving (Show)
 
+data KindCheckError
+  = KindMismatch (Maybe SrcLoc) Kind Kind
+  | KindOccursCheckFailed KindVar Kind
+  deriving (Show)
 
 data SyntacticCategory
   = ModuleCat
@@ -216,6 +221,7 @@ instance Pretty VarInfo ExpansionErr where
   pp env (NotValidType stx) =
     hang 2 $ group $ vsep [text "Not a type:", pp env stx]
   pp env (TypeCheckError err) = pp env err
+  pp env (KindCheckError err) = pp env err
   pp env (WrongArgCount stx ctor wanted got) =
     hang 2 $
     vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
@@ -231,11 +237,6 @@ instance Pretty VarInfo ExpansionErr where
                   , text "Got" <+> viaShow got
                   , text "In" <+> align (pp env stx)
                   ]
-  pp env (KindMismatch loc k1 k2) =
-    hang 2 $ group $ vsep [ text "Kind mismatch at" <+>
-                            maybe (text "unknown location") (pp env) loc <> text "."
-                          , group $ vsep [pp env k1, text "≠", pp env k2]
-                          ]
   pp env (CircularImports current stack) =
     hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", pp env current]
                   , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
@@ -265,10 +266,21 @@ instance Pretty VarInfo TypeCheckError where
                  ]
 
   pp env (OccursCheckFailed ptr ty) =
-    hang 2 $ group $ vsep [ text "Occurs check failed:"
-                          , group (vsep [viaShow ptr, "≠", pp env ty])
+    hang 2 $ group $ vsep [ text "Infinite type detected:"
+                          , group (vsep [viaShow ptr, "=", pp env ty])
                           ]
 
+instance Pretty VarInfo KindCheckError where
+  pp env (KindMismatch loc k1 k2) =
+    hang 2 $ group $ vsep [ text "Kind mismatch at" <+>
+                            maybe (text "unknown location") (pp env) loc <> text "."
+                          , group $ vsep [pp env k1, text "≠", pp env k2]
+                          ]
+
+  pp env (KindOccursCheckFailed v k) =
+    hang 2 $ group $ vsep [ text "Infinite kind detected:"
+                          , group (vsep [viaShow v, "=", pp env k])
+                          ]
 
 instance Pretty VarInfo SyntacticCategory where
   pp _env ExpressionCat = text "an expression"

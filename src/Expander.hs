@@ -539,15 +539,17 @@ initializeKernel outputChannel = do
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
       [ ("pure-IO"
-        , Scheme [KStar, KStar] $ tFun [tSchemaVar 0 []] (tIO (tSchemaVar 0 []))
+        , let a = tSchemaVar firstSchemeVar []
+          in Scheme [KStar, KStar] $ tFun [a] (tIO a)
         , ValueClosure $ HO $ \v -> ValueIOAction (pure v)
         )
       , ("bind-IO"
-        , Scheme [KStar, KStar] $
-          tFun [ tIO (tSchemaVar 0 [])
-               , tFun [tSchemaVar 0 []] (tIO (tSchemaVar 1 []))
-               ]
-               (tIO (tSchemaVar 1 []))
+        , let a:b:_ = [tSchemaVar i [] | i <- [firstSchemeVar..]]
+          in Scheme [KStar, KStar] $
+             tFun [ tIO a
+                  , tFun [a] (tIO b)
+                  ]
+                  (tIO b)
         , ValueClosure $ HO $ \(ValueIOAction mx) -> do
             ValueClosure $ HO $ \(ValueClosure f) -> do
               ValueIOAction $ do
@@ -587,22 +589,25 @@ initializeKernel outputChannel = do
       , ("Unit", [], [("unit", [])])
       , ("Bool", [], [("true", []), ("false", [])])
       , ("Problem", [], [("module", []), ("declaration", []), ("type", []), ("expression", [tType]), ("pattern", []), ("type-pattern", [])])
-      , ("Maybe", [KStar], [("nothing", []), ("just", [tSchemaVar 0 []])])
-      , ("List"
-        , [KStar]
-        , [ ("nil", [])
-          , ("::", [tSchemaVar 0 [], Prims.primitiveDatatype "List" [tSchemaVar 0 []]])
-          ]
-        )
+      , let a = tSchemaVar firstSchemeVar []
+        in ("Maybe", [KStar], [("nothing", []), ("just", [a])])
+      , let a = tSchemaVar firstSchemeVar []
+        in ("List"
+           , [KStar]
+           , [ ("nil", [])
+             , ("::", [a, Prims.primitiveDatatype "List" [a]])
+             ]
+           )
       , ("Syntax-Contents"
         , [KStar]
-        , [ ("list-contents", [Prims.primitiveDatatype "List" [tSchemaVar 0 []]])
-          , ("integer-contents", [tInteger])
-          , ("string-contents", [tString])
-          , ("identifier-contents", [tString])
-          -- if you add a constructor here, remember to also add a
-          -- corresponding pattern in close-syntax!
-          ]
+        , let a = tSchemaVar firstSchemeVar []
+          in [ ("list-contents", [Prims.primitiveDatatype "List" [a]])
+             , ("integer-contents", [tInteger])
+             , ("string-contents", [tString])
+             , ("identifier-contents", [tString])
+             -- if you add a constructor here, remember to also add a
+             -- corresponding pattern in close-syntax!
+             ]
         )
       ]
 
@@ -1220,8 +1225,9 @@ expandOneForm prob stx
           case prob of
             ExprDest t dest -> do
               argTys <- traverse makeTypeMeta argKinds
+              let tyStore = S.fromList $ zip [firstSchemeVar..] argTys
               unify dest t $ tDatatype dt argTys
-              args' <- for args \a -> inst dest (Scheme argKinds a) argTys
+              args' <- for args \a -> inst dest (Scheme argKinds a) tyStore
               Stx _ _ (foundName, foundArgs) <- mustBeCons stx
               _ <- mustBeIdent foundName
               argDests <-
@@ -1234,8 +1240,9 @@ expandOneForm prob stx
             PatternDest patTy dest -> do
               Stx _ loc (_cname, subPats) <- mustBeCons stx
               tyArgs <- traverse makeTypeMeta argKinds
+              let tyStore = S.fromList $ zip [firstSchemeVar..] tyArgs
               argTypes <- for args \ a ->
-                            inst loc (Scheme argKinds a) tyArgs
+                            inst loc (Scheme argKinds a) tyStore
               unify loc (tDatatype dt tyArgs) patTy
               if length subPats /= length argTypes
                 then throwError $ WrongArgCount stx ctor (length argTypes) (length subPats)
