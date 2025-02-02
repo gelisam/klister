@@ -110,4 +110,4 @@ instance ShortShow ExpanderTask where
   shortShow (AwaitingTypePattern _ _ _ _) = "(AwaitingTypePattern _ _ _ _)"
 
 instance Pretty VarInfo ExpanderTask where
-  pp _ task = string (shortShow task)
+  pp _ task = pure $ string (shortShow task)
