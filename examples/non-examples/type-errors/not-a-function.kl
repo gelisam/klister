@@ -1,0 +1,3 @@
+#lang kernel
+
+(example (42 23))
