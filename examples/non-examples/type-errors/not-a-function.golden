@@ -1,2 +1,2 @@
 Type mismatch at not-a-function.kl:3.11-3.13.
-Expected (Integer → META(MetaPtr 53790)) but got Integer
+Expected (Integer → ?1) but got Integer

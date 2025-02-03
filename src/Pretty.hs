@@ -404,7 +404,15 @@ instance Pretty VarInfo TypeConstructor where
   pp _   TType          = pure $ text "Type"
   pp env (TDatatype t)  = pp env t
   pp _   (TSchemaVar n) = pure $ text $ typeVarNames !! fromIntegral n
-  pp _   (TMetaVar v)   = pure $ text "META" <> viaShow v -- TODO
+  pp _   (TMetaVar v)   = do
+    renumbering <- get
+    case St.lookup v renumbering of
+      Just n -> do
+        pure $ text "?" <> viaShow n
+      Nothing -> do
+        let n = St.size renumbering + 1
+        put (St.insert v n renumbering)
+        pure $ text "?" <> viaShow n
 
 instance Pretty VarInfo a => Pretty VarInfo (TyF a) where
   pp _ (TyF TFun []) = pure $ parens (text "→")
