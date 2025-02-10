@@ -1412,11 +1412,7 @@ interpretMacroAction prob =
         StuckOnType loc ty env cases closures ->
           pure $ StuckOnType loc ty env cases (closures ++ [closure])
         Done boundResult -> do
-          phase <- view (expanderLocal . expanderPhase)
-          s <- getState
-          let env = fromMaybe Env.empty .
-                    view (expanderWorld . worldEnvironments . at phase) $ s
-          case applyInEnv env closure boundResult of
+          case apply closure boundResult of
             -- FIXME DYG: what error to throw here
             Left err -> throwError
               $ ValueNotMacro
