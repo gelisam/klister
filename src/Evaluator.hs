@@ -497,7 +497,7 @@ applyInEnv old_env (FO (FOClosure {..})) value =
   let env = Env.insert _closureVar
                        _closureIdent
                        value
-                       (_closureEnv <> old_env)
+                       _closureEnv
   in evaluateIn env _closureBody
 applyInEnv _ (HO prim) value = return $! prim value
 
@@ -516,7 +516,7 @@ applyAsClosure e v_closure value k = case v_closure of
     other                -> Er (evalErrorType "function" other) e k
 
     where app (FO (FOClosure{..})) =
-            let env = Env.insert _closureVar _closureIdent value (_closureEnv <> e)
+            let env = Env.insert _closureVar _closureIdent value _closureEnv
             in Down (unCore _closureBody) env k
           app (HO prim)            = Up (prim value) mempty k
 
