@@ -16,6 +16,7 @@ import Data.Text (Text)
 import Data.Sequence (Seq)
 import qualified Data.Text as T
 import Data.Foldable
+import Data.Traversable (for)
 
 import Core
 import Datatype
@@ -108,49 +109,63 @@ data SyntacticCategory
   deriving Show
 
 instance Pretty VarInfo ExpansionErr where
-  pp env (Ambiguous p x candidates) =
-    hang 4 $
-      text "Ambiguous identifier in phase" <+> pp env p <+> line <>
-      text "Identifier:" <+> pp env x <> line <>
+  pp env (Ambiguous p x candidates) = do
+    ppP <- pp env p
+    ppX <- pp env x
+    pure $ hang 4 $
+      text "Ambiguous identifier in phase" <+> ppP <+> line <>
+      text "Identifier:" <+> ppX <> line <>
       text "Scope set of the identifier:" <> line <>
         viaShow (_stxScopeSet x) <> line <>
       text "Scope sets of the candidates:" <> line <>
         vsep [viaShow c | c <- toList candidates]
-  pp env (Unknown x) = text "Unknown:" <+> pp env x
-  pp env (NoProgress tasks) =
-    hang 4 $
+  pp env (Unknown x) = do
+    ppX <- pp env x
+    pure $ text "Unknown:" <+> ppX
+  pp env (NoProgress tasks) = do
+    ppTasks <- mapM (pp env) tasks
+    pure $ hang 4 $
       text "No progress was possible:" <> line <>
-      vsep (map (pp env) tasks)
-  pp env (NotIdentifier stx) =
-    text "Not an identifier:" <+> pp env stx
-  pp env (NotEmpty stx) =
-    hang 2 $ group $ vsep [text "Expected (), but got", pp env stx]
-  pp env (NotCons stx) =
-    hang 2 $ group $ vsep [text "Expected non-empty parens, but got", pp env stx]
-  pp env (NotConsCons stx) =
-    hang 2 $ group $ vsep [text "Expected parens with at least 2 entries, but got", pp env stx]
-  pp env (NotList stx) =
-    hang 2 $ group $ vsep [text "Expected parens, but got", pp env stx]
-  pp env (NotInteger stx) =
-    hang 2 $ group $
-    vsep [ text "Expected integer literal, but got"
-         , pp env stx
-         ]
-  pp env (NotString stx) =
-    hang 2 $ group $
-    vsep [ text "Expected string literal, but got"
-         , pp env stx
-         ]
-  pp env (NotModName stx) =
-    hang 2 $ group $
-    vsep [ text "Expected module name (string or `kernel'), but got"
-         , pp env stx
-         ]
-  pp env (NotRightLength lengths0 stx) =
-    hang 2 $ group $
-    vsep [ text "Expected" <+> alts lengths0 <+> text "entries between parentheses, but got"
-         , pp env stx
-         ]
+      vsep ppTasks
+  pp env (NotIdentifier stx) = do
+    ppStx <- pp env stx
+    pure $ text "Not an identifier:" <+> ppStx
+  pp env (NotEmpty stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected (), but got", ppStx]
+  pp env (NotCons stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected non-empty parens, but got", ppStx]
+  pp env (NotConsCons stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected parens with at least 2 entries, but got", ppStx]
+  pp env (NotList stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected parens, but got", ppStx]
+  pp env (NotInteger stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group
+         $ vsep [ text "Expected integer literal, but got"
+                , ppStx
+                ]
+  pp env (NotString stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group
+         $ vsep [ text "Expected string literal, but got"
+                , ppStx
+                ]
+  pp env (NotModName stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group
+         $ vsep [ text "Expected module name (string or `kernel'), but got"
+                , ppStx
+                ]
+  pp env (NotRightLength lengths0 stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group
+         $ vsep [ text "Expected" <+> alts lengths0 <+> text "entries between parentheses, but got"
+                , ppStx
+                ]
     where
       alts :: [Natural] -> Doc ann
       alts []
@@ -161,119 +176,155 @@ instance Pretty VarInfo ExpansionErr where
         = viaShow len1 <+> "or" <+> viaShow len2
       alts (len:lengths)
         = viaShow len <> "," <+> alts lengths
-  pp env (NotVec stx) =
-    hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", pp env stx]
-  pp env (NotImportSpec stx) =
-    hang 2 $ group $ vsep [text "Expected import spec but got", pp env stx]
-  pp env (NotExportSpec stx) =
-    hang 2 $ group $ vsep [text "Expected export spec but got", pp env stx]
-  pp env (UnknownPattern stx) =
-    hang 2 $ group $ vsep [text "Unknown pattern",  pp env stx]
-  pp env (MacroRaisedSyntaxError err) =
+  pp env (NotVec stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected square-bracketed vec but got", ppStx]
+  pp env (NotImportSpec stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected import spec but got", ppStx]
+  pp env (NotExportSpec stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Expected export spec but got", ppStx]
+  pp env (UnknownPattern stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Unknown pattern",  ppStx]
+  pp env (MacroRaisedSyntaxError err) = do
     let locs = view syntaxErrorLocations err
-        msg = text "Syntax error from macro:" <> line <>
-              pp env (view syntaxErrorMessage err)
-    in hang 4 $ group $
-       case locs of
-         [] -> msg
-         (Syntax l : ls) ->
-           pp env (view stxSrcLoc l) <> text ":" <> line <> msg <>
-           case ls of
-             [] -> mempty
-             more -> text "Additional locations:" <> line <> vsep [pp env loc | Syntax (Stx _ loc _) <- more]
-  pp env (MacroEvaluationError p err) =
-    hang 4 $ group $
-    vsep [text "Error at phase" <+> pp env p <> text ":",
-          pp env err]
-  pp env (ValueNotMacro val) =
-    text "Not a macro monad value:" <+> pp env val
-  pp env (ValueNotSyntax val) =
-    hang 4 $ group $ text "Not a syntax object: " <> line <> pp env val
+    ppErr <- pp env (view syntaxErrorMessage err)
+    let ppMsg = text "Syntax error from macro:" <> line <>
+                ppErr
+    ppBlock <- case locs of
+      [] -> pure ppMsg
+      (Syntax l : ls) -> do
+        ppSrcLoc <- pp env (view stxSrcLoc l)
+        ppLs <- case ls of
+          [] -> pure mempty
+          more -> do
+            ppMore <- for more $ \(Syntax (Stx _ loc _)) ->
+              pp env loc
+            pure $ text "Additional locations:" <> line <> vsep ppMore
+        pure (ppSrcLoc <> text ":" <> line <> ppMsg <> ppLs)
+    pure $ hang 4 $ group ppBlock
+  pp env (MacroEvaluationError p err) = do
+    ppP <- pp env p
+    ppErr <- pp env err
+    pure $ hang 4 $ group
+         $ vsep [text "Error at phase" <+> ppP <> text ":",
+                 ppErr]
+  pp env (ValueNotMacro val) = do
+    ppVal <- pp env val
+    pure $ text "Not a macro monad value:" <+> ppVal
+  pp env (ValueNotSyntax val) = do
+    ppVal <- pp env val
+    pure $ hang 4 $ group $ text "Not a syntax object: " <> line <> ppVal
   pp _env (NoSuchFile filename) =
-    text "User error; no such file: " <> string filename
-  pp env (NotExported (Stx _ loc x) p) =
-    group $ hang 4 $ vsep [ pp env loc <> text ":"
-                          , text "Not available at phase" <+> pp env p <> text ":" <+> pp env x
+    pure $ text "User error; no such file: " <> string filename
+  pp env (NotExported (Stx _ loc x) p) = do
+    ppLoc <- pp env loc
+    ppP <- pp env p
+    ppX <- pp env x
+    pure $ group $ hang 4 $ vsep [ ppLoc <> text ":"
+                          , text "Not available at phase" <+> ppP <> text ":" <+> ppX
                           ]
   pp env (ImportError err) = pp env err
   pp _env (InternalError str) =
-    text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
+    pure $ text "Internal error during expansion! This is a bug in the implementation." <> line <> string str
   pp _env (ReaderError txt) =
-    vsep (map text (T.lines txt))
-  pp env (WrongSyntacticCategory stx is shouldBe) =
-    hang 2 $ group $
-    vsep [ pp env stx <> text ":"
-         , group $ vsep [ group $ hang 2 $
-                          vsep [ text "Used in a position expecting"
-                               , pp env (unMortise shouldBe)
+    pure $ vsep (map text (T.lines txt))
+  pp env (WrongSyntacticCategory stx is shouldBe) = do
+    ppStx <- pp env stx
+    ppIs <- pp env (unTenon is)
+    ppShouldBe <- pp env (unMortise shouldBe)
+    pure $ hang 2 $ group
+         $ vsep [ ppStx <> text ":"
+                , group $ vsep [ group $ hang 2 $
+                                 vsep [ text "Used in a position expecting"
+                                      , ppShouldBe
+                                      ]
+                               , group $ hang 2 $
+                                 vsep [ text "but is valid in a position expecting"
+                                      , ppIs
+                                      ]
                                ]
-                        , group $ hang 2 $
-                          vsep [ text "but is valid in a position expecting"
-                               , pp env (unTenon is)
-                               ]
-                        ]
-         ]
-  pp env (NotValidType stx) =
-    hang 2 $ group $ vsep [text "Not a type:", pp env stx]
+                ]
+  pp env (NotValidType stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Not a type:", ppStx]
   pp env (TypeCheckError err) = pp env err
-  pp env (WrongArgCount stx ctor wanted got) =
-    hang 2 $
-    vsep [ text "Wrong number of arguments for constructor" <+> pp env ctor
-         , text "Wanted" <+> viaShow wanted
-         , text "Got" <+> viaShow got
-         , text "At" <+> align (pp env stx)
-         ]
-  pp env (NotAConstructor stx) =
-    hang 2 $ group $ vsep [text "Not a constructor in", pp env stx]
-  pp env (WrongTypeArity stx ctor arity got) =
-    hang 2 $ vsep [ text "Incorrect arity for" <+> pp env ctor
+  pp env (WrongArgCount stx ctor wanted got) = do
+    ppCtor <- pp env ctor
+    ppStx <- pp env stx
+    pure $ hang 2
+         $ vsep [ text "Wrong number of arguments for constructor" <+> ppCtor
+                , text "Wanted" <+> viaShow wanted
+                , text "Got" <+> viaShow got
+                , text "At" <+> align (ppStx)
+                ]
+  pp env (NotAConstructor stx) = do
+    ppStx <- pp env stx
+    pure $ hang 2 $ group $ vsep [text "Not a constructor in", ppStx]
+  pp env (WrongTypeArity stx ctor arity got) = do
+    ppCtor <- pp env ctor
+    ppStx <- pp env stx
+    pure $ hang 2 $ vsep [ text "Incorrect arity for" <+> ppCtor
                   , text "Wanted" <+> viaShow arity
                   , text "Got" <+> viaShow got
-                  , text "In" <+> align (pp env stx)
+                  , text "In" <+> align (ppStx)
                   ]
-  pp env (KindMismatch loc k1 k2) =
-    hang 2 $ group $ vsep [ text "Kind mismatch at" <+>
-                            maybe (text "unknown location") (pp env) loc <> text "."
-                          , group $ vsep [pp env k1, text "≠", pp env k2]
+  pp env (KindMismatch loc k1 k2) = do
+    ppLoc <- maybe (pure $ text "unknown location") (pp env) loc
+    ppK1 <- pp env k1
+    ppK2 <- pp env k2
+    pure $ hang 2 $ group $ vsep [ text "Kind mismatch at" <+>
+                            ppLoc <> text "."
+                          , group $ vsep [ppK1, text "≠", ppK2]
                           ]
-  pp env (CircularImports current stack) =
-    hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", pp env current]
-                  , group $ hang 2 $ vsep (text "Context:" : map (pp env) stack)]
+  pp env (CircularImports current stack) = do
+    ppCurrent <- pp env current
+    ppStack <- mapM (pp env) stack
+    pure $ hang 2 $ vsep [ group $ vsep [ text "Circular imports while importing", ppCurrent]
+                  , group $ hang 2 $ vsep (text "Context:" : ppStack)]
 
 instance Pretty VarInfo TypeCheckError where
-  pp env (TypeMismatch loc shouldBe got specifically) =
-    group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
-                                         , maybe (text "unknown location") (pp env) loc <> text "."
-                                         ]
-                 , group $ vsep $
-                   [ group $ hang 2 $ vsep [ text "Expected"
-                                           , pp env shouldBe
-                                           ]
-                   , group $ hang 2 $ vsep [ text "but got"
-                                           , pp env got
-                                           ]
-                   ] ++
-                   case specifically of
-                     Nothing -> []
-                     Just (expected', got') ->
-                       [ hang 2 $ group $ vsep [text "Specifically,"
-                                               , group (vsep [ pp env expected'
-                                                             , text "doesn't match" <+> pp env got'
-                                                             ])
-                                               ]
+  pp env (TypeMismatch loc shouldBe got specifically) = do
+    ppLoc <- maybe (pure $ text "unknown location") (pp env) loc
+    ppShouldBe <- pp env shouldBe
+    ppGot <- pp env got
+    ppSpec <- case specifically of
+      Nothing -> pure []
+      Just (expected', got') -> do
+        ppE <- pp env expected'
+        ppG <- pp env got'
+        pure [ hang 2 $ group $ vsep [text "Specifically,"
+                                    , group (vsep [ ppE
+                                                , text "doesn't match" <+> ppG
+                                                ])
+                                    ]
+            ]
+    pure $ group $ vsep [ group $ hang 2 $ vsep [ text "Type mismatch at"
+                                                , ppLoc <> text "."
+                                                ]
+                       , group $ vsep $
+                         [ group $ hang 2 $ vsep [ text "Expected"
+                                                , ppShouldBe
+                                                ]
+                         , group $ hang 2 $ vsep [ text "but got"
+                                                , ppGot
+                                                ]
+                         ] ++ ppSpec
                        ]
-                 ]
 
-  pp env (OccursCheckFailed ptr ty) =
-    hang 2 $ group $ vsep [ text "Occurs check failed:"
-                          , group (vsep [viaShow ptr, "≠", pp env ty])
+  pp env (OccursCheckFailed ptr ty) = do
+    ppTy <- pp env ty
+    pure $ hang 2 $ group $ vsep [ text "Occurs check failed:"
+                          , group (vsep [viaShow ptr, "≠", ppTy])
                           ]
 
 
 instance Pretty VarInfo SyntacticCategory where
-  pp _env ExpressionCat = text "an expression"
-  pp _env ModuleCat = text "a module"
-  pp _env TypeCat = text "a type"
-  pp _env DeclarationCat = text "a top-level declaration or example"
-  pp _env PatternCaseCat = text "a pattern"
-  pp _env TypePatternCaseCat = text "a typecase pattern"
+  pp _env ExpressionCat = pure $ text "an expression"
+  pp _env ModuleCat = pure $ text "a module"
+  pp _env TypeCat = pure $ text "a type"
+  pp _env DeclarationCat = pure $ text "a top-level declaration or example"
+  pp _env PatternCaseCat = pure $ text "a pattern"
+  pp _env TypePatternCaseCat = pure $ text "a typecase pattern"

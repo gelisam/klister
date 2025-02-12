@@ -1,0 +1,2 @@
+Type mismatch at not-a-function.kl:3.11-3.13.
+Expected (Integer → (?1 → ?2)) but got Integer
