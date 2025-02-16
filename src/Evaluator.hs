@@ -208,7 +208,7 @@ step (Up v k) =
     (InLetDef id' var body env kont) -> Down body (extend id' var v env) kont
 
     -- done, FIXME use a banker's queue instead of a list
-    (InCtor v_args c [] env kont) -> Up (ValueCtor c (reverse $ v : v_args)) kont
+    (InCtor v_args c [] _env kont) -> Up (ValueCtor c (reverse $ v : v_args)) kont
     -- still processing
     (InCtor vs c (a:as) env kont) -> Down a env (InCtor (v:vs) c as env kont)
 
@@ -245,7 +245,7 @@ step (Up v k) =
             name@(Id _) -> Down (unCore scope) env (InScope name env kont)
       other -> Er (EvalErrorIdent other) env k
     (InIdentEqL how r env kont)  -> Down (unCore r) env (InIdentEqR v how env kont)
-    (InIdentEqR how lv env kont) -> Up (ValueMacroAction $ MacroActionIdentEq lv how v) kont
+    (InIdentEqR how lv _env kont) -> Up (ValueMacroAction $ MacroActionIdentEq lv how v) kont
 
     -- Short circuit to speed this up, we could issue an Down and do this recursively
     (InScope expr env kont) ->
@@ -295,7 +295,7 @@ step (Up v k) =
 
 
     -- Macros
-    (InPureMacro env kont) -> Up (ValueMacroAction $ MacroActionPure v) kont
+    (InPureMacro _env kont) -> Up (ValueMacroAction $ MacroActionPure v) kont
     (InBindMacroHd tl env kont) ->
       evalAsMacroAction v
       (\good -> Down (unCore tl) env (InBindMacroTl good env kont))
@@ -348,7 +348,7 @@ step (Up v k) =
           )
       (\err -> Er err env kont)
     -- done
-    (InSyntaxErrorLocations msg_syn [] dones env kont) ->
+    (InSyntaxErrorLocations msg_syn [] dones _env kont) ->
         Up (ValueMacroAction
                 $ MacroActionSyntaxError (SyntaxError { _syntaxErrorMessage   = msg_syn
                                                       , _syntaxErrorLocations = dones
