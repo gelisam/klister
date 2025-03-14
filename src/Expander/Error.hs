@@ -1,5 +1,6 @@
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE DerivingStrategies    #-}
+{-# LANGUAGE LambdaCase            #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE OverloadedStrings     #-}
 module Expander.Error
@@ -51,8 +52,8 @@ data ExpansionErr
   | NotExportSpec Syntax
   | UnknownPattern Syntax
   | MacroRaisedSyntaxError (SyntaxError Syntax)
-  | MacroEvaluationError Phase EvalError
-  | ValueNotMacro Value
+  | MacroEvaluationError Phase EState
+  | ValueNotMacro EState
   | ValueNotSyntax Value
   | ImportError KlisterPathError
   | InternalError String
@@ -322,9 +323,9 @@ instance Pretty VarInfo TypeCheckError where
 
 
 instance Pretty VarInfo SyntacticCategory where
-  pp _env ExpressionCat = pure $ text "an expression"
-  pp _env ModuleCat = pure $ text "a module"
-  pp _env TypeCat = pure $ text "a type"
-  pp _env DeclarationCat = pure $ text "a top-level declaration or example"
-  pp _env PatternCaseCat = pure $ text "a pattern"
+  pp _env ExpressionCat      = pure $ text "an expression"
+  pp _env ModuleCat          = pure $ text "a module"
+  pp _env TypeCat            = pure $ text "a type"
+  pp _env DeclarationCat     = pure $ text "a top-level declaration or example"
+  pp _env PatternCaseCat     = pure $ text "a pattern"
   pp _env TypePatternCaseCat = pure $ text "a typecase pattern"

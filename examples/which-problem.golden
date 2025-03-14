@@ -1,9 +1,9 @@
 (true) : Bool
 (true) : Bool
-#<closure> : (Bool → (Bool → (Bool → (Bool → Unit))))
-#<closure> : (Bool → (Bool → (Bool → (Bool → Unit))))
-(both #<closure> #<closure>) : ∀(α : *) (β : *) (γ : *). (Both (α → (β → (γ → Syntax))))
-(both #<closure> #<closure>) : ∀(α : *) (β : *) (γ : *). (Both (α → (β → (γ → Syntax))))
+#<_> : (Bool → (Bool → (Bool → (Bool → Unit))))
+#<_> : (Bool → (Bool → (Bool → (Bool → Unit))))
+(both #<x> #<_>) : ∀(α : *) (β : *) (γ : *). (Both (α → (β → (γ → Syntax))))
+(both #<_> #<x>) : ∀(α : *) (β : *) (γ : *). (Both (α → (β → (γ → Syntax))))
 "String" : String
 "String -> String" : String
 "String -> String -> String" : String

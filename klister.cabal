@@ -59,6 +59,7 @@ library
       Control.Lens.IORef
       Core
       Core.Builder
+      Debugger
       Datatype
       Env
       Evaluator

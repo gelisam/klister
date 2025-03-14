@@ -8,10 +8,27 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  CEK Machine
+-- Copyright   :  (c) Jeffrey M. Young
+--                    Samuel Gélineau
+--                    David Thrane Christiansen
+-- License     :  BSD-style (see the file LICENSE)
+--
+-- Maintainer  :  Jeffrey Young      <jeffrey.young@iohk.io>
+--                Samuel Gélineau    <gelisam@gmail.com>
+--                David Christiansen <david@davidchristiansen.dk>
+-- Stability   :  experimental
+--
+-- Converting state from the CEK machine to stack trace
+-----------------------------------------------------------------------------
+
+
 {- Note [The CEK interpreter]:
 
-The Klister interpreter is a straightforward implementation of a CEK
-interpreter. The interpreter keeps three kinds of state:
+The Klister interpreter is a straightforward implementation of a CEK machine.
+The interpreter keeps three kinds of state:
 
 -- C: Control      ::= The thing that is being evaluated
 -- E: Environment  ::= The interpreter environment
@@ -29,7 +46,7 @@ https://felleisen.org/matthias/4400-s20/lecture23.html
 
 The bird's eye view:
 
-The evaluator crawl's the input AST and progresses in three modes:
+The evaluator crawls the input AST and progresses in three modes:
 
 -- 'Down': meaning that the evaluator is searching for a redex to evaluate and
 -- therefore moving "down" the AST.
@@ -50,17 +67,21 @@ allows the evaluator to know exactly what needs to happen in order to continue.
 module Evaluator
   ( EvalError (..)
   , EvalResult (..)
+  , EState (..)
+  , Kont (..)
+  , VEnv
   , TypeError (..)
   , evaluate
   , evaluateIn
   , evaluateWithExtendedEnv
   , evalErrorType
   , evalErrorText
-  , projectError
   , erroneousValue
   , apply
   , doTypeCase
   , try
+  , projectKont
+  , constructErrorType
   ) where
 
 import Control.Lens hiding (List, elements)
@@ -95,7 +116,6 @@ data TypeError = TypeError
   , _typeErrorActual   :: Type
   }
   deriving (Eq, Show)
-makeLenses ''TypeError
 
 data EvalError
   = EvalErrorUnbound Var
@@ -135,6 +155,15 @@ data Kont where
   InDataCaseScrut :: ![(ConstructorPattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
   InTypeCaseScrut :: ![(TypePattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
 
+  {- Note [InCasePattern]
+     In case pattern is strictly not necessary, we could do this evaluation in
+     the host's runtime instead of in the evaluator but doing so would mean that
+     the debugger would not be able to capture the pattern that was matched.
+  -}
+  InPrim            :: !Text          -> !Kont -> Kont
+  InCasePattern     :: !SyntaxPattern -> !Kont -> Kont
+  InDataCasePattern :: !ConstructorPattern -> !Kont -> Kont
+
   -- lists
   InConsHd :: !Core -> !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
   InConsTl :: !Core -> !Syntax -> !VEnv -> !Kont -> Kont
@@ -163,9 +192,9 @@ data Kont where
   InLog   :: !VEnv -> !Kont -> Kont
   InError :: !VEnv -> !Kont -> Kont
 
-
   InSyntaxErrorMessage   :: ![Core] -> !VEnv -> !Kont -> Kont
   InSyntaxErrorLocations :: !Syntax -> ![Core] -> ![Syntax] -> !VEnv -> !Kont -> Kont
+  deriving Show
 
 -- | The state of the evaluator
 data EState where
@@ -177,7 +206,7 @@ data EState where
   -- returning a value up the stack
   Er   :: !EvalError -> !VEnv -> !Kont -> EState
   -- ^ 'Er', meaning that we are in an error state and running the debugger
-
+  deriving Show
 
 -- -----------------------------------------------------------------------------
 -- The evaluator. The CEK machine is a state machine, the @step@ function moves
@@ -221,6 +250,10 @@ step (Up v k) =
       (\good -> Up (ValueMacroAction $ MacroActionTypeCase env loc good cs) kont)
       (\err  -> Er err env kont)
 
+    -- Case passthroughs, see the Note [InCasePattern]
+    (InPrim _ kont)                   -> Up v kont
+    (InCasePattern _ kont)            -> Up v kont
+    (InDataCasePattern _ kont)        -> Up v kont
 
     -- Idents
     (InIdent scope env kont) -> case v of
@@ -498,7 +531,7 @@ apply (FO (FOClosure {..})) value =
                        value
                        _closureEnv
   in evaluateIn env _closureBody
-apply (HO prim) value = return $! prim value
+apply (HO _n prim) value = return $! prim value
 
 applyAsClosure :: VEnv -> Value -> Value -> Kont -> EState
 applyAsClosure e v_closure value k = case v_closure of
@@ -508,7 +541,7 @@ applyAsClosure e v_closure value k = case v_closure of
     where app (FO (FOClosure{..})) =
             let env = Env.insert _closureVar _closureIdent value _closureEnv
             in Down (unCore _closureBody) env k
-          app (HO prim)            = Up (prim value) k
+          app (HO n prim)            = Up (prim value) (InPrim n k)
 
 -- | predicate to check for done state
 final :: EState -> Bool
@@ -534,9 +567,21 @@ extends exts env = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env exts
 evalErrorType :: Text -> Value -> EvalError
 evalErrorType expected got =
   EvalErrorType $ TypeError
-    { _typeErrorExpected = expected
-    , _typeErrorActual   = describeVal got
-    }
+  { _typeErrorExpected = expected
+  , _typeErrorActual   = describeVal got
+  }
+
+-- this is a copy of 'evalErrorType' but with no memory of how we got to this
+-- error state. This should just be a stopgap and we should remove it. Its sole
+-- use case is in the expander where we have redundant error checks due to
+-- functions such as @doTypeCase@
+constructErrorType :: Text -> Value -> EState
+constructErrorType expected got = Er err mempty Halt
+  where
+    err = EvalErrorType $ TypeError
+      { _typeErrorExpected = expected
+      , _typeErrorActual   = describeVal got
+      }
 
 doTypeCase :: VEnv -> SrcLoc -> Ty -> [(TypePattern, Core)] -> Either EState Value
 -- We pass @Right $ ValueType v0@ here so that the Core type-case still matches
@@ -572,34 +617,34 @@ doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> VEnv -> Kont -> EState
 doCase blameLoc v0 []               e  kont = Er (EvalErrorCase blameLoc v0) e kont
 doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kont) p rhs0 v0 e kont
   where
-    match next (SyntaxPatternIdentifier n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternIdentifier n x) rhs scrutinee env k =
       case scrutinee of
         v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
-          step $ Down (unCore rhs) (extend n x v env) k
+          step $ Down (unCore rhs) (extend n x v env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternInteger n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternInteger n x) rhs scrutinee env k =
       case scrutinee of
         ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
-          step $ Down (unCore rhs) (extend n x (ValueInteger int) env) k
+          step $ Down (unCore rhs) (extend n x (ValueInteger int) env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternString n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternString n x) rhs scrutinee env k =
       case scrutinee of
         ValueSyntax (Syntax (Stx _ _ (String str))) ->
-          step $ Down (unCore rhs) (extend n x (ValueString str) env) k
+          step $ Down (unCore rhs) (extend n x (ValueString str) env) (InCasePattern pat k)
         _ -> next
     match next SyntaxPatternEmpty rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx _ _ (List [])))) ->
-          step $ Down (unCore rhs) env k
+          step $ Down (unCore rhs) env (InCasePattern SyntaxPatternEmpty k)
         _ -> next
-    match next (SyntaxPatternCons nx x nxs xs) rhs scrutinee env k =
+    match next pat@(SyntaxPatternCons nx x nxs xs) rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx scs loc (List (v:vs))))) ->
           let mkEnv = extend nx x (ValueSyntax v)
                     . extend nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs))))
-          in step $ Down (unCore rhs) (mkEnv env) k
+          in step $ Down (unCore rhs) (mkEnv env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternList xs) rhs scrutinee env k =
+    match next pat@(SyntaxPatternList xs) rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx _ _ (List vs))))
           | length vs == length xs ->
@@ -607,15 +652,15 @@ doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kon
                        | (n,x) <- xs
                        | v     <- vs
                        ]
-            in step $ Down (unCore rhs) (vals `extends` env) k
+            in step $ Down (unCore rhs) (vals `extends` env) (InCasePattern pat k)
         _ -> next
     match _next SyntaxPatternAny rhs _scrutinee env k =
-      step $ Down (unCore rhs) env k
+      step $ Down (unCore rhs) env (InCasePattern SyntaxPatternAny k)
 
 doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> VEnv -> Kont -> EState
 doDataCase loc v0 [] env kont = Er (EvalErrorCase loc v0) env kont
 doDataCase loc v0 ((pat, rhs) : ps) env kont =
-  match (doDataCase loc v0 ps env kont) (\newEnv -> step $ Down (unCore rhs) newEnv kont) [(unConstructorPattern pat, v0)]
+  match (doDataCase loc v0 ps env kont) (\newEnv -> step $ Down (unCore rhs) newEnv (InDataCasePattern pat kont)) [(unConstructorPattern pat, v0)]
   where
     match
       :: EState {- ^ Failure continuation -}
@@ -648,11 +693,6 @@ evaluateWithExtendedEnv env exts = evaluateIn (inserter exts)
   where
     inserter = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env
 
--- TODO DYG: Move to separate module
-projectError :: EState -> EvalError
-projectError (Er err _env _k) = err
-projectError _                = error "debugger: impossible"
-
 erroneousValue :: EvalError -> Value
 erroneousValue (EvalErrorCase _loc v) = v
 erroneousValue (EvalErrorIdent v)     = v
@@ -660,3 +700,8 @@ erroneousValue  _                     =
   error $ mconcat [ "erroneousValue: "
                   , "Evaluator concluded in an error that did not return a value"
                   ]
+
+projectKont :: EState -> Kont
+projectKont (Er _ _ k)   = k
+projectKont (Up _ k)     = k
+projectKont (Down _ _ k) = k

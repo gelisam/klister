@@ -11,13 +11,13 @@ module Expander.TC (
 
 import Control.Lens hiding (indices)
 import Control.Monad
-import Control.Monad.Except
 import Control.Monad.State
 import Data.Foldable
 import Numeric.Natural
 
 import Expander.Monad
 import Core
+import Debugger
 import Datatype
 import Kind
 import SplitCore
@@ -33,7 +33,7 @@ derefType :: MetaPtr -> Expand (TVar Ty)
 derefType ptr =
   (view (expanderTypeStore . at ptr) <$> getState) >>=
   \case
-    Nothing -> throwError $ InternalError "Dangling type metavar"
+    Nothing -> debug $ InternalError "Dangling type metavar"
     Just var -> pure var
 
 
@@ -79,7 +79,7 @@ occursCheck ptr t = do
   if ptr `elem` free
     then do
       t' <- normAll t
-      throwError $ TypeCheckError $ OccursCheckFailed ptr t'
+      debug $ TypeCheckError $ OccursCheckFailed ptr t'
     else pure ()
 
 pruneLevel :: Traversable f => BindingLevel -> f MetaPtr -> Expand ()
@@ -110,7 +110,7 @@ freshMeta kind = do
 inst :: UnificationErrorBlame blame => blame -> Scheme Ty -> [Ty] -> Expand Ty
 inst blame (Scheme argKinds ty) ts
   | length ts /= length argKinds =
-    throwError $ InternalError "Mismatch in number of type vars"
+    debug $ InternalError "Mismatch in number of type vars"
   | otherwise = do
       traverse_ (uncurry $ checkKind blame) (zip argKinds ts)
       instTy ty
@@ -195,7 +195,7 @@ generalizeType ty = do
             Just j -> pure $ TSchemaVar j
       | otherwise = pure $ TMetaVar v
     genVarsCtor _ (TSchemaVar _) =
-      throwError $ InternalError "Can't generalize in scheme"
+      debug $ InternalError "Can't generalize in scheme"
     genVarsCtor _ ctor =
       pure ctor
 
@@ -289,11 +289,11 @@ unifyWithBlame blame depth t1 t2 = do
         e' <- normAll $ Ty shouldBe
         r' <- normAll $ Ty received
         if depth == 0
-          then throwError $ TypeCheckError $ TypeMismatch loc e' r' Nothing
+          then debug $ TypeCheckError $ TypeMismatch loc e' r' Nothing
           else do
             outerE' <- normAll outerExpected
             outerR' <- normAll outerReceived
-            throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
+            debug $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
 
     linkVar ptr t = linkToType (view _1 blame) ptr t
 
@@ -302,7 +302,7 @@ typeVarKind :: MetaPtr -> Expand Kind
 typeVarKind ptr =
   (view (expanderTypeStore . at ptr) <$> getState) >>=
   \case
-    Nothing -> throwError $ InternalError "Type variable not found!"
+    Nothing -> debug $ InternalError "Type variable not found!"
     Just v -> pure $ view varKind v
 
 
@@ -324,7 +324,7 @@ equateKinds blame kind1 kind2 =
       k1' <- zonkKind kind1
       k2' <- zonkKind kind2
       loc <- getBlameLoc blame
-      throwError $ KindMismatch loc k1' k2'
+      debug $ KindMismatch loc k1' k2'
   where
     -- Rigid-rigid cases
     equateKinds' KStar KStar = pure True
@@ -378,7 +378,7 @@ inferKind blame (Ty (TyF ctor args)) = do
     ctorKind (TDatatype dt) = do
       DatatypeInfo argKinds _ <- datatypeInfo dt
       pure $ kFun argKinds KStar
-    ctorKind (TSchemaVar _) = throwError $ InternalError "Tried to find kind in open context"
+    ctorKind (TSchemaVar _) = debug $ InternalError "Tried to find kind in open context"
     ctorKind (TMetaVar mv) = typeVarKind mv
 
     appKind k [] = pure k

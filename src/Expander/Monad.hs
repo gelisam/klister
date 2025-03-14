@@ -155,9 +155,7 @@ import Control.Arrow
 import Control.Lens
 import Control.Monad
 import Control.Monad.IO.Class (MonadIO(liftIO))
-import Control.Monad.Except (MonadError(throwError))
 import Control.Monad.Reader (MonadReader(ask, local), asks)
-import Control.Monad.Trans.Except (ExceptT, runExceptT)
 import Control.Monad.Trans.Reader (ReaderT, runReaderT)
 import Data.Foldable
 import Data.IORef
@@ -176,6 +174,7 @@ import Binding.Info
 import Control.Lens.IORef
 import Core
 import Datatype
+import Debugger
 import Env
 import Evaluator
 import Expander.DeclScope
@@ -206,13 +205,14 @@ import qualified Util.Store as S
 import Util.Key
 
 newtype Expand a = Expand
-  { runExpand :: ReaderT ExpanderContext (ExceptT ExpansionErr IO) a
+  { runExpand :: ReaderT ExpanderContext (Debug DebugContext ExpansionErr) a
   }
-  deriving (Functor, Applicative, Monad, MonadError ExpansionErr, MonadIO, MonadReader ExpanderContext)
+  deriving (Functor, Applicative, Monad, MonadIO
+           , MonadDebugger ExpansionErr, MonadReader ExpanderContext
+           )
 
 execExpand :: ExpanderContext -> Expand a -> IO (Either ExpansionErr a)
-execExpand ctx act = runExceptT $ runReaderT (runExpand act) ctx
-
+execExpand ctx act = runDebug (runReaderT (runExpand act) ctx) initialContext
 
 newtype TaskID = TaskID Unique
   deriving newtype (Eq, Ord, HasKey)
@@ -596,7 +596,7 @@ getDeclGroup :: DeclTreePtr -> Expand (Seq CompleteDecl)
 getDeclGroup ptr =
   (view (expanderCompletedDeclTrees . at ptr) <$> getState) >>=
   \case
-    Nothing -> throwError $ InternalError "Incomplete module after expansion"
+    Nothing -> debug $ InternalError "Incomplete module after expansion"
     Just DeclTreeLeaf -> pure mempty
     Just (DeclTreeAtom decl) ->
       pure <$> getDecl decl
@@ -607,7 +607,7 @@ getDecl :: DeclPtr -> Expand CompleteDecl
 getDecl ptr =
   (view (expanderCompletedDecls . at ptr) <$> getState) >>=
   \case
-    Nothing -> throwError $ InternalError "Missing decl after expansion"
+    Nothing -> debug $ InternalError "Missing decl after expansion"
     Just decl -> zonkDecl decl
   where
     zonkDecl ::
@@ -616,11 +616,11 @@ getDecl ptr =
     zonkDecl (Define x v schPtr e) =
       linkedCore e >>=
       \case
-        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Nothing -> debug $ InternalError "Missing expr after expansion"
         Just e' ->
           linkedScheme schPtr >>=
           \case
-            Nothing -> throwError $ InternalError "Missing scheme after expansion"
+            Nothing -> debug $ InternalError "Missing scheme after expansion"
             Just (Scheme ks t) -> do
               ks' <- traverse zonkKindDefault ks
               pure $ CompleteDecl $ Define x v (Scheme ks' t) e'
@@ -629,7 +629,7 @@ getDecl ptr =
       for macros \(x, v, e) ->
         linkedCore e >>=
         \case
-          Nothing -> throwError $ InternalError "Missing expr after expansion"
+          Nothing -> debug $ InternalError "Missing expr after expansion"
           Just e' -> pure $ (x, v, e')
     zonkDecl (Data x dn argKinds ctors) = do
       argKinds' <- traverse zonkKindDefault argKinds
@@ -645,7 +645,7 @@ getDecl ptr =
                          linkedType ptr' >>=
                          \case
                            Nothing ->
-                             throwError $ InternalError "Missing type after expansion"
+                             debug $ InternalError "Missing type after expansion"
                            Just argTy ->
                              pure argTy
             pure (ident, cn, args')
@@ -654,18 +654,18 @@ getDecl ptr =
     zonkDecl (Example loc schPtr e) =
       linkedCore e >>=
       \case
-        Nothing -> throwError $ InternalError "Missing expr after expansion"
+        Nothing -> debug . InternalError $ "Missing expr after expansion at: " <> show loc
         Just e' ->
           linkedScheme schPtr >>=
           \case
-            Nothing -> throwError $ InternalError "Missing example scheme after expansion"
+            Nothing -> debug . InternalError $ "Missing example scheme after expansion: " <> show loc
             Just (Scheme ks t) -> do
               ks' <- traverse zonkKindDefault ks
               pure $ CompleteDecl $ Example loc (Scheme ks' t) e'
     zonkDecl (Run loc e) =
       linkedCore e >>=
       \case
-        Nothing -> throwError $ InternalError "Missing action after expansion"
+        Nothing -> debug $ InternalError "Missing action after expansion"
         Just e' -> pure $ CompleteDecl $ Run loc e'
     zonkDecl (Import spec) = return $ CompleteDecl $ Import spec
     zonkDecl (Export x) = return $ CompleteDecl $ Export x
@@ -772,7 +772,7 @@ constructorInfo ctor = do
   fromModule <- view (expanderCurrentConstructors . at p . non mempty . at ctor) <$> getState
   case fromWorld <|> fromModule of
     Nothing ->
-      throwError $ InternalError $ "Unknown constructor " ++ show ctor
+     debug $ InternalError $ "Unknown constructor " ++ show ctor
     Just info -> pure info
 
 datatypeInfo :: Datatype -> Expand DatatypeInfo
@@ -782,7 +782,7 @@ datatypeInfo datatype = do
   fromModule <- view (expanderCurrentDatatypes . at p . non mempty . at datatype) <$> getState
   case fromWorld <|> fromModule of
     Nothing ->
-      throwError $ InternalError $ "Unknown datatype " ++ show datatype
+     debug $ InternalError $ "Unknown datatype " ++ show datatype
     Just info -> pure info
 
 bind :: Binding -> EValue -> Expand ()
@@ -848,7 +848,7 @@ completely body = do
   a <- body
   remainingTasks <- getTasks
   unless (null remainingTasks) $ do
-    throwError (NoProgress (map (view _3) remainingTasks))
+   debug (NoProgress (map (view _3) remainingTasks))
   setTasks oldTasks
   pure a
 
@@ -864,11 +864,10 @@ clearTasks = modifyState $ set expanderTasks []
 evalInCurrentPhase :: Core -> Expand Value
 evalInCurrentPhase evalAction = do
   env <- currentEnv
-  let out = evaluateIn env evalAction
-  case out of
-    Left err -> do
+  case evaluateIn env evalAction of
+    Left e_state -> do
       p <- currentPhase
-      throwError $ MacroEvaluationError p $ projectError err
+      debug $ MacroEvaluationError p e_state
     Right val -> return val
 
 currentTransformerEnv :: Expand TEnv
@@ -927,7 +926,7 @@ importing mn act = do
   if mn `elem` inProgress
     then do
     here <- view (expanderWorld . worldLocation) <$> getState
-    throwError $
+    debug $
          CircularImports (relativizeModuleName here mn) $
          fmap (relativizeModuleName here) inProgress
     else Expand $ local (over (expanderLocal . expanderImportStack) (mn:)) (runExpand act)

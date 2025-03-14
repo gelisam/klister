@@ -1,0 +1,3 @@
+#lang "prelude.kl"
+
+(example (pure (error 'surprise-error)))

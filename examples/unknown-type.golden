@@ -1,4 +1,4 @@
 (nothing) : ∀(α : *). (Maybe α)
 (just #[unknown-type.kl:24.33-24.37]<here>) : (Maybe Syntax)
-(just #<closure>) : ∀(α : *). (Maybe (α → α))
-(pair (just #<closure>) (nothing)) : ∀(α : *). (Pair (Maybe (α → α)) (Maybe (α → α)))
+(just #<x>) : ∀(α : *). (Maybe (α → α))
+(pair (just #<x>) (nothing)) : ∀(α : *). (Pair (Maybe (α → α)) (Maybe (α → α)))

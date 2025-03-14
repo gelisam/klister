@@ -33,12 +33,12 @@ import Syntax
 import Value
 import World
 
-data Options = Options { optCommand :: CLICommand }
-data RunOptions = RunOptions { runOptFile :: FilePath
-                             , runOptWorld :: Bool
+newtype Options = Options { optCommand :: CLICommand }
+data RunOptions = RunOptions { runOptFile        :: FilePath
+                             , runOptWorld       :: Bool
                              , runOptBindingInfo :: Bool
                              }
-data ReplOptions = ReplOptions { replOptFile :: Maybe FilePath }
+newtype ReplOptions = ReplOptions { replOptFile :: Maybe FilePath }
 
 data CLICommand
   = Run RunOptions
@@ -63,8 +63,8 @@ main = do
     replOptions = Repl . ReplOptions <$> optional fileArg
     parser = Options <$>
       subparser
-        ( (command "run" (info runOptions (progDesc "Run a file")))
-        <> (command "repl" (info replOptions (progDesc "Use the REPL")))
+        ( command "run" (info runOptions (progDesc "Run a file"))
+        <> command "repl" (info replOptions (progDesc "Use the REPL"))
         )
     opts = info parser mempty
 
@@ -147,5 +147,5 @@ repl ctx startWorld = do
                         putStrLn ""
                         currentWorld <- readIORef theWorld
                         case evaluateIn (phaseEnv runtime currentWorld) expr of
-                            Left evalErr -> print $ erroneousValue $ projectError evalErr
+                            Left evalErr -> print evalErr
                             Right val    -> prettyPrintLn val

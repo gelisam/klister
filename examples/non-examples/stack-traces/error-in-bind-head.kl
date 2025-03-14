@@ -1,0 +1,5 @@
+#lang "prelude.kl"
+
+(example
+  (>>= (pure (error 'Im-an-error))
+       (lambda (x) (pure x))))
