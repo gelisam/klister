@@ -99,8 +99,8 @@ instance Phased TypePattern where
 
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
-  | SyntaxPatternInteger Ident Var
-  | SyntaxPatternString Ident Var
+  | SyntaxPatternInteger Integer
+  | SyntaxPatternString Text
   | SyntaxPatternEmpty
   | SyntaxPatternCons Ident Var Ident Var
   | SyntaxPatternList [(Ident, Var)]

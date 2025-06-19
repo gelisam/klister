@@ -26,20 +26,15 @@ module Expander.Primitives
   , err
   , flet
   , identEqual
-  , identSyntax
   , lambda
   , letExpr
   , letSyntax
-  , listSyntax
-  , integerSyntax
-  , stringSyntax
   , makeIntroducer
   , Expander.Primitives.log
   , whichProblem
   , pureMacro
   , quote
   , replaceLoc
-  , syntaxCase
   , syntaxError
   , the
   , typeCase
@@ -378,55 +373,6 @@ quote t dest stx = do
   Stx _ _ (_, quoted) <- mustHaveEntries stx
   linkExpr dest $ CoreSyntax quoted
 
-identSyntax :: ExprPrim
-identSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, someId, source) <- mustHaveEntries stx
-  idDest <- schedule tSyntax someId
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreIdent $ ScopedIdent idDest sourceDest
-
-emptyListSyntax :: ExprPrim
-emptyListSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, source) <- mustHaveEntries stx
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreEmpty $ ScopedEmpty sourceDest
-
-consListSyntax :: ExprPrim
-consListSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, car, cdr, source) <- mustHaveEntries stx
-  carDest <- schedule tSyntax car
-  cdrDest <- schedule tSyntax cdr
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreCons $ ScopedCons carDest cdrDest sourceDest
-
-listSyntax :: ExprPrim
-listSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, list, source) <- mustHaveEntries stx
-  listItems <- mustHaveShape list
-  listDests <- traverse (schedule tSyntax) listItems
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreList $ ScopedList listDests sourceDest
-
-integerSyntax :: ExprPrim
-integerSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, int, source) <- mustHaveEntries stx
-  intDest <- schedule tInteger int
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreIntegerSyntax $ ScopedInteger intDest sourceDest
-
-stringSyntax :: ExprPrim
-stringSyntax t dest stx = do
-  unify dest t tSyntax
-  Stx _ _ (_, str, source) <- mustHaveEntries stx
-  strDest <- schedule tString str
-  sourceDest <- schedule tSyntax source
-  linkExpr dest $ CoreStringSyntax $ ScopedString strDest sourceDest
-
 replaceLoc :: ExprPrim
 replaceLoc t dest stx = do
   unify dest t tSyntax
@@ -434,14 +380,6 @@ replaceLoc t dest stx = do
   locDest <- schedule tSyntax loc
   valStxDest <- schedule tSyntax valStx
   linkExpr dest $ CoreReplaceLoc locDest valStxDest
-
-syntaxCase :: ExprPrim
-syntaxCase t dest stx = do
-  Stx scs loc (_ :: Syntax, args) <- mustBeCons stx
-  Stx _ _ (scrutinee, patterns) <- mustBeCons (Syntax (Stx scs loc (List args)))
-  scrutDest <- schedule tSyntax scrutinee
-  patternDests <- traverse (mustHaveEntries >=> expandPatternCase t) patterns
-  linkExpr dest $ CoreCase loc scrutDest patternDests
 
 letSyntax :: ExprPrim
 letSyntax t dest stx = do
@@ -639,40 +577,30 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
   p <- currentPhase
   sch <- trivialScheme tSyntax
   case lhs of
-    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "ident")),
-                           patVar])) -> do
-      (sc, x', var) <- prepareVar patVar
+    Syntax (Stx _ _ (Syntax.Id "_")) -> do
+      rhsDest <- schedule t rhs
+      return (SyntaxPatternAny, rhsDest)
+    Syntax (Stx scs srcloc (Syntax.Id anIdent)) -> do
+      -- TODO Check that anIdent is a pattern variable (i.e. not bound to a constructor)
+      -- For now, assume all identifiers are pattern variables
+      (sc, x', var) <- prepareVar (Syntax (Stx scs srcloc (Syntax.Id anIdent)))
       let rhs' = addScope p sc rhs
       rhsDest <- withLocalVarType x' var sch $ schedule t rhs'
       let patOut = SyntaxPatternIdentifier x' var
       return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "integer")),
-                           patVar])) -> do
-      (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p sc rhs
-      strSch <- trivialScheme tInteger
-      rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
-      let patOut = SyntaxPatternInteger x' var
+    Syntax (Stx _ _ (Syntax.Integer anInteger)) -> do
+      rhsDest <- schedule t rhs
+      let patOut = SyntaxPatternInteger anInteger
       return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "string")),
-                           patVar])) -> do
-      (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p sc rhs
-      strSch <- trivialScheme tString
-      rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
-      let patOut = SyntaxPatternString x' var
+    Syntax (Stx _ _ (Syntax.String aString)) -> do
+      rhsDest <- schedule t rhs
+      let patOut = SyntaxPatternString aString
       return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "list")),
-                           Syntax (Stx _ _ (List vars))])) -> do
-      varInfo <- traverse prepareVar vars
-      let rhs' = foldr (addScope p) rhs [sc | (sc, _, _) <- varInfo]
-      rhsDest <- withLocalVarTypes [(var, vIdent, sch) | (_, vIdent, var) <- varInfo] $
-                   schedule t rhs'
-      let patOut = SyntaxPatternList [(vIdent, var) | (_, vIdent, var) <- varInfo]
-      return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "cons")),
-                           car,
-                           cdr])) -> do
+    Syntax (Stx _ _ (Syntax.List [])) -> do
+      rhsDest <- schedule t rhs
+      return (SyntaxPatternEmpty, rhsDest)
+    Syntax (Stx _ _ (Syntax.List (Syntax (Stx _ _ (Syntax.Id "cons")) : car : cdr : []))) -> do
+      -- This handles `(cons car cdr)` syntax for `SyntaxPatternCons`
       (sc, car', carVar) <- prepareVar car
       (sc', cdr', cdrVar) <- prepareVar cdr
       let rhs' = addScope p sc' $ addScope p sc rhs
@@ -680,14 +608,15 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
                    schedule t rhs'
       let patOut = SyntaxPatternCons car' carVar cdr' cdrVar
       return (patOut, rhsDest)
-    Syntax (Stx _ _ (List [])) -> do
-      rhsDest <- schedule t rhs
-      return (SyntaxPatternEmpty, rhsDest)
-    Syntax (Stx _ _ (Id "_")) -> do
-      rhsDest <- schedule t rhs
-      return (SyntaxPatternAny, rhsDest)
+    Syntax (Stx _ _ (Syntax.List vars)) -> do -- This is for list patterns
+      varInfo <- traverse prepareVar vars
+      let rhs' = foldr (addScope p) rhs [sc | (sc, _, _) <- varInfo]
+      rhsDest <- withLocalVarTypes [(var, vIdent, sch) | (_, vIdent, var) <- varInfo] $
+                   schedule t rhs'
+      let patOut = SyntaxPatternList [(vIdent, var) | (_, vIdent, var) <- varInfo]
+      return (patOut, rhsDest)
     other ->
-      throwError $ UnknownPattern other
+      throwError $ UnknownPattern lhs
 
 scheduleDataPattern ::
   Ty -> Ty ->

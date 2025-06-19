@@ -61,14 +61,7 @@
         bound-identifier=?
         free-identifier=?
         quote
-        ident-syntax
-        empty-list-syntax
-        cons-list-syntax
-        list-syntax
-        integer-syntax
-        string-syntax
         replace-loc
-        syntax-case
         let-syntax
         log
         make-introducer

@@ -6,68 +6,57 @@
 
 (meta
   (defun map-syntax (f stx)
-    (syntax-case stx
-      [() stx]
-      [(cons a d)
-       (cons-list-syntax (f a) (map-syntax f d) stx)]
+    (case (open-syntax stx)
+      [(list-contents ()) stx]
+      [(list-contents (cons a d))
+       (close-syntax stx (cons (f a) (map-syntax f d)))]
       [_ stx])))
 
 [define-macros
   ([unquote
     [lambda (stx)
-      (syntax-error [quote "unquote used out of context"] stx)]]
+      (syntax-error (list (quote "unquote used out of context") stx) stx)]]
    [quasiquote
     [lambda (stx)
-      (syntax-case stx
-        [[list [_ e]]
-         (syntax-case e
-           [[ident x]
-            [pure [list-syntax [[quote quote] x]
-                               x]]]
-           [[integer int]
-            [pure [list-syntax [[quote quote] (integer-syntax int e)]
-                               e]]]
-           [[string str]
-            [pure [list-syntax [[quote quote] (string-syntax str e)]
-                               e]]]
-           [()
-            [pure
-             [list-syntax [[quote empty-list-syntax]
-                           [list-syntax [[quote quote]
-                                        e]
-                                       'here]]
-                         e]]]
-           [[cons x y]
-            (syntax-case x
-              [[ident i]
-               [>>= [free-identifier=? i [quote unquote]]
-                 [lambda [unquote?]
-                   [if unquote?
-                       (syntax-case y
-                         [[list [v]] [pure v]]
-                         [_ (syntax-error '"wrong number of arguments to unquote" e)])
-                       [pure
-                        (list-syntax ('list-syntax
+      (case (open-syntax stx)
+        [(list-contents (list _ e))
+         (case (open-syntax e)
+           [(identifier-contents x)
+            (pure (close-syntax x (list (quote quote) x)))]
+           [(integer-contents int)
+            (pure (close-syntax e (list (quote quote) (close-syntax e int))))]
+           [(string-contents str)
+            (pure (close-syntax e (list (quote quote) (close-syntax e str))))]
+           [(list-contents ())
+            (pure (close-syntax e (list (quote quote) (close-syntax e '()))))]
+           [(list-contents (cons x y))
+            (case (open-syntax x)
+              [(identifier-contents i)
+               (>>= (free-identifier=? i (quote unquote))
+                 (lambda (unquote?)
+                   (if unquote?
+                       (case (open-syntax y)
+                         [(list-contents (list v)) (pure v)]
+                         [_ (syntax-error (quote "wrong number of arguments to unquote") e)])
+                       (pure
+                        (close-syntax e (list (quote list) -- Assuming 'list replaces 'list-syntax for constructing lists of syntax
                                         (map-syntax (lambda (s)
-                                                      (list-syntax ('quasiquote s)
-                                                                   s))
+                                                      (close-syntax s (list (quote quasiquote) s)))
                                                     e)
-                                        (list-syntax ('quote e) 'foo))
-                                      e)]]]]]
-              [_ [pure
-                  (list-syntax ('list-syntax
+                                        (close-syntax e (list (quote quote) e))))))))]
+              [_ (pure
+                  (close-syntax e (list (quote list) -- Assuming 'list replaces 'list-syntax
                                   (map-syntax (lambda (s)
-                                                (list-syntax ('quasiquote s) s))
+                                                (close-syntax s (list (quote quasiquote) s)))
                                               e)
-                                  (list-syntax ('quote e) 'foo))
-                                e)]])])]
-        [_ (syntax-error [list-syntax [[quote "bad syntax"] stx] stx] stx)])]])]
+                                  (close-syntax e (list (quote quote) e)))))]])]
+        [_ (syntax-error (list (quote "bad syntax") stx) stx)])]])]
 
 (define-macros
   ([quasiquote/loc
     (lambda (stx)
-      (syntax-case stx
-        [(list (_ loc q))
-         (pure (list-syntax ('replace-loc loc (list-syntax ('quasiquote q) stx)) stx))]))]))
+      (case (open-syntax stx)
+        [(list-contents (list _ loc q))
+         (pure (close-syntax stx (list (quote replace-loc) loc (close-syntax stx (list (quote quasiquote) q)))))]))]))
 
 (export unquote quasiquote quasiquote/loc)

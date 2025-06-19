@@ -12,15 +12,15 @@
 (define-macros
   ((define-macro
      (lambda (stx)
-       (syntax-case stx
-         ((list (_ pattern body))
-          (syntax-case pattern
-           ((cons macro-name args)
+       (case (open-syntax stx)
+         [(list-contents (list _ pattern body))
+          (case (open-syntax pattern)
+           [(list-contents (cons (identifier-contents macro-name) args))
             (pure `(define-macros
                      ([,macro-name (lambda (stx)
-                                     (syntax-case stx
-                                      ((list ,pattern)
-                                       ,body)))])))))))))))
+                                     (case (open-syntax stx)
+                                      [(list-contents (list ,pattern))
+                                       ,body])))]))))]))))))
 
 -- (define-variadic-macro (lambda2 stx)
 --   (case (open-syntax stx)
@@ -36,23 +36,23 @@
 -- (define-syntax-rule (lambda2 x y body)
 --   (lambda (x y) body))
 (define-variadic-macro (define-syntax-rule stx)
-  (syntax-case stx
-    ((list (_ pattern template))
-     (syntax-case pattern
-      ((cons macro-name args)
+  (case (open-syntax stx)
+    [(list-contents (list _ pattern template))
+     (case (open-syntax pattern)
+      [(list-contents (cons (identifier-contents macro-name) args))
        (do (unquoted-template <- (foldlM (lambda (t arg)
                                            (replace-identifier
                                              arg
-                                             (list-syntax ('unquote arg) stx)
+                                             (close-syntax stx '(unquote arg))
                                              t))
                                          template
                                          args))
-           (quasiquoted-template <- (pure (list-syntax ('quasiquote unquoted-template) stx)))
+           (quasiquoted-template <- (pure (close-syntax stx '(quasiquote unquoted-template))))
            (pure `(define-macros
                     ([,macro-name (lambda (stx)
-                                    (syntax-case stx
-                                     ((list ,pattern)
-                                      (pure ,quasiquoted-template))))])))))))))
+                                    (case (open-syntax stx)
+                                     [(list-contents (list ,pattern))
+                                      (pure ,quasiquoted-template)]))]))))))])))
 
 
 (export define-macro define-variadic-macro define-syntax-rule)
