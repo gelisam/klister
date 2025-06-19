@@ -1,7 +1,67 @@
 #lang "prelude.kl"
 
+-- This defines an Algebraic Datatype (ADT) called `Either`.
+-- It is very similar to Haskell's `Either` type or Scala's `Either`.
+-- It represents a value that can be one of two types: `A` (for Left) or `B` (for Right).
+-- This is often used to represent computations that can either succeed (Right) or fail (Left).
 (datatype (Either A B)
-  (left A)
-  (right B))
+  (Left A)  -- Constructor for the Left case, holding a value of type A
+  (Right B) -- Constructor for the Right case, holding a value of type B
+)
 
-(export Either left right)
+-- Function to check if an `Either` value is `Left`.
+-- The type checker statically ensures that the patterns (e.g., `(Left x)`)
+-- are valid for the `Either` type and that `x` is used according to its type.
+(defun isLeft (e)
+  (case e
+    ((Left x) (true))   -- If it's Left, return true. `x` is bound to the value inside Left.
+    ((Right _) (false)) -- If it's Right, return false. `_` means we don't care about the value.
+  ))
+
+-- Function to check if an `Either` value is `Right`.
+-- Similar to `isLeft`, type checking ensures pattern validity.
+(defun isRight (e)
+  (case e
+    ((Left _) (false))
+    ((Right y) (true))  -- `y` is bound to the value inside Right.
+  ))
+
+-- A function that processes an `Either` value.
+-- It takes two functions, `f` and `g`, and an `Either` value `e`.
+-- If `e` is `(Left x)`, it applies `f` to `x`.
+-- If `e` is `(Right y)`, it applies `g` to `y`.
+-- This is analogous to Haskell's `either` function.
+-- The type system ensures that `f` is only called with values of type `A`
+-- and `g` is only called with values of type `B`.
+(defun either (f g e)
+  (case e
+    ((Left x) (f x))
+    ((Right y) (g y))
+  ))
+
+-- Define some example `Either` values.
+(define e1 (Left "hello"))  -- e1 is an Either String Integer (type inferred)
+(define e2 (Right 123))    -- e2 is also an Either String Integer (type inferred from context if used with e1)
+
+-- Examples to demonstrate the functions.
+-- The `example` form is used for running expressions and seeing their results in tests.
+(example (isLeft e1))
+(example (isRight e1))
+(example (isLeft e2))
+(example (isRight e2))
+
+-- Demonstrate the `either` function.
+-- If e1 is Left, apply string-length. If Right, apply identity (lambda (x) x).
+(example (either string-length (lambda (x) x) e1))
+-- If e2 is Left, apply string-length. If Right, apply identity.
+(example (either string-length (lambda (x) x) e2))
+
+-- Note on Pattern Synonyms:
+-- While Klister does not have a built-in "pattern synonym" feature quite like Haskell's
+-- (e.g., `pattern IsLeft x = Left x`), its hygienic macro system is powerful
+-- enough to define similar abstractions if needed. One could write a macro
+-- that expands a custom pattern form into a standard `case` pattern.
+-- However, creating such macros is more advanced and beyond the scope of this basic example.
+
+-- Export the defined names so they can be used by other modules if this were imported.
+(export Either Left Right isLeft isRight either e1 e2)

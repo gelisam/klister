@@ -1,0 +1,11 @@
+Up to date
+Example at either-datatype.kl:48.1-49.1: (isLeft e1) : Bool ↦ (true)
+Example at either-datatype.kl:49.1-50.1: (isRight e1) : Bool ↦ (false)
+Example at either-datatype.kl:50.1-51.1: (isLeft e2) : Bool ↦ (false)
+Example at either-datatype.kl:51.1-55.1: (isRight e2) : Bool ↦ (true)
+Example at either-datatype.kl:55.1-57.1:
+  (((either string-length) λx. x) e1) : Integer ↦
+  5
+Example at either-datatype.kl:57.1-67.1:
+  (((either string-length) λx. x) e2) : Integer ↦
+  123
