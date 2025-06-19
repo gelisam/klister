@@ -1,7 +1,128 @@
 #lang "prelude.kl"
 
+(import (shift "prelude.kl" 1))
+(import (shift "list.kl" 1))
+(import "define-syntax-rule.kl")
+(import "list.kl")
+
+
+-- A sum type, like in Haskell:
+--
+-- > data Either a b
+-- >   = Left a
+-- >   | Right b
+--
+-- Note Klister's naming convention: type-level names (including type
+-- variables!) are Uppercase, while value-level names (including data
+-- constructors!) are lowercase.
 (datatype (Either A B)
   (left A)
   (right B))
 
-(export Either left right)
+-- Pattern-matching, like in Haskell:
+--
+-- > case either of
+-- >   Left x -> onLeft x
+-- >   Right y -> onRight y
+--
+-- Since Klister is a typed language, it is a compile-time error if the type of
+-- the pattern does not match the type of the scrutinee (try [(true) (true)]).
+-- Klister does not yet emit a warning if the patterns are not exhaustive (try
+-- deleting the [(right _) (false)]).
+--
+(defun run-either (on-left on-right either)
+  (case either
+    [(left x)
+     (on-left x)]
+    [(right y)
+     (on-right y)]))
+
+-- look at "either-datatype.golden" to see that the inferred type is
+-- > run-either
+-- >   : ∀ (A : *) (B : *) (R : *)
+-- >   . (A → R)
+-- >   → (B → R)
+-- >   → (Either A B)
+-- >   → R
+(example run-either)
+
+-- _ : Either Integer String → String
+(example (run-either integer->string id))
+
+-- "42"
+(example (run-either integer->string id (left 42)))
+
+
+-- Next, let's define a variant of Either with three cases: leftmost, center,
+-- and rightmost.
+--
+-- The most straightforward way to do it would be to define a new datatype with
+-- three data constructors, but let's take this opportunity to demonstrate the
+-- Klister equivalent of Haskell's type synonyms and pattern synonyms.
+--
+-- In Klister, macro invocations are also expanded inside types and patterns.
+-- Therefore, to define a type synonym or a pattern synonym, it suffices to
+-- define a macro.
+
+-- > type Ternary a b c  = Either a (Either b c)
+-- > pattern Leftmost  x = Left x
+-- > pattern Center    y = Right (Left y)
+-- > pattern Rightmost z = Right (Right z)
+(define-syntax-rule (Ternary A B C)  (Either A (Either B C)))
+(define-syntax-rule (leftmost x)     (left x))
+(define-syntax-rule (center y)       (right (left y)))
+(define-syntax-rule (rightmost z)    (right (right z)))
+
+(defun run-ternary (on-leftmost on-center on-rightmost ternary)
+  (case ternary
+    [(leftmost x)
+     (on-leftmost x)]
+    [(center y)
+     (on-center y)]
+    [(rightmost z)
+     (on-rightmost z)]))
+
+-- _ : ∀ (A : *) (B : *) (R : *)A
+--   . Ternary A B C
+--   → Ternary C A B
+(example (run-ternary
+           (lambda (x) (center x))
+           (lambda (y) (rightmost y))
+           (lambda (z) (leftmost z))))
+
+
+-- Haskell would say that we have defined "implicit bidirectional pattern
+-- synonyms", in the sense that they can appear in a pattern or an expression,
+-- and that they expand to the same thing in both locations.
+--
+-- It is also possible to define an "explicitly bidirectional pattern synonym",
+-- that is, a synonym which expands in a different way depending on whether it
+-- is used as a pattern or an expression.
+
+-- > pattern Head :: a -> [a]
+-- > pattern Head x <- x : _ where
+-- >   Head x = x : []
+(define-macro (head x)
+  (>>= (which-problem)
+    (lambda (problem)
+      (case problem
+        [(pattern)
+         -- called as (head x) in a pattern,
+         -- expand to (:: x _)
+         (pure `(:: ,x _))]
+        [(expression _)
+         -- called as (head x) in an expression,
+         -- expand to (:: x (nil))
+         (pure `(:: ,x (nil)))]))))
+
+-- (list 42)
+(example (head 42))
+
+-- 1
+(example (case (list 1 2 3)
+           [(head x)
+            x]))
+
+
+(export Either left right run-either
+        Ternary leftmost center rightmost run-ternary)

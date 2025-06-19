@@ -1,0 +1,6 @@
+#<closure> : ∀(α : *) (β : *) (γ : *). ((α → β) → ((γ → β) → ((Either α γ) → β)))
+#<closure> : ((Either Integer String) → String)
+"42" : String
+#<closure> : ∀(α : *) (β : *) (γ : *). ((Either α (Either β γ)) → (Either γ (Either α β)))
+(:: 42 (nil)) : (List Integer)
+1 : Integer
