@@ -1,7 +1,6 @@
 #lang "prelude.kl"
 
 (import (shift "prelude.kl" 1))
-(import (shift "list.kl" 1))
 (import "define-syntax-rule.kl")
 (import "list.kl")
 
