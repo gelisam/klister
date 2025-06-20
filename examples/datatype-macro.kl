@@ -1,52 +1,68 @@
-#lang "prelude.kl"
-(import "defun.kl")
-(import (shift "prelude.kl" 1))
-(import (shift "lispy-do.kl" 1))
-(import (shift "let.kl" 1))
-(import (shift "quasiquote.kl" 1))
-(import (shift (only "list-syntax.kl" map) 1))
+#lang klister
 
-
+;; User writes (List A) explicitly because List takes a parameter.
 (datatype (List A)
   (nil)
   (:: A (List A)))
 
-(defun snoc (xs x)
-  (case xs
-    [(nil) (:: x (nil))]
-    [(:: y ys) (:: y (snoc ys x))]))
+(the (List Integer) nil)
+(the (List Bool) (:: true (:: false nil)))
 
-(defun reverse (xs)
-  (case xs
-    [(nil) (nil)]
-    [(:: x xs) (snoc (reverse xs) x)]))
+;; User writes Nat (single identifier) because Nat takes no parameters.
+(datatype Nat
+  (zero)
+  (suc Nat)) ;; Nat in (suc Nat) refers to the type, will be wrapped by macro.
 
-(define-macros
-  ([list
-     (lambda (stx)
-       (syntax-case stx
-         [(cons _ more)
-          (syntax-case more
-           [()
-            (pure (replace-loc more '(nil)))]
-           [(cons x xs)
-            (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
+(the Nat zero)
+(the Nat (suc zero))
+(the Nat (suc (suc Nat))) ;; Stress test
 
-(example (reverse (:: 1 (:: 2 (:: 3 (nil))))))
+;; User writes (Maybe A) explicitly.
+(datatype (Maybe A)
+  (nothing) ;; nothing is nullary, will be wrapped by macro
+  (just A)) ;; A is a param, not wrapped by macro
 
-(example (reverse (list 1 2 3)))
+(the (Maybe Bool) (just true))
+(the (Maybe Integer) nothing)
 
-(define-macros
-  ([null (lambda (stx) (pure '(nil)))]))
+;; User writes Tree A (not (Tree A)) - macro handles making (Tree A) for kernel
+(datatype Tree A
+  (leaf)  ;; leaf is nullary, will be wrapped
+  (node (Tree A) A (Tree A))) ;; (Tree A) is already a list, A is param
 
-(define-macros
-  ([head
-    (lambda (stx)
-     (syntax-case stx
-       [(list (_ x))
-        (pure (quasiquote/loc stx (:: ,x xs)))]))]))
+(the (Tree Integer) (node (leaf) 5 (leaf)))
 
-(example (case (reverse null) [null 'a]))
+;; User writes PlainType (single identifier)
+(datatype PlainType
+  plainCons) ;; plainCons is nullary, will be wrapped
 
-(example (case (reverse (list 1 2 3)) [(head x) x]))
-         
+(the PlainType plainCons)
+
+;; User writes MixedParamsType A B SomeOtherType
+(datatype MixedParamsType A B SomeOtherType
+  (mixedCons A SomeOtherType B)) ;; SomeOtherType is not a param, will be wrapped
+
+(the (MixedParamsType Bool String Integer) (mixedCons true "test" 5))
+
+
+;; User writes IdWrapper X
+(datatype IdWrapper X
+  (wrapId X)) ;; X is a param
+
+(the (IdWrapper Nat) (wrapId zero))
+(the (IdWrapper (List Bool)) (wrapId (:: true nil)))
+
+
+;; User writes Foo A B
+(datatype Foo A B
+  (bar A) ;; A is a param
+  (baz B C)) ;; B is a param, C is not a param, will be wrapped
+
+(the (Foo Bool Nat) (bar true))
+(the (Foo Bool Nat) (baz false zero)) ;; Assumes C is Nat for this instance
+
+;; User writes (Pair A B) explicitly
+(datatype (Pair A B)
+  (pair A B))
+
+(the (Pair Nat Bool) (pair zero true))

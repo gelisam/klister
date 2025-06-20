@@ -17,7 +17,6 @@
 
         -- primitive declaration macros
         define
-        datatype
         define-macros
         example
         run
@@ -84,6 +83,7 @@
 
         -- non-primitive declaration macros
         defun
+        datatype
 
         -- non-primitive expression macros
         unquote

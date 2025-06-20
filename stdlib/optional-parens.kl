@@ -45,6 +45,48 @@
    [my-Syntax-Contents (optional-parens 'Syntax-Contents)]
    [my-Output-Port (optional-parens 'Output-Port)]))
 
+(defmacro data-optional-parens . all-args
+  (let* ((parse-head-and-constructors
+           (lambda (Args)
+             (if (empty? Args)
+               (error "data-optional-parens: No arguments provided.")
+               (if (list? (hd Args))
+                 (list (hd Args) (cdr Args)) ; Head is pre-grouped, e.g. ((Maybe A) ...)
+                 ; Head is not pre-grouped, collect leading symbols
+                 (let Rec ((RemainingArgs Args) (HeadAccumulator []))
+                   (if (or (empty? RemainingArgs) (not (symbol? (hd RemainingArgs))))
+                     (if (empty? HeadAccumulator)
+                       (error "data-optional-parens: Invalid declaration head, expected symbols or a list.")
+                       (list (reverse HeadAccumulator) RemainingArgs))
+                     (Rec (cdr RemainingArgs) (cons (hd RemainingArgs) HeadAccumulator))))))))
+
+         (parsed-parts (parse-head-and-constructors all-args))
+         (head-spec (first parsed-parts)) ; This is (Name P1 P2...) or (Name)
+         (constructor-defs-unprocessed (second parsed-parts))
+
+         (processed-head head-spec) ; Head-spec from parser is already what kernel `datatype` expects
+         (datatype-params (if (list? head-spec) (cdr head-spec) ())) ; Params are (cdr head-spec)
+
+         (processed-constructor-defs
+           (map (lambda (ctor-def)
+                  (if (symbol? ctor-def)
+                    (list ctor-def) ; Nullary constructor, e.g., nothing -> (nothing)
+                    (if (list? ctor-def)
+                      (let ((ctor-name (car ctor-def))
+                            (ctor-args-unprocessed (cdr ctor-def)))
+                        (cons ctor-name ; e.g., just
+                              (map (lambda (arg)
+                                     (if (symbol? arg)
+                                       (if (mem? arg datatype-params)
+                                         arg        ; Argument is a type parameter, keep as is
+                                         (list arg)) ; Argument is a symbol but not a type param, wrap it
+                                       arg))        ; Argument is already a list (e.g., (List Nat)), keep as is
+                                   ctor-args-unprocessed)))
+                      (error "data-optional-parens: Constructor definition must be a symbol or a list."))))
+                constructor-defs-unprocessed)))
+
+    `(datatype ,processed-head ,@processed-constructor-defs)))
+
 (export (rename ([my-Syntax Syntax]
                  [my-Integer Integer]
                  [my-Macro Macro]
@@ -58,7 +100,8 @@
                  [my-Maybe Maybe] [my-nothing nothing]
                  [my-List List] [my-nil nil]
                  [my-Syntax-Contents Syntax-Contents]
-                 [my-Output-Port Output-Port])
+                 [my-Output-Port Output-Port]
+                 [data-optional-parens datatype])
                 my-Syntax
                 my-Integer
                 my-Macro
