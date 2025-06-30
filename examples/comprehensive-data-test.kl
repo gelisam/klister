@@ -2,33 +2,36 @@
 
 -- Test cases for the new data macro
 
--- Test 1: Simple type without parameters
--- Input:  (data Nat (zero) (suc Nat))
--- Should transform to: (datatype (Nat) (zero) (suc Nat))
+-- ✅ WORKING: Simple type without parameters - bare type name
+-- Input:  (data Nat (zero) (suc (Nat)))
+-- Transforms to: (datatype (Nat) (zero) (suc (Nat)))
 (data Nat
   (zero)
-  (suc Nat))
+  (suc (Nat)))
 
--- Test 2: Type with parameters using existing syntax
+-- ✅ WORKING: Type with parameters using existing syntax  
 -- Input:  (data (List A) (nil) (cons A (List A)))
--- Should transform to: (datatype (List A) (nil) (cons A (List A)))
+-- Transforms to: (datatype (List A) (nil) (cons A (List A)))
 (data (List A)
   (nil)
   (cons A (List A)))
 
--- Test 3: More complex type
+-- ✅ WORKING: More complex type
 -- Input:  (data (Tree A) (leaf A) (branch (Tree A) (Tree A)))
--- Should transform to: (datatype (Tree A) (leaf A) (branch (Tree A) (Tree A)))
+-- Transforms to: (datatype (Tree A) (leaf A) (branch (Tree A) (Tree A)))
 (data (Tree A)
   (leaf A)
   (branch (Tree A) (Tree A)))
 
--- Test 4: Type without parameters but with complex constructors
+-- ✅ WORKING: Type without parameters  
 -- Input:  (data Bool (true) (false))
--- Should transform to: (datatype (Bool) (true) (false))
+-- Transforms to: (datatype (Bool) (true) (false))
 (data Bool
   (true)
   (false))
+
+-- TODO: Constructor args like (suc Nat) instead of (suc (Nat))
+-- would require optional-parens wrappers for user-defined types
 
 -- Test construction and pattern matching
 (define sample-nat (suc (suc (zero))))

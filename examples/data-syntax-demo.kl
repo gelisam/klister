@@ -1,0 +1,50 @@
+#lang "prelude.kl"
+
+-- Demonstration of the new data syntax
+-- This file shows the main improvement: datatype names without parentheses
+
+-- NEW: Can now write bare type names in data declarations
+(data Nat
+  (zero)
+  (suc (Nat)))    -- Still need (Nat) here for now
+
+(data Bool
+  (true)
+  (false))
+
+-- EXISTING: Parameterized types still work the same way
+(data (List A)
+  (nil)
+  (cons A (List A)))
+
+(data (Maybe A)
+  (nothing)
+  (just A))
+
+-- Test that everything works correctly
+(define sample-numbers 
+  (cons (suc (suc (zero))) 
+        (cons (suc (zero)) 
+              (cons (zero) (nil)))))
+
+(define is-empty
+  (lambda (lst)
+    (case lst
+      [(nil) (true)]
+      [(cons _ _) (false)])))
+
+(define maybe-add-one
+  (lambda (maybe-n)
+    (case maybe-n
+      [(nothing) (nothing)]
+      [(just n) (just (suc n))])))
+
+-- Examples demonstrating usage
+(example sample-numbers)
+(example (is-empty (nil)))
+(example (is-empty sample-numbers))
+(example (maybe-add-one (just (zero))))
+(example (maybe-add-one (nothing)))
+
+(export Nat zero suc Bool true false List nil cons Maybe nothing just
+        sample-numbers is-empty maybe-add-one)
