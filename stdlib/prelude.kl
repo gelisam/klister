@@ -9,6 +9,33 @@
 (define const (lambda (x y) x))
 (define compose (lambda (f g x) (f (g x))))
 
+-- Macro to support datatype names without parentheses
+(meta
+  (define data-macro
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: typeNameAndArgs ctorSpecs)))
+         (case (open-syntax typeNameAndArgs)
+           [(identifier-contents _)
+            -- Handle bare type name: (data Nat ctor1 ctor2...)
+            -- Transform to: (datatype (Nat) ctor1 ctor2...)
+            (pure (close-syntax stx stx
+                   (list-contents (:: 'datatype 
+                                      (:: (close-syntax stx typeNameAndArgs
+                                           (list-contents (:: typeNameAndArgs (nil))))
+                                          ctorSpecs)))))]
+           [(list-contents _)
+            -- Handle parenthesized type name: (data (List A) ctor1 ctor2...)
+            -- Transform to: (datatype (List A) ctor1 ctor2...)
+            (pure (close-syntax stx stx
+                   (list-contents (:: 'datatype 
+                                      (:: typeNameAndArgs ctorSpecs)))))]
+           [_ (syntax-error '"bad data syntax" stx)])]
+        [_ (syntax-error '"bad data syntax" stx)]))))
+
+(define-macros
+  ([data data-macro]))
+
 -- When adding an export to this file, please remember to add a corresponding
 -- entry to "examples/primitives-documentation.kl", so that we at least have
 -- its type signature as a bare minimum form of documentation.
@@ -17,6 +44,7 @@
 
         -- primitive declaration macros
         define
+        data
         datatype
         define-macros
         example
