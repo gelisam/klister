@@ -1,0 +1,12 @@
+#lang kernel
+
+-- This is what the kernel datatype expects (current working syntax)
+(datatype (Nat)
+  (zero)
+  (suc (Nat)))
+
+(define three (suc (suc (suc (zero)))))
+
+(example three)
+
+(export Nat zero suc three)

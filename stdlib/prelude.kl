@@ -21,7 +21,7 @@
             -- Transform to: (datatype (Nat) ctor1 ctor2...)
             (pure (close-syntax stx stx
                    (list-contents (:: 'datatype 
-                                      (:: (close-syntax stx typeNameAndArgs
+                                      (:: (close-syntax typeNameAndArgs typeNameAndArgs
                                            (list-contents (:: typeNameAndArgs (nil))))
                                           ctorSpecs)))))]
            [(list-contents _)

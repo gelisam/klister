@@ -1,0 +1,49 @@
+#lang "prelude.kl"
+
+-- Test cases for the new data macro
+
+-- Test 1: Simple type without parameters
+-- Input:  (data Nat (zero) (suc Nat))
+-- Should transform to: (datatype (Nat) (zero) (suc Nat))
+(data Nat
+  (zero)
+  (suc Nat))
+
+-- Test 2: Type with parameters using existing syntax
+-- Input:  (data (List A) (nil) (cons A (List A)))
+-- Should transform to: (datatype (List A) (nil) (cons A (List A)))
+(data (List A)
+  (nil)
+  (cons A (List A)))
+
+-- Test 3: More complex type
+-- Input:  (data (Tree A) (leaf A) (branch (Tree A) (Tree A)))
+-- Should transform to: (datatype (Tree A) (leaf A) (branch (Tree A) (Tree A)))
+(data (Tree A)
+  (leaf A)
+  (branch (Tree A) (Tree A)))
+
+-- Test 4: Type without parameters but with complex constructors
+-- Input:  (data Bool (true) (false))
+-- Should transform to: (datatype (Bool) (true) (false))
+(data Bool
+  (true)
+  (false))
+
+-- Test construction and pattern matching
+(define sample-nat (suc (suc (zero))))
+(define sample-list (cons (suc (zero)) (nil)))
+(define sample-tree (branch (leaf (zero)) (leaf (suc (zero)))))
+
+(define is-zero 
+  (lambda (n)
+    (case n
+      [(zero) (true)]
+      [(suc _) (false)])))
+
+(example sample-nat)
+(example (is-zero (zero)))
+(example (is-zero sample-nat))
+
+(export Nat zero suc List nil cons Tree leaf branch Bool true false 
+        sample-nat sample-list sample-tree is-zero)
