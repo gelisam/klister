@@ -281,6 +281,7 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
           lift $ modifyState $
             over (expanderWorld . worldEnvironments . at p) $
             Just . maybe (Env.singleton n x val) (Env.insert n x val)
+
         Data _ dn argKinds ctors -> do
           p <- lift currentPhase
           let mn = view moduleName em
@@ -302,8 +303,9 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
           env <- lift currentEnv
           value <- lift $ evalInCurrentPhase expr
           modify' (:|> ExampleResult loc env expr sch value)
+
         Run loc expr -> do
-          lift (evalInCurrentPhase expr) >>=
+           lift (evalInCurrentPhase expr) >>=
             \case
               (ValueIOAction act) ->
                 modify' (:|> (IOResult . void $ act))
@@ -313,6 +315,7 @@ evalMod (Expanded em _) = execStateT (traverseOf_ (moduleBody . each) evalDecl e
                   $ "While running an action at "
                   ++ T.unpack (pretty loc)
                   ++ " an unexpected non-IO value was encountered."
+
         DefineMacros macros -> do
           p <- lift currentPhase
           lift $ inEarlierPhase $ for_ macros $ \(x, n, e) -> do
@@ -1436,9 +1439,7 @@ interpretMacroAction prob =
             Right v  ->
               case v of
                 ValueMacroAction act -> interpretMacroAction prob act
-                other -> do
-                  p <- currentPhase
-                  debug $ expansionError p $ ValueNotMacro (Up other Halt)
+                other                -> eDebug $ ValueNotMacro $ eStateWith other
     MacroActionSyntaxError syntaxError ->
       eDebug $ MacroRaisedSyntaxError syntaxError
     MacroActionIdentEq how v1 v2 -> do

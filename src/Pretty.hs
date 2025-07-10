@@ -14,7 +14,7 @@ module Pretty
   , string
   , text
   , viaShow
-  , (<+>), (<>), align, hang, line, group, vsep, hsep, hardline, nest
+  , (<+>), (<>), align, hang, indent, line, group, vsep, hsep, hardline, nest
   , VarInfo(..)
   , pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv
   ) where
@@ -825,7 +825,13 @@ instance Pretty VarInfo EState where
 
 instance Pretty VarInfo Kont where
   pp env k = do kont <- printKont env k
-                return $ hardline <> text "----" <+> kont
+                return $ hardline <> text stackTracePrefix <+> kont
+
+stackTracePrefix :: Text
+stackTracePrefix = "----"
+
+stackTraceIndent :: Int
+stackTraceIndent = T.length stackTracePrefix
 
 printStack :: Env Var () -> EState -> State Renumbering (Doc VarInfo)
 printStack e (Er err _env k) = do
@@ -847,10 +853,18 @@ printKont e (InFun arg _env k) = do
   a <- pp e arg
   kont <- pp e k
   return $ text "with arg" <+> a <> kont
-printKont e (InArg fun _env k) = do
-  f <- pp e fun
+printKont e (InArg fname flam _env k) = do
+  fun  <- case fname of
+    Just s  -> pp e s
+    Nothing -> pure mempty
+  f    <- pp e flam
   kont <- pp e k
-  return $ text "with function" <+> f <> kont
+  -- this is the argument
+  return $
+    text "with argument:" <+> f
+    <> line
+    <> indent (2 * stackTraceIndent) (text "in function" <+> fun)
+    <> kont
 printKont e (InLetDef name _var _body _env k) = do
   n <- pp e name
   -- TODO: DYG: the body prints out uniques instead of the var name

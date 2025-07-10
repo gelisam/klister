@@ -140,8 +140,9 @@ instance Pretty VarInfo ExpansionErr where
     ppStx <- pp env stx
     ppP   <- pp env ppM
     pure $
-      text "In Phase:" <+> ppP
-      <> text "Not an identifier:" <+> ppStx
+      vsep [ text "In Phase:" <+> ppP
+           , indent 2 $ text "Not an identifier:" <+> ppStx
+           ]
   pp env (unExpansionErr -> (ppM, NotEmpty stx)) = do
     ppStx <- pp env stx
     ppP   <- pp env ppM
@@ -291,19 +292,16 @@ instance Pretty VarInfo ExpansionErr where
     ppIs  <- pp env (unTenon is)
     ppP   <- pp env ppM
     ppShouldBe <- pp env (unMortise shouldBe)
-    pure $ hang 2 $ group
-         $ text "In Phase:" <+> ppP
-         <> vsep [ ppStx <> text ":"
-                 , group $ vsep [ group $ hang 2 $
-                                 vsep [ text "Used in a position expecting"
-                                      , ppShouldBe
-                                      ]
-                               , group $ hang 2 $
-                                 vsep [ text "but is valid in a position expecting"
-                                      , ppIs
-                                      ]
-                                ]
-                ]
+    pure $
+      vsep [ text "In Phase:" <+> ppP
+           , indent 2 (ppStx <> text ":")
+           , indent 2
+             $ vsep [ text "Used in a position expecting:"
+                    , indent 2 ppShouldBe
+                    , text "but is valid in a position expecting:"
+                    , indent 2 ppIs
+              ]
+           ]
   pp env (unExpansionErr -> (ppM, NotValidType stx)) = do
     ppStx <- pp env stx
     ppP   <- pp env ppM
