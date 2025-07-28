@@ -25,9 +25,9 @@
 -- >   Right y -> onRight y
 --
 -- Since Klister is a typed language, it is a compile-time error if the type of
--- the pattern does not match the type of the scrutinee (try [(true) (true)]).
+-- the pattern does not match the type of the scrutinee (try [(true) (error 'undefined)]).
 -- Klister does not yet emit a warning if the patterns are not exhaustive (try
--- deleting the [(right _) (false)]).
+-- deleting the [(left x) (on-left x)]).
 --
 (defun run-either (on-left on-right either)
   (case either
@@ -81,7 +81,7 @@
     [(rightmost z)
      (on-rightmost z)]))
 
--- _ : ∀ (A : *) (B : *) (R : *)A
+-- _ : ∀ (A : *) (B : *) (R : *)
 --   . Ternary A B C
 --   → Ternary C A B
 (example (run-ternary
@@ -114,7 +114,7 @@
          -- expand to (:: x (nil))
          (pure `(:: ,x (nil)))]))))
 
--- (list 42)
+-- (:: 42 (nil))
 (example (head 42))
 
 -- 1
