@@ -1,0 +1,6 @@
+In Phase: p0:
+    error-in-let.kl:4.42-4.53: Im-an-error
+    stack trace:
+    ---- with function #<+>
+    ---- in let #[error-in-let.kl:4.22-4.24]<go>
+    ---- Halt

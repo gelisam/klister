@@ -2,11 +2,22 @@
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ParallelListComp #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
-module Pretty (Doc, Pretty(..), string, text, viaShow, (<+>), (<>), align, hang, line, group, vsep, hsep, VarInfo(..), pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv) where
+module Pretty
+  ( Doc
+  , Pretty(..)
+  , ppBind
+  , string
+  , text
+  , viaShow
+  , (<+>), (<>), align, hang, indent, line, group, vsep, hsep, hardline, nest
+  , VarInfo(..)
+  , pretty, prettyPrint, prettyPrintLn, prettyEnv, prettyPrintEnv
+  ) where
 
 import Control.Lens hiding (List)
 import Control.Monad.State
@@ -28,7 +39,7 @@ import Binding.Info
 import Core
 import Datatype
 import Env
-import Evaluator (EvalResult(..), EvalError(..), TypeError(..))
+import Evaluator (EvalResult(..), EvalError(..), TypeError(..), Kont(..), EState(..))
 import Kind
 import Module
 import ModuleName
@@ -465,7 +476,7 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
       ppArgs <- mapM (pp env) args
       pure $ case ppArgs of
         [] -> text c
-        more -> hang 2 $ text c <+> group (vsep ppArgs)
+        _more -> hang 2 $ text c <+> group (vsep ppArgs)
     pure (hang 2 $ group $
             vsep ( text "data" <+> text x <+>
                    hsep [ parens (text α <+> ":" <+> kind)
@@ -608,7 +619,8 @@ instance Pretty VarInfo (ExprF Syntax) where
     pure $ parens (group (vsep ppXs))
 
 instance Pretty VarInfo Closure where
-  pp _ _ = pure $ text "#<closure>"
+  pp _ (FO fo) = pure $ "#<" <> text (_stxValue (_closureIdent fo)) <> ">"
+  pp _ (HO n _) = pure $ "#<" <> text n <> ">"
 
 instance Pretty VarInfo Value where
   pp env (ValueClosure c) = pp env c
@@ -665,8 +677,8 @@ instance Pretty VarInfo Phase where
 
 instance Pretty VarInfo a => Pretty VarInfo (World a) where
   pp env w = do
-    ppModules <- for (HM.toList (view worldModules w)) $ \(_modName, mod) -> do
-      pp env mod
+    ppModules <- for (HM.toList (view worldModules w)) $ \(_modName, modul) -> do
+      pp env modul
     ppVisited <- for (HM.toList (view worldVisited w)) $ \(modName, phases) -> do
       ppModName <- pp env modName
       ppPhases <- mapM (pp env) (Set.toList phases)
@@ -744,6 +756,7 @@ instance Pretty VarInfo EvalError where
     ppV <- pp env v
     pure $ text "Attempt to bind identifier to non-value: " <+> ppV
 
+
 instance Pretty VarInfo EvalResult where
   pp env (ExampleResult loc valEnv coreExpr sch val) = do
     let varEnv = fmap (const ()) valEnv
@@ -793,7 +806,7 @@ instance Pretty VarInfo ScopeSet where
       ppSet s = do
         ppS <- mapM (pp env) (Set.toList s)
         pure $ text "{" <> commaSep ppS <> text "}"
-      
+
       ppStore :: Store Phase (Set Scope) -> State Renumbering (Doc VarInfo)
       ppStore m = do
         ppM <- for (St.toList m) $ \(p, scopes) -> do
@@ -803,3 +816,204 @@ instance Pretty VarInfo ScopeSet where
 
 instance Pretty VarInfo KlisterPathError where
   pp _ = pure . ppKlisterPathError
+
+-- -----------------------------------------------------------------------------
+-- StackTraces
+
+instance Pretty VarInfo EState where
+  pp env st = printStack env st
+
+instance Pretty VarInfo Kont where
+  pp env k = do kont <- printKont env k
+                return $ hardline <> text stackTracePrefix <+> kont
+
+stackTracePrefix :: Text
+stackTracePrefix = "----"
+
+stackTraceIndent :: Int
+stackTraceIndent = T.length stackTracePrefix
+
+printStack :: Env Var () -> EState -> State Renumbering (Doc VarInfo)
+printStack e (Er err _env k) = do
+  er   <- pp e err
+  kont <- pp e k
+  return $ vsep [ er , text "stack trace:"] <> kont
+
+printStack _ Up{}   = pure $ hang 2 $ text "up"
+printStack _ Down{} = pure $ hang 2 $ text "down"
+
+printKont :: Env Var () -> Kont -> State Renumbering (Doc VarInfo)
+-- the basics
+printKont _ Halt               = pure $ text "Halt"
+printKont e (InPrim prim k)    = do
+  p <- pp e prim
+  kont <- pp e k
+  return $ text "in prim" <+> p <> kont
+printKont e (InFun arg _env k) = do
+  a <- pp e arg
+  kont <- pp e k
+  return $ text "with arg" <+> a <> kont
+printKont e (InArg fname flam _env k) = do
+  fun  <- case fname of
+    Just s  -> pp e s
+    Nothing -> pure mempty
+  f    <- pp e flam
+  kont <- pp e k
+  -- this is the argument
+  return $
+    text "with argument:" <+> f
+    <> line
+    <> indent (2 * stackTraceIndent) (text "in function" <+> fun)
+    <> kont
+printKont e (InLetDef name _var _body _env k) = do
+  n <- pp e name
+  -- TODO: DYG: the body prints out uniques instead of the var name
+  -- b <- pp e _body
+  kont <- pp e k
+  return $ text "in let" <+> n <> kont
+
+-- constructors
+printKont e (InCtor field_vals con _f_to_process _env k) = do
+  let position = length field_vals + 1
+  c <- pp e con
+  kont <- pp e k
+  return $ text "in constructor"
+    <+> align (vsep [c,  text "in field" <+> viaShow position]) <> kont
+
+-- cases
+printKont e (InCaseScrut cases loc _env k) = do
+  l <- pp e loc
+  kont <- pp e k
+  cs <- mconcat <$> mapM (do_case e) cases
+  return $ text "in case" <> l <> cs <> kont
+printKont e (InDataCaseScrut cases loc _env k) = do
+  l <- pp e loc
+  kont <- pp e k
+  cs <- mconcat <$> mapM (do_case e) cases
+  return $ text "in data case" <> l <> cs <> kont
+printKont e (InTypeCaseScrut cases loc _env k) = do
+  l <- pp e loc
+  kont <- pp e k
+  cs <- mconcat <$> mapM (do_case e) cases
+  return $ text "in type case" <> l <> cs <> kont
+printKont e (InCasePattern p k) = do
+  let ppPattern = \case
+        SyntaxPatternIdentifier i _   -> pp e i
+        SyntaxPatternInteger i _      -> pp e i
+        SyntaxPatternString i _       -> pp e i
+        SyntaxPatternCons il _iv rl _rv -> do
+          il' <- pp e il
+          rl' <- pp e rl
+          return $ il' <> rl'
+        SyntaxPatternList ls          -> mconcat <$> mapM (\(i, _) -> pp e i) ls
+        SyntaxPatternAny              -> pure $ text "_"
+        SyntaxPatternEmpty            -> pure $ text "()"
+  pat <- ppPattern p
+  kont <- pp e k
+  return $ text "in case pattern" <> pat <> kont
+printKont e (InDataCasePattern p k) = do
+  let ppPattern = \case
+        CtorPattern c _ps  -> pp e c
+        PatternVar i _v    -> pp e i
+  pat <- ppPattern (unConstructorPattern p)
+  kont <- pp e k
+  return $ text "in data case pattern: " <> pat <> kont
+
+-- pairs
+printKont e (InConsHd scope hd _env k) = do
+  h    <- pp e hd
+  scpe <- pp e scope
+  kont <- pp e k
+  return $
+    vsep [ text "in head of pair"
+         , nest 2 h
+         , text "in scope"
+         , nest 2 scpe
+         ] <> kont
+printKont e (InConsTl scope hd _env k) = do
+  h    <- pp e hd
+  scpe <- pp e scope
+  kont <- pp e k
+  return $
+    vsep [ text "in tail of pair"
+         , nest 2 h
+         , text "in scope"
+         , nest 2 scpe
+         ] <> kont
+
+-- lists
+printKont e (InList scope _todos dones _env k) = do
+  ds <- mconcat <$> mapM (pp e) dones
+  scpe <- pp e scope
+  kont <- pp e k
+  return $
+    vsep [ text "in list"
+         , nest 2 ds
+         , text "in scope"
+         , nest 2 scpe
+         ] <> kont
+
+-- idents
+printKont e (InIdent scope _env k) = do
+  scpe <- pp e scope
+  kont <- pp e k
+  return $
+    vsep [ text "in ident"
+         , text "in scope"
+         , nest 2 scpe
+         ] <> kont
+printKont e (InIdentEqL _how scope _env k) = do
+  scpe <- pp e scope
+  kont <- pp e k
+  return $
+    vsep [ text "in ident eq left"
+         , text "in scope"
+         , nest 2 scpe
+         ] <> kont
+printKont e (InIdentEqR other _how _env k) = do
+  o <- pp e other
+  kont <- pp e k
+  return $
+    vsep [ text "in ident eq right, comparing: " <> o] <> kont
+
+-- macros
+printKont e (InPureMacro _env k) = do
+  kont <- pp e k
+  return $
+    vsep [ text "in pure macro"] <> kont
+printKont e (InBindMacroHd tl _env k) = do
+  tale <- pp e tl
+  kont <- pp e k
+  return $
+    vsep [ text "in bind macro head", tale] <> kont
+printKont e (InBindMacroTl action _env k) = do
+  act  <- pp e action
+  kont <- pp e k
+  return $ vsep [ text "in bind macro tail", act] <> kont
+
+-- atomics
+printKont e (InInteger _ _ k) = pp e k
+printKont e (InString  _ _ k) = pp e k
+printKont e (InReplaceLocL _ _ k) = pp e k
+printKont e (InReplaceLocR _ _ k) = pp e k
+
+-- scope
+printKont e (InScope scope _env k) = do
+  scpe <- pp e scope
+  kont <- pp e k
+  return $ vsep [ text "in scope" , scpe] <> kont
+
+-- others
+printKont e (InLog _ k) = pp e k -- would require a passthrough
+printKont e (InError _ k) = pp e k
+printKont e (InSyntaxErrorMessage _ _ k) = pp e k
+printKont e (InSyntaxErrorLocations _ _ _ _ k) = pp e k
+
+-------------------------- stack trace helpers ---------------------------------
+do_case
+  :: (PrettyBinder ann a1, Pretty ann a2)
+  => Env Var () -> (a1, a2) -> StateT Renumbering Identity (Doc ann)
+do_case e c = do
+  cse  <- fst <$> ppBind e (fst c)
+  body <- pp e (snd c)
+  return $ cse <> body

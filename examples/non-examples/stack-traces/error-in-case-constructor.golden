@@ -1,0 +1,5 @@
+In Phase: p0:
+    error-in-case-constructor.kl:12.20-12.31: Im-an-error
+    stack trace:
+    ---- in data case pattern: l
+    ---- Halt

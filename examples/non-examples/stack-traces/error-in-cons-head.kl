@@ -1,0 +1,10 @@
+#lang "prelude.kl"
+
+(import "lambda-case.kl")
+
+-- TODO: DYG: see #265
+(define fail
+  (lambda (thing)
+    (car '(1 2 'something-else))))
+
+(example (fail 3))

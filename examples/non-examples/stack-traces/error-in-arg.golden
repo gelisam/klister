@@ -1,0 +1,5 @@
+In Phase: p0:
+    error-in-arg.kl:5.24-5.27: bad
+    stack trace:
+    ---- with function #<thing>
+    ---- Halt

@@ -1,0 +1,8 @@
+#lang "prelude.kl"
+
+(example
+  (>>= (pure 'hello-go-boom)
+    (lambda (x)
+      (>>= (pure x)
+      -- TODO: DYG: see #265
+        (lambda (y) (error y))))))

@@ -1,0 +1,20 @@
+#lang "prelude.kl"
+
+(import "lambda-case.kl")
+
+(datatype (Pair A B)
+  (pair A B))
+
+(define fst
+  (lambda-case
+    [(pair x _) x]))
+
+(define snd
+  (lambda-case
+    [(pair _ y) y]))
+
+(define fail (lambda (thing)
+               (let (go (pair thing (error 'Im-an-error)))
+                 go)))
+
+(example (fail 23))

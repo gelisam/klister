@@ -8,10 +8,27 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 
+-----------------------------------------------------------------------------
+-- |
+-- Module      :  CEK Machine
+-- Copyright   :  (c) Jeffrey M. Young
+--                    Samuel Gélineau
+--                    David Thrane Christiansen
+-- License     :  BSD-style (see the file LICENSE)
+--
+-- Maintainer  :  Jeffrey Young      <jeffrey.young@iohk.io>
+--                Samuel Gélineau    <gelisam@gmail.com>
+--                David Christiansen <david@davidchristiansen.dk>
+-- Stability   :  experimental
+--
+-- Converting state from the CEK machine to stack trace
+-----------------------------------------------------------------------------
+
+
 {- Note [The CEK interpreter]:
 
-The Klister interpreter is a straightforward implementation of a CEK
-interpreter. The interpreter keeps three kinds of state:
+The Klister interpreter is a straightforward implementation of a CEK machine.
+The interpreter keeps three kinds of state:
 
 -- C: Control      ::= The thing that is being evaluated
 -- E: Environment  ::= The interpreter environment
@@ -29,7 +46,7 @@ https://felleisen.org/matthias/4400-s20/lecture23.html
 
 The bird's eye view:
 
-The evaluator crawl's the input AST and progresses in three modes:
+The evaluator crawls the input AST and progresses in three modes:
 
 -- 'Down': meaning that the evaluator is searching for a redex to evaluate and
 -- therefore moving "down" the AST.
@@ -50,17 +67,22 @@ allows the evaluator to know exactly what needs to happen in order to continue.
 module Evaluator
   ( EvalError (..)
   , EvalResult (..)
+  , EState (..)
+  , Kont (..)
+  , VEnv
   , TypeError (..)
   , evaluate
   , evaluateIn
   , evaluateWithExtendedEnv
   , evalErrorType
   , evalErrorText
-  , projectError
   , erroneousValue
+  , eStateWith
   , apply
   , doTypeCase
   , try
+  , projectKont
+  , constructErrorType
   ) where
 
 import Control.Lens hiding (List, elements)
@@ -95,7 +117,6 @@ data TypeError = TypeError
   , _typeErrorActual   :: Type
   }
   deriving (Eq, Show)
-makeLenses ''TypeError
 
 data EvalError
   = EvalErrorUnbound Var
@@ -117,10 +138,14 @@ data Kont where
   -- ^ Marks the evaluator finishing
 
   -- functions
-  InArg :: !Value -> !VEnv -> !Kont -> Kont
-  -- ^ The argument is being evaluated, so hold onto the function symbol. We
-  -- require that the function symbol be fully evaluated before evaluating the
-  -- arguments, hence the @Value@
+  InArg :: Maybe (Stx Text) -> !Value -> !VEnv -> !Kont -> Kont
+  -- ^ The argument is being evaluated, we hold onto meta information in 'Maybe
+  -- (Stx Text)' for pretty printing function names. We require that the
+  -- function symbol be fully evaluated before evaluating the arguments, hence
+  -- the @Value@ is the function closure. The closure does not contain the
+  -- function symbol so we must hold onto the meta information to report the
+  -- function name in a stack trace. Once the argument is done being evaluated
+  -- we pass its value to the closure contained in @Value@ here.
   InFun :: !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
   -- ^ The function is being evaluated, so hold onto the argument.
 
@@ -134,6 +159,15 @@ data Kont where
   InCaseScrut     :: ![(SyntaxPattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
   InDataCaseScrut :: ![(ConstructorPattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
   InTypeCaseScrut :: ![(TypePattern, Core)] -> !SrcLoc -> !VEnv -> !Kont -> Kont
+
+  {- Note [InCasePattern]
+     In case pattern is strictly not necessary, we could do this evaluation in
+     the host's runtime instead of in the evaluator but doing so would mean that
+     the debugger would not be able to capture the pattern that was matched.
+  -}
+  InPrim            :: !Text          -> !Kont -> Kont
+  InCasePattern     :: !SyntaxPattern -> !Kont -> Kont
+  InDataCasePattern :: !ConstructorPattern -> !Kont -> Kont
 
   -- lists
   InConsHd :: !Core -> !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> Kont
@@ -163,22 +197,28 @@ data Kont where
   InLog   :: !VEnv -> !Kont -> Kont
   InError :: !VEnv -> !Kont -> Kont
 
-
   InSyntaxErrorMessage   :: ![Core] -> !VEnv -> !Kont -> Kont
   InSyntaxErrorLocations :: !Syntax -> ![Core] -> ![Syntax] -> !VEnv -> !Kont -> Kont
+  deriving Show
 
 -- | The state of the evaluator
 data EState where
   Down :: !(CoreF TypePattern ConstructorPattern Core) -> !VEnv -> !Kont -> EState
   -- ^ 'Down', we are searching the AST for a redex and building up the stack of
   -- continuations
-  Up   :: !Value -> !Kont -> EState
+  Up   :: Maybe (Stx Text) -> !Value -> !Kont -> EState
   -- ^ 'Up', means we have performed some evaluation on a redex and are
-  -- returning a value up the stack
+  -- returning a value up the stack. 'Maybe (Stx Text)' is meta information from
+  -- the evaluator used for printing stack traces.
   Er   :: !EvalError -> !VEnv -> !Kont -> EState
   -- ^ 'Er', meaning that we are in an error state and running the debugger
+  deriving Show
 
+noStx :: Maybe (Stx Text)
+noStx = Nothing
 
+eStateWith :: Value -> EState
+eStateWith v = Up noStx v Halt
 -- -----------------------------------------------------------------------------
 -- The evaluator. The CEK machine is a state machine, the @step@ function moves
 -- the state machine a single step of evaluation. This is the heart of the
@@ -187,28 +227,27 @@ data EState where
 
 -- | Make a single step transition in the CEK state machine.
 step :: EState -> EState
-step done@(Up _val Halt) = done
+step done@(Up _ _val Halt) = done
 
 -- for now we just bail out. Once we have a debugger we'll do something more
 -- advanced.
 step done@(Er _err _env _k)  = done
 
 -- Upsweep, returning a value after evaluating a redex
-step (Up v k) =
+step (Up stx v k) =
   case k of
     -- functions
     -- we evaluated the arg to get a closed so now we evaluate the fun
-    (InArg fun env kont) -> applyAsClosure env fun v kont
+    (InArg _ fun env kont) -> applyAsClosure env fun v kont
     -- we evaluated the fun so now do the application
-    (InFun arg env kont) -> Down arg env (InArg v env kont)
-
+    (InFun arg env kont)  -> Down arg env (InArg stx v env kont)
 
     -- lets
     -- we have the value for the def, now eval the body
     (InLetDef id' var body env kont) -> Down body (extend id' var v env) kont
 
     -- done, FIXME use a banker's queue instead of a list
-    (InCtor v_args c [] _env kont) -> Up (ValueCtor c (reverse $ v : v_args)) kont
+    (InCtor v_args c [] _env kont) -> Up stx (ValueCtor c (reverse $ v : v_args)) kont
     -- still processing
     (InCtor vs c (a:as) env kont) -> Down a env (InCtor (v:vs) c as env kont)
 
@@ -218,14 +257,18 @@ step (Up v k) =
     (InDataCaseScrut cs loc env kont) -> doDataCase loc v cs env kont
     (InTypeCaseScrut cs loc env kont) ->
       evalAsType v
-      (\good -> Up (ValueMacroAction $ MacroActionTypeCase env loc good cs) kont)
+      (\good -> Up stx (ValueMacroAction $ MacroActionTypeCase env loc good cs) kont)
       (\err  -> Er err env kont)
 
+    -- Case passthroughs, see the Note [InCasePattern]
+    (InPrim _ kont)                   -> Up stx v kont
+    (InCasePattern _ kont)            -> Up stx v kont
+    (InDataCasePattern _ kont)        -> Up stx v kont
 
     -- Idents
     (InIdent scope env kont) -> case v of
-      ValueSyntax stx ->
-        case _unSyntax stx of
+      ValueSyntax sx ->
+        case _unSyntax sx of
           (Stx _ _ expr) -> case expr of
             Integer _ ->
               Er (EvalErrorType
@@ -245,12 +288,12 @@ step (Up v k) =
             name@(Id _) -> Down (unCore scope) env (InScope name env kont)
       other -> Er (EvalErrorIdent other) env k
     (InIdentEqL how r env kont)  -> Down (unCore r) env (InIdentEqR v how env kont)
-    (InIdentEqR how lv _env kont) -> Up (ValueMacroAction $ MacroActionIdentEq lv how v) kont
+    (InIdentEqR how lv _env kont) -> Up stx (ValueMacroAction $ MacroActionIdentEq lv how v) kont
 
     -- Short circuit to speed this up, we could issue an Down and do this recursively
     (InScope expr env kont) ->
       evalAsSyntax v
-      (\(Syntax (Stx scopeSet loc _)) -> Up (ValueSyntax $ Syntax $ Stx scopeSet loc expr) kont)
+      (\(Syntax (Stx scopeSet loc _)) -> Up stx (ValueSyntax $ Syntax $ Stx scopeSet loc expr) kont)
       (\err                           -> Er err env kont)
 
 
@@ -295,7 +338,7 @@ step (Up v k) =
 
 
     -- Macros
-    (InPureMacro _env kont) -> Up (ValueMacroAction $ MacroActionPure v) kont
+    (InPureMacro _env kont) -> Up stx (ValueMacroAction $ MacroActionPure v) kont
     (InBindMacroHd tl env kont) ->
       evalAsMacroAction v
       (\good -> Down (unCore tl) env (InBindMacroTl good env kont))
@@ -303,7 +346,7 @@ step (Up v k) =
 
     (InBindMacroTl macroAction env kont) ->
       evalAsClosure v
-      (\good -> Up (ValueMacroAction $ MacroActionBind macroAction good) kont)
+      (\good -> Up stx (ValueMacroAction $ MacroActionBind macroAction good) kont)
       (\err  -> Er err env kont)
 
 
@@ -316,17 +359,17 @@ step (Up v k) =
       evalAsString v
       (\good -> Down (unCore scope) env (InScope (String good) env kont))
       (\err  -> Er err env kont)
-    (InReplaceLocL stx env kont) ->
+    (InReplaceLocL sx env kont) ->
       evalAsSyntax v
-      (\(Syntax (Stx _ newLoc _)) -> Down (unCore stx) env (InReplaceLocR newLoc env kont) )
+      (\(Syntax (Stx _ newLoc _)) -> Down (unCore sx) env (InReplaceLocR newLoc env kont) )
       (\err -> Er err env kont)
     (InReplaceLocR loc env kont) ->
       evalAsSyntax v
-      (\(Syntax (Stx scs _ contents)) -> Up (ValueSyntax $ Syntax $ Stx scs loc contents) kont)
+      (\(Syntax (Stx scs _ contents)) -> Up stx (ValueSyntax $ Syntax $ Stx scs loc contents) kont)
       (\err -> Er err env kont)
     (InLog   env kont)   ->
       evalAsSyntax v
-      (\good -> Up (ValueMacroAction (MacroActionLog good)) kont)
+      (\good -> Up stx (ValueMacroAction (MacroActionLog good)) kont)
       (\err  -> Er err env kont)
 
 
@@ -340,16 +383,16 @@ step (Up v k) =
       (\msg_syn ->
          case locs of
            -- done
-           []     -> Up (ValueMacroAction $ MacroActionSyntaxError
-                          (SyntaxError { _syntaxErrorMessage   = msg_syn
-                                       , _syntaxErrorLocations = mempty
-                                       })) kont
+           []     -> Up stx (ValueMacroAction $ MacroActionSyntaxError
+                            (SyntaxError { _syntaxErrorMessage   = msg_syn
+                                         , _syntaxErrorLocations = mempty
+                                         })) kont
            (l:ls) -> Down (unCore l) env (InSyntaxErrorLocations msg_syn ls mempty env kont)
           )
       (\err -> Er err env kont)
     -- done
     (InSyntaxErrorLocations msg_syn [] dones _env kont) ->
-        Up (ValueMacroAction
+        Up stx (ValueMacroAction
                 $ MacroActionSyntaxError (SyntaxError { _syntaxErrorMessage   = msg_syn
                                                       , _syntaxErrorLocations = dones
                                                       })) kont
@@ -363,21 +406,21 @@ step (Down c env k)  =
   case c of
 
     -- atoms
-    (CoreString s)    -> Up (ValueString s) k
-    (CoreInteger i)   -> Up (ValueInteger i) k
+    (CoreString s)    -> Up noStx (ValueString s) k
+    (CoreInteger i)   -> Up noStx (ValueInteger i) k
     (CoreIntegerSyntax (ScopedInteger int scope)) -> Down (unCore int) env (InInteger scope env k)
     (CoreStringSyntax  (ScopedString  str scope)) -> Down (unCore str) env (InString scope env k)
-    (CoreSyntax s)    -> Up (ValueSyntax s) k
+    (CoreSyntax s)    -> Up noStx (ValueSyntax s) k
     (CoreError what)  -> Down (unCore what) env (InError env k)
     (CoreEmpty (ScopedEmpty scope)) -> Down (unCore scope) env (InScope (List mempty) env k)
-    CoreMakeIntroducer -> Up (ValueMacroAction MacroActionIntroducer)   k
-    CoreWhichProblem   -> Up (ValueMacroAction MacroActionWhichProblem) k
+    CoreMakeIntroducer -> Up noStx (ValueMacroAction MacroActionIntroducer)   k
+    CoreWhichProblem   -> Up noStx (ValueMacroAction MacroActionWhichProblem) k
 
 
     -- variables and binders
     (CoreVar var) ->
-      case lookupVal var env of
-        Just val -> Up val k
+      case Env.lookup var env of
+        Just (i,val) -> Up (Just i) val k
         _        -> Er (EvalErrorUnbound var) env k
 
     (CoreLet ident var def body) ->
@@ -395,7 +438,7 @@ step (Down c env k)  =
 
     (CoreCtor con args) -> case args of
                            -- just a symbol, shortcut out
-                           []     -> Up (ValueCtor con mempty) k
+                           []     -> Up noStx (ValueCtor con mempty) k
                            -- process fields left to right
                            (f:fs) -> Down (unCore f) env (InCtor mempty con (fmap unCore fs) env k)
 
@@ -408,7 +451,7 @@ step (Down c env k)  =
             , _closureVar   = var
             , _closureBody  = body
             }
-      in Up lam k
+      in Up noStx lam k
     (CoreApp fun arg) -> Down (unCore fun) env (InFun (unCore arg) env k)
 
 
@@ -498,7 +541,7 @@ apply (FO (FOClosure {..})) value =
                        value
                        _closureEnv
   in evaluateIn env _closureBody
-apply (HO prim) value = return $! prim value
+apply (HO _n prim) value = return $! prim value
 
 applyAsClosure :: VEnv -> Value -> Value -> Kont -> EState
 applyAsClosure e v_closure value k = case v_closure of
@@ -508,11 +551,11 @@ applyAsClosure e v_closure value k = case v_closure of
     where app (FO (FOClosure{..})) =
             let env = Env.insert _closureVar _closureIdent value _closureEnv
             in Down (unCore _closureBody) env k
-          app (HO prim)            = Up (prim value) k
+          app (HO n prim)            = Up noStx (prim value) (InPrim n k)
 
 -- | predicate to check for done state
 final :: EState -> Bool
-final (Up _v Halt)      = True
+final (Up _ _v Halt)      = True
 final (Er _err _env _k) = True
 final _                 = False
 
@@ -521,7 +564,7 @@ start :: VEnv -> CoreF TypePattern ConstructorPattern Core -> EState
 start e c = Down c e Halt
 
 yield :: EState -> Either EState Value
-yield (Up v Halt) = Right v
+yield (Up _ v Halt) = Right v
 yield e@Er{}      = Left  e
 yield _           = error "evaluate: completed impossibly"
 
@@ -534,9 +577,21 @@ extends exts env = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env exts
 evalErrorType :: Text -> Value -> EvalError
 evalErrorType expected got =
   EvalErrorType $ TypeError
-    { _typeErrorExpected = expected
-    , _typeErrorActual   = describeVal got
-    }
+  { _typeErrorExpected = expected
+  , _typeErrorActual   = describeVal got
+  }
+
+-- this is a copy of 'evalErrorType' but with no memory of how we got to this
+-- error state. This should just be a stopgap and we should remove it. Its sole
+-- use case is in the expander where we have redundant error checks due to
+-- functions such as @doTypeCase@
+constructErrorType :: Text -> Value -> EState
+constructErrorType expected got = Er err mempty Halt
+  where
+    err = EvalErrorType $ TypeError
+      { _typeErrorExpected = expected
+      , _typeErrorActual   = describeVal got
+      }
 
 doTypeCase :: VEnv -> SrcLoc -> Ty -> [(TypePattern, Core)] -> Either EState Value
 -- We pass @Right $ ValueType v0@ here so that the Core type-case still matches
@@ -572,34 +627,34 @@ doCase :: SrcLoc -> Value -> [(SyntaxPattern, Core)] -> VEnv -> Kont -> EState
 doCase blameLoc v0 []               e  kont = Er (EvalErrorCase blameLoc v0) e kont
 doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kont) p rhs0 v0 e kont
   where
-    match next (SyntaxPatternIdentifier n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternIdentifier n x) rhs scrutinee env k =
       case scrutinee of
         v@(ValueSyntax (Syntax (Stx _ _ (Id _)))) ->
-          step $ Down (unCore rhs) (extend n x v env) k
+          step $ Down (unCore rhs) (extend n x v env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternInteger n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternInteger n x) rhs scrutinee env k =
       case scrutinee of
         ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
-          step $ Down (unCore rhs) (extend n x (ValueInteger int) env) k
+          step $ Down (unCore rhs) (extend n x (ValueInteger int) env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternString n x) rhs scrutinee env k =
+    match next pat@(SyntaxPatternString n x) rhs scrutinee env k =
       case scrutinee of
         ValueSyntax (Syntax (Stx _ _ (String str))) ->
-          step $ Down (unCore rhs) (extend n x (ValueString str) env) k
+          step $ Down (unCore rhs) (extend n x (ValueString str) env) (InCasePattern pat k)
         _ -> next
     match next SyntaxPatternEmpty rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx _ _ (List [])))) ->
-          step $ Down (unCore rhs) env k
+          step $ Down (unCore rhs) env (InCasePattern SyntaxPatternEmpty k)
         _ -> next
-    match next (SyntaxPatternCons nx x nxs xs) rhs scrutinee env k =
+    match next pat@(SyntaxPatternCons nx x nxs xs) rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx scs loc (List (v:vs))))) ->
           let mkEnv = extend nx x (ValueSyntax v)
                     . extend nxs xs (ValueSyntax (Syntax (Stx scs loc (List vs))))
-          in step $ Down (unCore rhs) (mkEnv env) k
+          in step $ Down (unCore rhs) (mkEnv env) (InCasePattern pat k)
         _ -> next
-    match next (SyntaxPatternList xs) rhs scrutinee env k =
+    match next pat@(SyntaxPatternList xs) rhs scrutinee env k =
       case scrutinee of
         (ValueSyntax (Syntax (Stx _ _ (List vs))))
           | length vs == length xs ->
@@ -607,15 +662,15 @@ doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kon
                        | (n,x) <- xs
                        | v     <- vs
                        ]
-            in step $ Down (unCore rhs) (vals `extends` env) k
+            in step $ Down (unCore rhs) (vals `extends` env) (InCasePattern pat k)
         _ -> next
     match _next SyntaxPatternAny rhs _scrutinee env k =
-      step $ Down (unCore rhs) env k
+      step $ Down (unCore rhs) env (InCasePattern SyntaxPatternAny k)
 
 doDataCase :: SrcLoc -> Value -> [(ConstructorPattern, Core)] -> VEnv -> Kont -> EState
 doDataCase loc v0 [] env kont = Er (EvalErrorCase loc v0) env kont
 doDataCase loc v0 ((pat, rhs) : ps) env kont =
-  match (doDataCase loc v0 ps env kont) (\newEnv -> step $ Down (unCore rhs) newEnv kont) [(unConstructorPattern pat, v0)]
+  match (doDataCase loc v0 ps env kont) (\newEnv -> step $ Down (unCore rhs) newEnv (InDataCasePattern pat kont)) [(unConstructorPattern pat, v0)]
   where
     match
       :: EState {- ^ Failure continuation -}
@@ -648,11 +703,6 @@ evaluateWithExtendedEnv env exts = evaluateIn (inserter exts)
   where
     inserter = foldl' (\acc (n,x,v) -> Env.insert x n v acc) env
 
--- TODO DYG: Move to separate module
-projectError :: EState -> EvalError
-projectError (Er err _env _k) = err
-projectError _                = error "debugger: impossible"
-
 erroneousValue :: EvalError -> Value
 erroneousValue (EvalErrorCase _loc v) = v
 erroneousValue (EvalErrorIdent v)     = v
@@ -660,3 +710,8 @@ erroneousValue  _                     =
   error $ mconcat [ "erroneousValue: "
                   , "Evaluator concluded in an error that did not return a value"
                   ]
+
+projectKont :: EState -> Kont
+projectKont (Er _ _ k)   = k
+projectKont (Up _ _ k)     = k
+projectKont (Down _ _ k) = k

@@ -1,0 +1,5 @@
+#lang "prelude.kl"
+
+(define fail (lambda (thing) (+ thing )))
+
+(example (fail (error 'badd)))

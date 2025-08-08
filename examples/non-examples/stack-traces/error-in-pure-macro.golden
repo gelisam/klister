@@ -1,0 +1,5 @@
+In Phase: p0:
+    error-in-pure-macro.kl:3.24-3.38: surprise-error
+    stack trace:
+    ---- in pure macro
+    ---- Halt

@@ -6,6 +6,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns #-}
 {-# OPTIONS -Wno-name-shadowing #-}
+
 module Expander.Primitives
   ( -- * Declaration primitives
     define
@@ -64,7 +65,6 @@ module Expander.Primitives
 import Control.Lens hiding (List)
 import Control.Monad.IO.Class
 import Control.Monad
-import Control.Monad.Except
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
@@ -73,6 +73,7 @@ import Numeric.Natural
 import Binding
 import Core
 import Datatype
+import Debugger
 import qualified Env
 import Expander.DeclScope
 import Expander.Monad
@@ -517,8 +518,10 @@ typeConstructor ctor argKinds = (implT, implP)
   where
     implT k dest stx = do
       Stx _ _ (_, args) <- mustBeCons stx
+      p <- currentPhase
       if length args > length argKinds
-        then throwError $ WrongTypeArity stx ctor
+        then debug $ expansionError p
+                   $ WrongTypeArity stx ctor
                             (fromIntegral $ length argKinds)
                             (length args)
         else do
@@ -529,8 +532,11 @@ typeConstructor ctor argKinds = (implT, implP)
           linkType dest $ TyF ctor argDests
     implP dest stx = do
       Stx _ _ (_, args) <- mustBeCons stx
+      p <- currentPhase
       if length args > length argKinds
-        then throwError $ WrongTypeArity stx ctor
+        then debug
+             $ expansionError p
+             $ WrongTypeArity stx ctor
                             (fromIntegral $ length argKinds)
                             (length args)
         else do
@@ -587,8 +593,9 @@ makeLocalType dest stx = do
         equateKinds tstx k k'
         _ <- mustBeIdent tstx
         linkType tdest $ TyF t []
-  let patImpl _ tstx =
-        throwError $ NotValidType tstx
+  let patImpl _ tstx = do
+        p <- currentPhase
+        debug $ expansionError p $ NotValidType tstx
 
   p <- currentPhase
   addLocalBinding n b
@@ -686,8 +693,9 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
     Syntax (Stx _ _ (Id "_")) -> do
       rhsDest <- schedule t rhs
       return (SyntaxPatternAny, rhsDest)
-    other ->
-      throwError $ UnknownPattern other
+    other -> do
+      p <- currentPhase
+      debug $ expansionError p $ UnknownPattern other
 
 scheduleDataPattern ::
   Ty -> Ty ->
@@ -745,36 +753,36 @@ primitiveDatatype name args =
                     }
   in tDatatype dt args
 
-unaryIntegerPrim :: (Integer -> Integer) -> Value
-unaryIntegerPrim f =
-  ValueClosure $ HO $
+unaryIntegerPrim :: Text -> (Integer -> Integer) -> Value
+unaryIntegerPrim name f =
+  ValueClosure $ HO name $
   \(ValueInteger i) ->
     ValueInteger (f i)
 
-binaryIntegerPrim :: (Integer -> Integer -> Integer) -> Value
-binaryIntegerPrim f =
-  ValueClosure $ HO $
+binaryIntegerPrim :: Text -> (Integer -> Integer -> Integer) -> Value
+binaryIntegerPrim name f =
+  ValueClosure $ HO name $
   \(ValueInteger i1) ->
-    ValueClosure $ HO $
+    ValueClosure $ HO name $
     \(ValueInteger i2) ->
       ValueInteger (f i1 i2)
 
-binaryIntegerPred :: (Integer -> Integer -> Bool) -> Value
-binaryIntegerPred f =
-  ValueClosure $ HO $
+binaryIntegerPred :: Text -> (Integer -> Integer -> Bool) -> Value
+binaryIntegerPred name f =
+  ValueClosure $ HO name $
   \(ValueInteger i1) ->
-    ValueClosure $ HO $
+    ValueClosure $ HO name $
     \(ValueInteger i2) ->
       if f i1 i2
         then primitiveCtor "true" []
         else primitiveCtor "false" []
 
 
-binaryStringPred :: (Text -> Text -> Bool) -> Value
-binaryStringPred f =
-  ValueClosure $ HO $
+binaryStringPred :: Text -> (Text -> Text -> Bool) -> Value
+binaryStringPred name f =
+  ValueClosure $ HO name $
   \(ValueString str1) ->
-    ValueClosure $ HO $
+    ValueClosure $ HO name $
     \(ValueString str2) ->
       if f str1 str2
         then primitiveCtor "true" []

@@ -1,5 +1,5 @@
-#<closure> : (Syntax → Syntax)
-#<closure> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
-#<closure> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
-#<closure> : ∀(α : *). (α → α)
+#<contract> : (Syntax → Syntax)
+#<arg> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
+#<args> : (Syntax → (Syntax → (Syntax → (Macro Syntax))))
+#<x> : ∀(α : *). (α → α)
 (true) : Bool
