@@ -62,7 +62,7 @@
 --
 -- Syntax : Type
 (example (pair "open-syntax" open-syntax))
-(example (pair "close-syntax" close-syntax))
+(example (pair "close-syntax" close-syntax))  -- (close-syntax loc scope-set syntax-contents)
 --
 -- -> : Type -> Type -> Type
 --
