@@ -1,0 +1,9 @@
+(data Nat
+  (zero)
+  (suc Nat))
+
+(the Nat 42)
+
+(type-case t
+  [Nat
+   (pure '42)])

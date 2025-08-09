@@ -609,11 +609,12 @@ initializeKernel outputChannel = do
     modPrims :: [(Text, DeclTreePtr -> Syntax -> Expand ())]
     modPrims = [("#%module", Prims.makeModule expandDeclForms)]
 
-    declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
-    declPrims =
-      [ ("define", Prims.define)
-      , ("datatype", Prims.datatype)
-      , ("define-macros", Prims.defineMacros)
+    let declPrims :: [(Text, DeclTreePtr -> DeclOutputScopesPtr -> Syntax -> Expand ())]
+        declPrims =
+          [ ("define", Prims.define)
+          , ("data", Prims.data' expandDeclForms)
+          , ("core-data", Prims.coreData)
+          , ("define-macros", Prims.defineMacros)
       , ("example", Prims.example)
       , ("run", Prims.run)
       , ("import", primImportModule)
