@@ -3,6 +3,7 @@
 -- Allow e.g. unit instead of (unit)
 
 (import (shift kernel 1))
+(import (shift "n-ary-app.kl" 1))
 
 (meta
   (define optional-parens
@@ -10,9 +11,9 @@
       (lambda (stx)
         (case (open-syntax stx)
           [(identifier-contents x)
-           (pure (((close-syntax stx) stx) (list-contents (:: symbol (nil)))))]
+           (pure (close-syntax stx stx (list-contents (:: symbol (nil)))))]
           [(list-contents (:: _ args))
-           (pure (((close-syntax stx) stx) (list-contents (:: symbol args))))])))))
+           (pure (close-syntax stx stx (list-contents (:: symbol args))))])))))
 
 -- TODO: wrap 'datatype' so that parentheses are also optional for
 -- the nullary types and constructors it creates
@@ -45,7 +46,8 @@
    [my-Syntax-Contents (optional-parens 'Syntax-Contents)]
    [my-Output-Port (optional-parens 'Output-Port)]))
 
-(export (rename ([my-Syntax Syntax]
+(export (rename ([my-datatype datatype]
+                 [my-Syntax Syntax]
                  [my-Integer Integer]
                  [my-Macro Macro]
                  [my-Type Type]
