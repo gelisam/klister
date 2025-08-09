@@ -1,6 +1,6 @@
-(import "optional-parens.kl")
+(import "datatype-macro.kl")
 
-(data Nat
+(my-datatype Nat
   (zero)
   (suc Nat))
 

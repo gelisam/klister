@@ -1,0 +1,6 @@
+/app/examples/my-datatype-macro.kl:1:1:
+  |
+1 | (import "datatype-macro.kl")
+  | ^^^^^
+unexpected "(impo"
+expecting "#lang"

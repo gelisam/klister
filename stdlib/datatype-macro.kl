@@ -1,0 +1,19 @@
+#lang kernel
+
+(import [shift kernel 1])
+
+(define-macros
+  ([my-datatype
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: name-stx ctor-stxes)))
+         (case (open-syntax name-stx)
+           [(list-contents _)
+            (pure (list-syntax (cons (quote datatype) (cons name-stx ctor-stxes)) stx))]
+           [_ (pure (list-syntax (cons (quote datatype)
+                                       (cons (list-syntax (list name-stx) name-stx)
+                                             ctor-stxes))
+                                 stx))])]
+        [_ (syntax-error "malformed datatype" stx)]))]))
+
+(export my-datatype)
