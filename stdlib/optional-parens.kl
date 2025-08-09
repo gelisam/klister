@@ -4,6 +4,7 @@
 
 (import (shift kernel 1))
 (import (shift "n-ary-app.kl" 1))
+(import (shift "quasiquote.kl" 1))
 
 (meta
   (define optional-parens
@@ -11,8 +12,14 @@
       (lambda (stx)
         (case (open-syntax stx)
           [(identifier-contents x)
-           (pure (close-syntax stx stx (list-contents (:: symbol (nil)))))]
+           -- unit
+           -- =>
+           -- (unit)
+           (pure `(,symbol))]
           [(list-contents (:: _ args))
+           -- (unit 1 2 3)
+           -- =>
+           -- (unit 1 2 3)
            (pure (close-syntax stx stx (list-contents (:: symbol args))))])))))
 
 -- TODO: wrap 'datatype' so that parentheses are also optional for
