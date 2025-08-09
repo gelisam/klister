@@ -2,7 +2,7 @@
 
 -- Allow e.g. unit instead of (unit)
 
-[import [shift kernel 1]]
+(import (shift kernel 1))
 
 (meta
   (define optional-parens
