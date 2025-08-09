@@ -1,0 +1,30 @@
+#lang "prelude.kl"
+
+-- Test the basic data macro functionality
+
+-- Simple datatype with no type parameters
+(data Nat
+  (zero)
+  (suc Nat))
+
+-- Datatype with type parameters (existing syntax should still work)
+(data (List A)
+  (nil)
+  (cons A (List A)))
+
+-- Test constructing values
+(define three (suc (suc (suc (zero))))) 
+(define numbers (cons (zero) (cons (suc (zero)) (nil))))
+
+-- Test pattern matching works
+(define length
+  (lambda (lst)
+    (case lst
+      [(nil) (zero)]
+      [(cons _ tail) (suc (length tail))])))
+
+(example three)
+(example numbers)
+(example (length numbers))
+
+(export Nat zero suc List nil cons three numbers length)

@@ -1,0 +1,29 @@
+#lang "prelude.kl"
+
+-- Test case demonstrating the new parentheses-free data syntax
+
+-- This should work now with the new data macro:
+(data Nat
+  (zero)
+  (suc Nat))
+
+-- This should also work (existing syntax):
+(data (Maybe A)
+  (nothing)
+  (just A))
+
+-- Test using the constructed types
+(define nat-example (suc (suc (zero))))
+(define maybe-example (just (zero)))
+
+-- Test case - should be equivalent to existing datatype usage
+(define double-nat
+  (lambda (n)
+    (case n
+      [(zero) (zero)]
+      [(suc k) (suc (suc k))])))
+
+(example (double-nat nat-example))
+(example maybe-example)
+
+(export Nat zero suc Maybe nothing just nat-example maybe-example double-nat)
