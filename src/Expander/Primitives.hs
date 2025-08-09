@@ -9,8 +9,7 @@
 module Expander.Primitives
   ( -- * Declaration primitives
     define
-  , coreData
-  , data'
+  , datatype
   , defineMacros
   , example
   , run
@@ -126,8 +125,8 @@ define dest outScopesDest stx = do
   forkGeneralizeType exprDest t schPtr
   linkDeclOutputScopes outScopesDest (ScopeSet.singleScopeAtPhase postDefineScope p)
 
-coreData :: DeclPrim
-coreData dest outScopesDest stx = do
+datatype :: DeclPrim
+datatype dest outScopesDest stx = do
   Stx scs loc (_ :: Syntax, more) <- mustBeCons stx
   Stx _ _ (nameAndArgs, ctorSpecs) <- mustBeCons (Syntax (Stx scs loc (List more)))
   Stx _ _ (name, args) <- mustBeCons nameAndArgs
@@ -166,41 +165,6 @@ coreData dest outScopesDest stx = do
   forkEstablishConstructors (ScopeSet.singleScopeAtPhase sc p) outScopesDest d ctors
 
   linkOneDecl dest (Data realName (view datatypeName d) argKinds ctors)
-
-data' :: DeclExpander -> DeclPrim
-data' expandDeclForms dest outScopesDest stx = do
-  Stx scs loc (_ :: Syntax, stxBody) <- mustBeCons stx
-  case stxBody of
-    (nameStx@(Syntax (Stx _ _ (Id _)))) : ctors ->
-      expandDeclForms dest outScopesDest $
-      Syntax (Stx scs loc (List [
-        Syntax (Stx scs loc (Id "group")),
-        Syntax (Stx scs loc (List [
-          Syntax (Stx scs loc (Id "core-data")),
-          Syntax (Stx scs loc (List [nameStx])),
-          Syntax (Stx scs loc (List ctors))
-          ])),
-        Syntax (Stx scs loc (List [
-          Syntax (Stx scs loc (Id "define-macros")),
-          Syntax (Stx scs loc (List [
-            Syntax (Stx scs loc (List [
-              nameStx,
-              Syntax (Stx scs loc (List [
-                Syntax (Stx scs loc (Id "lambda")),
-                Syntax (Stx scs loc (List [Syntax (Stx scs loc (Id "_"))])),
-                Syntax (Stx scs loc (List [
-                  Syntax (Stx scs loc (Id "pure")),
-                  Syntax (Stx scs loc (List [
-                    Syntax (Stx scs loc (Id "quote")),
-                    nameStx
-                    ]))
-                  ]))
-                ]))
-              ]))
-            ]))
-          ]))
-        ]))
-    _ -> coreData dest outScopesDest stx
 
 defineMacros :: DeclPrim
 defineMacros dest outScopesDest stx = do

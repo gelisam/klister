@@ -17,7 +17,18 @@
 -- TODO: wrap 'datatype' so that parentheses are also optional for
 -- the nullary types and constructors it creates
 (define-macros
-  ([my-Syntax (optional-parens 'Syntax)]
+  ([my-data
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(_ . (_ name . rest))
+         (case (open-syntax name)
+           [(list-contents _) (pure stx)]
+           [_ (pure (list-syntax (cons 'data
+                                       (cons (list-syntax (list name) name)
+                                             rest))
+                                 stx))])]
+        [_ (syntax-error "malformed data" stx)]))]
+   [my-Syntax (optional-parens 'Syntax)]
    [my-Integer (optional-parens 'Integer)]
    [my-Macro (optional-parens 'Macro)]
    [my-Type (optional-parens 'Type)]
@@ -45,7 +56,8 @@
    [my-Syntax-Contents (optional-parens 'Syntax-Contents)]
    [my-Output-Port (optional-parens 'Output-Port)]))
 
-(export (rename ([my-Syntax Syntax]
+(export (rename ([my-data data]
+                 [my-Syntax Syntax]
                  [my-Integer Integer]
                  [my-Macro Macro]
                  [my-Type Type]
