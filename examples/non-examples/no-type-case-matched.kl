@@ -1,0 +1,16 @@
+#lang "prelude.kl"
+
+(import (shift "prelude.kl" 1))
+
+(define-macros
+  ([m1
+    (lambda (stx)
+      (>>= (which-problem)
+        (lambda (problem)
+          (case problem
+            [(expression tp)
+             (type-case tp
+               [(Integer)
+                (pure '42)])]))))]))
+
+(example (the String m1))

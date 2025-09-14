@@ -1,0 +1,6 @@
+#lang "prelude.kl"
+
+(example
+  (case (true)
+    [(false)
+     42]))
