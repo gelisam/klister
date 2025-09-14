@@ -1,83 +1,25 @@
 #lang kernel
 
--- Allow e.g. unit instead of (unit)
+-- A helper which turns a macro like (unit) which must be used with parentheses
+-- into a macro which can be used either with or without parentheses.
 
-(import (shift kernel 1))
-(import (shift "n-ary-app.kl" 1))
-(import (shift "quasiquote.kl" 1))
+(import "n-ary-app.kl")
+(import "quasiquote.kl")
 
-(meta
-  (define optional-parens
-    (lambda (symbol)
-      (lambda (stx)
-        (case (open-syntax stx)
-          [(identifier-contents x)
-           -- unit
-           -- =>
-           -- (unit)
-           (pure `(,symbol))]
-          [(list-contents (:: _ args))
-           -- (unit 1 2 3)
-           -- =>
-           -- (unit 1 2 3)
-           (pure (close-syntax stx stx (list-contents (:: symbol args))))])))))
+-- (define-macros
+--   ([unit (optional-parens 'unit)]))
+(define optional-parens
+  (lambda (symbol stx)
+    (case (open-syntax stx)
+      [(identifier-contents x)
+       -- unit
+       -- =>
+       -- (unit)
+       (pure `(,symbol))]
+      [(list-contents (:: _ args))
+       -- (unit 1 2 3)
+       -- =>
+       -- (unit 1 2 3)
+       (pure (close-syntax stx stx (list-contents (:: symbol args))))])))
 
--- TODO: wrap 'datatype' so that parentheses are also optional for
--- the nullary types and constructors it creates
-(define-macros
-  ([my-Syntax (optional-parens 'Syntax)]
-   [my-Integer (optional-parens 'Integer)]
-   [my-Macro (optional-parens 'Macro)]
-   [my-Type (optional-parens 'Type)]
-   [my-String (optional-parens 'String)]
-   [my-IO (optional-parens 'IO)]
-   [my-ScopeAction (optional-parens 'ScopeAction)]
-   [my-flip (optional-parens 'flip)]
-   [my-add (optional-parens 'add)]
-   [my-remove (optional-parens 'remove)]
-   [my-Unit (optional-parens 'Unit)]
-   [my-unit (optional-parens 'unit)]
-   [my-Bool (optional-parens 'Bool)]
-   [my-true (optional-parens 'true)]
-   [my-false (optional-parens 'false)]
-   [my-Problem (optional-parens 'Problem)]
-   [my-module (optional-parens 'module)]
-   [my-declaration (optional-parens 'declaration)]
-   [my-type (optional-parens 'type)]
-   [my-pattern (optional-parens 'pattern)]
-   [my-type-pattern (optional-parens 'type-pattern)]
-   [my-Maybe (optional-parens 'Maybe)]
-   [my-nothing (optional-parens 'nothing)]
-   [my-List (optional-parens 'List)]
-   [my-nil (optional-parens 'nil)]
-   [my-Syntax-Contents (optional-parens 'Syntax-Contents)]
-   [my-Output-Port (optional-parens 'Output-Port)]))
-
-(export (rename ([my-datatype datatype]
-                 [my-Syntax Syntax]
-                 [my-Integer Integer]
-                 [my-Macro Macro]
-                 [my-Type Type]
-                 [my-String String]
-                 [my-IO IO]
-                 [my-ScopeAction ScopeAction] [my-flip flip] [my-add add] [my-remove remove]
-                 [my-Unit Unit] [my-unit unit]
-                 [my-Bool Bool] [my-true true] [my-false false]
-                 [my-Problem Problem] [my-module module] [my-declaration declaration] [my-type type] [my-pattern pattern] [my-type-pattern type-pattern]
-                 [my-Maybe Maybe] [my-nothing nothing]
-                 [my-List List] [my-nil nil]
-                 [my-Syntax-Contents Syntax-Contents]
-                 [my-Output-Port Output-Port])
-                my-Syntax
-                my-Integer
-                my-Macro
-                my-Type
-                my-String
-                my-IO
-                my-ScopeAction my-flip my-add my-remove
-                my-Unit my-unit
-                my-Bool my-true my-false
-                my-Maybe my-nothing
-                my-List my-nil
-                my-Syntax-Contents
-                my-Output-Port))
+(export optional-parens)
