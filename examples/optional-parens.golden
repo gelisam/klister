@@ -1,0 +1,5 @@
+(zero1) : Nat1
+(zero2) : Nat2
+(nil3) : (List3 Integer)
+(zero1) : Nat1
+(zero2) : Nat2
