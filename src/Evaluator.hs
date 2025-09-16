@@ -55,7 +55,6 @@ module Evaluator
   , evaluateIn
   , evaluateWithExtendedEnv
   , evalErrorType
-  , evalErrorText
   , projectError
   , erroneousValue
   , apply
@@ -442,19 +441,6 @@ step (Down c env k)  =
 
 -- -----------------------------------------------------------------------------
 -- Helper Functions
-
-evalErrorText :: EvalError -> Text
-evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
-evalErrorText (EvalErrorType (TypeError expected got)) =
-  "Wrong type. Expected a " <> expected <> " but got a " <> got
-evalErrorText (EvalErrorCase loc val) =
-  "Didn't match any pattern at " <> T.pack (shortShow loc) <> ": " <> valueText val
-evalErrorText (EvalErrorTypeCase loc ty) =
-  "Didn't match any type pattern at " <> T.pack (shortShow loc) <> ": " <> T.pack (shortShow ty)
-evalErrorText (EvalErrorUser what) =
-  T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
-  syntaxText what
-evalErrorText (EvalErrorIdent v) = "Attempt to bind identifier to non-value: " <> valueText v
 
 type ContinueWith a = a -> EState
 type OnFailure   = EvalError -> EState
