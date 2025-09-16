@@ -528,10 +528,6 @@ evalErrorType expected got =
     }
 
 doTypeCase :: VEnv -> SrcLoc -> Ty -> [(TypePattern, Core)] -> Either EState Value
--- We pass @Right $ ValueType v0@ here so that the Core type-case still matches
--- on the outermost constructor instead of failing immediately. This behavior
--- comports with the other cases and could allow a debugger to fixup an
--- expression while knowing the type-case.
 doTypeCase env blameLoc ty [] = Left $ Er (EvalErrorTypeCase blameLoc ty) env Halt
 doTypeCase env blameLoc (Ty v0) ((p, rhs0) : ps) =
   do let next :: Either EState Value
