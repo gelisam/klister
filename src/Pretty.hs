@@ -736,6 +736,10 @@ instance Pretty VarInfo EvalError where
     ppBlame <- pp env blame
     ppVal <- pp env val
     pure $ group $ hang 2 $ vsep [text "No case matched at" <+> ppBlame <> ":" , ppVal]
+  pp env (EvalErrorTypeCase blame ty) = do
+    ppBlame <- pp env blame
+    ppTy <- pp env ty
+    pure $ group $ hang 2 $ vsep [text "No case matched at" <+> ppBlame <> ":" , ppTy]
   pp env (EvalErrorUser (Syntax (Stx _ loc msg))) = do
     ppLoc <- pp env loc
     ppMsg <- pp env msg

@@ -55,7 +55,6 @@ module Evaluator
   , evaluateIn
   , evaluateWithExtendedEnv
   , evalErrorType
-  , evalErrorText
   , projectError
   , erroneousValue
   , apply
@@ -101,6 +100,7 @@ data EvalError
   = EvalErrorUnbound Var
   | EvalErrorType TypeError
   | EvalErrorCase SrcLoc Value
+  | EvalErrorTypeCase SrcLoc Ty
   | EvalErrorUser Syntax
   | EvalErrorIdent Value
   deriving (Show, Typeable)
@@ -442,17 +442,6 @@ step (Down c env k)  =
 -- -----------------------------------------------------------------------------
 -- Helper Functions
 
-evalErrorText :: EvalError -> Text
-evalErrorText (EvalErrorUnbound x) = "Unbound: " <> T.pack (show x)
-evalErrorText (EvalErrorType (TypeError expected got)) =
-  "Wrong type. Expected a " <> expected <> " but got a " <> got
-evalErrorText (EvalErrorCase loc val) =
-  "Didn't match any pattern at " <> T.pack (shortShow loc) <> ": " <> valueText val
-evalErrorText (EvalErrorUser what) =
-  T.pack (shortShow (stxLoc what)) <> ":\n\t" <>
-  syntaxText what
-evalErrorText (EvalErrorIdent v) = "Attempt to bind identifier to non-value: " <> valueText v
-
 type ContinueWith a = a -> EState
 type OnFailure   = EvalError -> EState
 
@@ -539,23 +528,20 @@ evalErrorType expected got =
     }
 
 doTypeCase :: VEnv -> SrcLoc -> Ty -> [(TypePattern, Core)] -> Either EState Value
--- We pass @Right $ ValueType v0@ here so that the Core type-case still matches
--- on the outermost constructor instead of failing immedaitely. This behavior
--- comports with the other cases and could allow a debugger to fixup an
--- expression while knowing the type-case.
-doTypeCase _env _blameLoc v0 [] = Right $ ValueType v0
+doTypeCase env blameLoc ty [] = Left $ Er (EvalErrorTypeCase blameLoc ty) env Halt
 doTypeCase env blameLoc (Ty v0) ((p, rhs0) : ps) =
-  do v <- doTypeCase env blameLoc (Ty v0) ps
-     match v p rhs0 v0
+  do let next :: Either EState Value
+         next = doTypeCase env blameLoc (Ty v0) ps
+     match next p rhs0 v0
   where
-    match :: Value -> TypePattern -> Core -> TyF Ty -> Either EState Value
+    match :: Either EState Value -> TypePattern -> Core -> TyF Ty -> Either EState Value
     match next (TypePattern t) rhs scrut =
       case (t, scrut) of
         -- unification variables never match; instead, type-case remains stuck
         -- until the variable is unified with a concrete type constructor or a
         -- skolem variable.
-        (TyF (TMetaVar _) _, _) -> return next
-        (_, TyF (TMetaVar _) _) -> return next
+        (TyF (TMetaVar _) _, _) -> next
+        (_, TyF (TMetaVar _) _) -> next
 
         (TyF ctor1 args1, TyF ctor2 args2)
           | ctor1 == ctor2 && length args1 == length args2 ->
@@ -563,7 +549,7 @@ doTypeCase env blameLoc (Ty v0) ((p, rhs0) : ps) =
                                         | (n, x) <- args1
                                         | arg <- args2
                                         ] rhs
-        (_, _) -> return next
+        (_, _) -> next
     match _next (AnyType n x) rhs scrut =
       evaluateWithExtendedEnv env [(n, x, ValueType (Ty scrut))] rhs
 

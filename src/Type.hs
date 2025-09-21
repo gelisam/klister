@@ -104,6 +104,9 @@ instance AlphaEq a => AlphaEq (TyF a) where
 instance ShortShow a => ShortShow (TyF a) where
   shortShow t = show (fmap shortShow t)
 
+instance ShortShow Ty where
+  shortShow (Ty t) = shortShow t
+
 
 class TyLike a arg | a -> arg where
   tSyntax     :: a
