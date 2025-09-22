@@ -87,6 +87,8 @@ import qualified ScopeSet
 import qualified Util.Set   as Set
 import qualified Util.Store as S
 
+import Debug.Trace
+
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
   dest <- liftIO $ newSplitCorePtr

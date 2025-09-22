@@ -44,7 +44,7 @@ data Value
   | ValueString Text
 
 instance Show Value where
-  show _ = "Value..."
+  show = T.unpack . valueText --"Value..."
 
 primitiveCtor :: Text -> [Value] -> Value
 primitiveCtor name args =

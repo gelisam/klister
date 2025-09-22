@@ -101,6 +101,7 @@ import Syntax.SrcLoc
 import Type
 import Value
 
+import Debug.Trace
 -- -----------------------------------------------------------------------------
 -- Interpreter Data Types
 
@@ -238,7 +239,7 @@ step (Up stx v k) =
   case k of
     -- functions
     -- we evaluated the arg to get a closed so now we evaluate the fun
-    (InArg _ fun env kont) -> applyAsClosure env fun v kont
+    (InArg st fun env kont) -> applyAsClosure st env fun v kont
     -- we evaluated the fun so now do the application
     (InFun arg env kont)  -> Down arg env (InArg stx v env kont)
 
@@ -543,15 +544,15 @@ apply (FO (FOClosure {..})) value =
   in evaluateIn env _closureBody
 apply (HO _n prim) value = return $! prim value
 
-applyAsClosure :: VEnv -> Value -> Value -> Kont -> EState
-applyAsClosure e v_closure value k = case v_closure of
+applyAsClosure :: Maybe (Stx Text) -> VEnv -> Value -> Value -> Kont -> EState
+applyAsClosure stx e v_closure value k = case v_closure of
     ValueClosure closure -> app closure
     other                -> Er (evalErrorType "function" other) e k
 
     where app (FO (FOClosure{..})) =
             let env = Env.insert _closureVar _closureIdent value _closureEnv
             in Down (unCore _closureBody) env k
-          app (HO n prim)            = Up noStx (prim value) (InPrim n k)
+          app (HO n prim)            = Up stx (prim value) (InPrim n k)
 
 -- | predicate to check for done state
 final :: EState -> Bool
@@ -561,7 +562,7 @@ final _                 = False
 
 -- | Initial state
 start :: VEnv -> CoreF TypePattern ConstructorPattern Core -> EState
-start e c = Down c e Halt
+start e c = trace ("Core: " ++ show c) $ trace ("Env: " ++ show e) $ Down c e Halt
 
 yield :: EState -> Either EState Value
 yield (Up _ v Halt) = Right v

@@ -852,19 +852,19 @@ printKont e (InPrim prim k)    = do
 printKont e (InFun arg _env k) = do
   a <- pp e arg
   kont <- pp e k
-  return $ text "with arg" <+> a <> kont
+  return $ text "with argument" <+> a <> kont
 printKont e (InArg fname flam _env k) = do
-  fun  <- case fname of
-    Just s  -> pp e s
+  fun'  <- case fname of
+    Just s  -> do
+      fun <- pp e s
+      return $
+        -- line <> indent (2 * stackTraceIndent)
+        (text "in function" <+> fun)
     Nothing -> pure mempty
-  f    <- pp e flam
+  -- arg  <- pp e flam
   kont <- pp e k
-  -- this is the argument
   return $
-    text "with argument:" <+> f
-    <> line
-    <> indent (2 * stackTraceIndent) (text "in function" <+> fun)
-    <> kont
+    fun' <> kont
 printKont e (InLetDef name _var _body _env k) = do
   n <- pp e name
   -- TODO: DYG: the body prints out uniques instead of the var name
