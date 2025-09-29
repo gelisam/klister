@@ -85,7 +85,6 @@ import Phase
 import Scope
 import ScopeSet (ScopeSet)
 import qualified ScopeSet
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax
@@ -106,7 +105,7 @@ define :: DeclPrim
 define dest outScopesDest stx = do
   p <- currentPhase
   Stx _ _ (_, varStx, expr) <- mustHaveEntries stx
-  postDefineScope <- freshScope $ T.pack $ "For definition at " ++ shortShow (stxLoc stx)
+  postDefineScope <- freshScope $ T.pack $ "For definition at " ++ show (stxLoc stx)
   x <- addScope' postDefineScope <$> mustBeIdent varStx
   b <- freshBinding
   addDefinedBinding x b
@@ -132,7 +131,7 @@ datatype dest outScopesDest stx = do
   Stx _ _ (name, args) <- mustBeCons nameAndArgs
   typeArgs <- for (zip [0..] args) $ \(i, a) ->
     prepareTypeVar i a
-  sc <- freshScope $ T.pack $ "For datatype at " ++ shortShow (stxLoc stx)
+  sc <- freshScope $ T.pack $ "For datatype at " ++ show (stxLoc stx)
   let typeScopes = map (view _1) typeArgs ++ [sc]
   realName <- mustBeIdent (addScope' sc name)
   p <- currentPhase
@@ -175,8 +174,8 @@ defineMacros dest outScopesDest stx = do
   -- any of the other newly-defined macros, while 'postDefineScope' allows the
   -- code which follows the @define-macros@ call to refer to the newly-defined
   -- macros.
-  sc <- freshScope $ T.pack $ "For macros at " ++ shortShow (stxLoc stx)
-  postDefineScope <- freshScope $ T.pack $ "For macro-definition at " ++ shortShow (stxLoc stx)
+  sc <- freshScope $ T.pack $ "For macros at " ++ show (stxLoc stx)
+  postDefineScope <- freshScope $ T.pack $ "For macro-definition at " ++ show (stxLoc stx)
   macros <- for macroDefs $ \def -> do
     Stx _ _ (mname, mdef) <- mustHaveEntries def
     theName <- addScope' sc <$> mustBeIdent mname
@@ -447,7 +446,7 @@ letSyntax :: ExprPrim
 letSyntax t dest stx = do
   Stx _ loc (_, macro, body) <- mustHaveEntries stx
   Stx _ _ (mName, mdef) <- mustHaveEntries macro
-  sc <- freshScope $ T.pack $ "Scope for let-syntax at " ++ shortShow loc
+  sc <- freshScope $ T.pack $ "Scope for let-syntax at " ++ show loc
   m <- mustBeIdent mName
   p <- currentPhase
   -- Here, the binding occurrence of the macro gets the
@@ -721,7 +720,7 @@ prepareTypeVar i varStx = do
 
 varPrepHelper :: Syntax -> Expand (Scope, Ident, Binding)
 varPrepHelper varStx = do
-  sc <- freshScope $ T.pack $ "For variable " ++ shortShow varStx
+  sc <- freshScope $ T.pack $ "For variable " ++ show varStx
   x <- mustBeIdent varStx
   p <- currentPhase
   psc <- phaseRoot

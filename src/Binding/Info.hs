@@ -4,7 +4,6 @@ module Binding.Info where
 
 import Data.Data (Data)
 
-import ShortShow
 
 data BindingInfo loc
   = BoundLocally loc
@@ -13,8 +12,3 @@ data BindingInfo loc
   -- enable go to definition
   | Imported loc
   deriving (Data, Eq, Functor, Show)
-
-instance ShortShow loc => ShortShow (BindingInfo loc) where
-  shortShow (BoundLocally l) = "BoundLocally " ++ shortShow l
-  shortShow (Defined l) = "Defined " ++ shortShow l
-  shortShow (Imported l) = "Imported " ++ shortShow l

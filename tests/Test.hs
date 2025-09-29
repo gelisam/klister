@@ -46,7 +46,6 @@ import Pretty
 import Scope
 import qualified ScopeSet
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import Syntax.SrcLoc
 import Syntax
@@ -296,16 +295,16 @@ moduleTests = testGroup "Module tests" [ shouldWork, shouldn'tWork ]
                   case e1 of
                     Core (CoreApp (Core (CoreApp f _)) _) ->
                       assertAlphaEq "Ex 1 picks fun 2" (Core (CoreVar fun2)) f
-                    other -> assertFailure $ "Ex 1 should be an application, but it's " ++ shortShow other
+                    other -> assertFailure $ "Ex 1 should be an application, but it's " ++ show other
                   case e2 of
                     Core (CoreApp (Core (CoreApp f _)) _) ->
                       assertAlphaEq "Ex 2 picks fun 1" (Core (CoreVar fun1)) f
-                    other -> assertFailure $ "Ex 2 should be an application, but it's " ++ shortShow other
+                    other -> assertFailure $ "Ex 2 should be an application, but it's " ++ show other
                   spec3 <- lam (const (pure (Core (CoreVar fun2))))
                   case e3 of
                     Core (CoreApp (Core (CoreApp (Core (CoreApp f _)) _)) _) ->
                       assertAlphaEq "Ex 3 picks fun 2" f spec3
-                    other -> assertFailure $ "Ex 3 should be an application, but it's " ++ shortShow other
+                    other -> assertFailure $ "Ex 3 should be an application, but it's " ++ show other
 
                 _ -> assertFailure "Expected two imports, a def, a macro, a def, two examples, a macro, and an example"
           )
@@ -405,11 +404,11 @@ testQuasiquoteExamples examples =
       assertAlphaEq "Third and first example are the same" e3 e1
       case e4 of
         Core (CoreList (ScopedList [Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))] _)) -> pure ()
-        other -> assertFailure ("Expected (thing), got " ++ shortShow other)
+        other -> assertFailure ("Expected (thing), got " ++ show other)
       case e5 of
         Core (CoreList (ScopedList [expr] _)) ->
           assertAlphaEq "the expression is e1" expr e1
-        other -> assertFailure ("Expected [nothing], got " ++ shortShow other)
+        other -> assertFailure ("Expected [nothing], got " ++ show other)
       case e6 of
         Core (CoreList (ScopedList [ Core (CoreSyntax (Syntax (Stx _ _ (Id "list-syntax"))))
                                    , Core (CoreList
@@ -420,7 +419,7 @@ testQuasiquoteExamples examples =
                                    , _
                                    ]
                         _)) -> assertAlphaEq "the expression is e1" expr e1
-        other -> assertFailure ("Expected [list-syntax [nothing thing] thing], got " ++ shortShow other)
+        other -> assertFailure ("Expected [list-syntax [nothing thing] thing], got " ++ show other)
       case e7 of
         Core (CoreList (ScopedList [ Core (CoreSyntax (Syntax (Stx _ _ (Id "list-syntax"))))
                                    , Core (CoreList
@@ -432,7 +431,7 @@ testQuasiquoteExamples examples =
                                    , _
                                    ]
                         _))  -> assertAlphaEq "the expression is e1" expr e1
-        other -> assertFailure ("Expected [list-syntax [nothing thing ()] thing], got " ++ shortShow other)
+        other -> assertFailure ("Expected [list-syntax [nothing thing ()] thing], got " ++ show other)
       -- assertFailure
       case e8 of
         Core (CoreList (ScopedList
@@ -441,7 +440,7 @@ testQuasiquoteExamples examples =
                          , Core (CoreSyntax (Syntax (Stx _ _ (Id "thing"))))
                          ]
                          _)) -> assertAlphaEq "the expression is e1" expr e1
-        other -> assertFailure ("Expected [thing nothing thing], got " ++ shortShow other)
+        other -> assertFailure ("Expected [thing nothing thing], got " ++ show other)
 
     other -> assertFailure ("Expected 8 examples: " ++ show other)
 
@@ -530,11 +529,11 @@ testFileError f p = do
 
 
 
-assertAlphaEq :: (AlphaEq a, ShortShow a) => String -> a -> a -> Assertion
+assertAlphaEq :: (AlphaEq a, Show a) => String -> a -> a -> Assertion
 assertAlphaEq preface expected actual =
   unless (alphaEq actual expected) (assertFailure msg)
  where msg = (if null preface then "" else preface ++ "\n") ++
-             "expected: " ++ shortShow expected ++ "\n but got: " ++ shortShow actual
+             "expected: " ++ show expected ++ "\n but got: " ++ show actual
 
 --------------------------------------------------------------------------------
 -- Hedgehog

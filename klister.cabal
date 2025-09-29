@@ -83,7 +83,6 @@ library
       Pretty
       Scope
       ScopeSet
-      ShortShow
       SplitCore
       SplitType
       Syntax

@@ -14,7 +14,6 @@ import Data.Hashable
 import Alpha
 import Kind
 import ModuleName
-import ShortShow
 import GHC.Generics (Generic)
 
 newtype DatatypeName = DatatypeName { _datatypeNameText :: Text }
@@ -46,8 +45,6 @@ data Constructor
 makeLenses ''Constructor
 
 instance Hashable Constructor
-instance ShortShow Constructor where
-  shortShow = show
 
 instance AlphaEq Constructor where
   alphaCheck c1 c2
