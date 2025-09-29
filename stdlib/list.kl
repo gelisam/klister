@@ -20,6 +20,16 @@
     (nil)
     lst))
 
+(defun traverse (f)
+  (foldr
+    (lambda (a mk-bs)
+      (>>= (f a)
+        (lambda (b)
+          (>>= (mk-bs)
+            (lambda (bs)
+              (pure (:: b bs)))))))
+    (pure (nil))))
+
 (defun filter (predicate lst)
   (foldr
     (lambda (elem accum)
@@ -65,4 +75,4 @@
            [(cons x xs)
             (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
 
-(export List nil :: foldr map filter snoc reverse syntax->list list->syntax list)
+(export List nil :: foldr map traverse filter snoc reverse syntax->list list->syntax list)

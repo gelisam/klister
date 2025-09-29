@@ -1,0 +1,44 @@
+#lang "prelude.kl"
+
+-- a type defined with parentheses
+(datatype (Nat1)
+  (zero1)
+  (suc1 (Nat1)))
+
+-- a type defined without parentheses
+(datatype Nat2
+  (zero2)
+  (suc2 Nat2))
+
+-- a type defined with a type parameter (parentheses are mandatory in this
+-- case)
+(datatype (List3 A)
+  (nil3)
+  (cons3 A (List3 A)))
+
+
+-- all three types can be used with parentheses
+(example
+  (the (Nat1) (zero1)))
+
+(example
+  (the (Nat2) (zero2)))
+
+(example
+  (the (List3 Integer)
+       (nil3)))
+
+
+-- the nullary types can be used without parentheses
+(example
+  (the Nat1 (zero1)))
+
+(example
+  (the Nat2 (zero2)))
+
+
+-- continued in optional-parens-in-type-case.kl
+(export
+  Nat1 zero1 suc1
+  Nat2 zero2 suc2
+  List3 nil3 cons3)

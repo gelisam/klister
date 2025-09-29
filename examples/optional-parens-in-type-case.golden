@@ -1,0 +1,4 @@
+(suc1 (zero1)) : Nat1
+(suc2 (zero2)) : Nat2
+43 : Integer
+(cons3 42 (nil3)) : (List3 Integer)
