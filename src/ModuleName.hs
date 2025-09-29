@@ -20,7 +20,6 @@ import System.FilePath
 import Data.Hashable
 import GHC.Generics (Generic)
 
-import ShortShow
 
 newtype KernelName = Kernel ()
   deriving (Data, Eq, Ord, Show, Generic)
@@ -34,10 +33,6 @@ data ModuleName = ModuleName FilePath | KernelName KernelName
   deriving (Data, Eq, Ord, Show, Generic)
 
 instance Hashable ModuleName
-
-instance ShortShow ModuleName where
-  shortShow (ModuleName x) = x
-  shortShow (KernelName _k) = "kernel"
 
 moduleNameFromPath :: FilePath -> IO ModuleName
 moduleNameFromPath file = ModuleName <$> canonicalizePath file

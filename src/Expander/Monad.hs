@@ -188,7 +188,6 @@ import KlisterPath
 import PartialCore
 import PartialType
 import Phase
-import ShortShow
 import SplitCore
 import SplitType
 import Scope
@@ -417,7 +416,7 @@ moduleScope' mn = do
   case HM.lookup mn mods of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope $ T.pack $ "Module root for " ++ shortShow mn
+      sc <- freshScope $ T.pack $ "Module root for " ++ show mn
       modifyState $ set (expanderModuleRoots . at mn) (Just sc)
       return sc
 
@@ -429,7 +428,7 @@ phaseRoot = do
   case S.lookup p roots of
     Just sc -> return sc
     Nothing -> do
-      sc <- freshScope $ T.pack $ "Root for phase " ++ shortShow p
+      sc <- freshScope $ T.pack $ "Root for phase " ++ show p
       modifyState $ set (expanderPhaseRoots . at p) (Just sc)
       return sc
 

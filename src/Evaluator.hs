@@ -66,13 +66,11 @@ import Control.Lens hiding (List, elements)
 import Control.Exception hiding (TypeError, evaluate)
 import Data.Data (Typeable)
 import Data.Text (Text)
-import qualified Data.Text as T
 import Data.List (foldl')
 
 import Datatype
 import Core
 import Env
-import ShortShow
 import Syntax
 import Syntax.SrcLoc
 import Type
