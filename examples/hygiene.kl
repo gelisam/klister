@@ -39,14 +39,14 @@
                   (let [,misc-id 'other]
                     x)))]))]))
 (example
-  ((should-be-id x) 5))
+  ((should-be-id x) (the Integer 5)))
 
 -- The following example demonstrates that we can have two (define x ...)
 -- declarations with overlapping scopes without any accidental captures.
 (define-syntax-rule (define-six misc-id)
   (group
     (define x "defined six")
-    (define misc-id 6)
+    (define misc-id (the Integer 6))
     (example x)))
 (define-six x)
 (example x)

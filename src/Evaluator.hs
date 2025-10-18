@@ -67,6 +67,8 @@ import Control.Exception hiding (TypeError, evaluate)
 import Data.Data (Typeable)
 import Data.Text (Text)
 import Data.List (foldl')
+import Data.Word
+import Data.Int
 
 import Datatype
 import Core
@@ -150,6 +152,14 @@ data Kont where
 
   -- atomics
   InInteger :: !Core -> !VEnv -> !Kont -> Kont
+  InWord64  :: !Core -> !VEnv -> !Kont -> Kont
+  InWord32  :: !Core -> !VEnv -> !Kont -> Kont
+  InWord16  :: !Core -> !VEnv -> !Kont -> Kont
+  InWord8   :: !Core -> !VEnv -> !Kont -> Kont
+  InInt64   :: !Core -> !VEnv -> !Kont -> Kont
+  InInt32   :: !Core -> !VEnv -> !Kont -> Kont
+  InInt16   :: !Core -> !VEnv -> !Kont -> Kont
+  InInt8    :: !Core -> !VEnv -> !Kont -> Kont
   InString  :: !Core -> !VEnv -> !Kont -> Kont
   InReplaceLocL :: !Core -> !VEnv -> !Kont -> Kont
   InReplaceLocR :: !SrcLoc -> !VEnv -> !Kont -> Kont
@@ -225,22 +235,18 @@ step (Up v k) =
       ValueSyntax stx ->
         case _unSyntax stx of
           (Stx _ _ expr) -> case expr of
-            Integer _ ->
-              Er (EvalErrorType
-                   $ TypeError { _typeErrorExpected = "id"
-                               , _typeErrorActual   = "integer"
-                               }) env k
-            String _ ->
-              Er (EvalErrorType
-                  $ TypeError { _typeErrorExpected = "id"
-                              , _typeErrorActual   = "string"
-                              }) env k
-            List _ ->
-              Er (EvalErrorType
-                  $ TypeError { _typeErrorExpected = "id"
-                              , _typeErrorActual   = "list"
-                              }) env k
             name@(Id _) -> Down (unCore scope) env (InScope name env kont)
+            Integer _ -> mkTypeError "id" "integer" env k
+            Int64 _   -> mkTypeError "id" "int64"   env k
+            Int32 _   -> mkTypeError "id" "int32"   env k
+            Int16 _   -> mkTypeError "id" "int16"   env k
+            Int8 _    -> mkTypeError "id" "int8"    env k
+            Word64 _  -> mkTypeError "id" "word64"  env k
+            Word32 _  -> mkTypeError "id" "word32"  env k
+            Word16 _  -> mkTypeError "id" "word16"  env k
+            Word8 _   -> mkTypeError "id" "word8"   env k
+            String _  -> mkTypeError "id" "string"  env k
+            List _    -> mkTypeError "id" "list"    env k
       other -> Er (EvalErrorIdent other) env k
     (InIdentEqL how r env kont)  -> Down (unCore r) env (InIdentEqR v how env kont)
     (InIdentEqR how lv _env kont) -> Up (ValueMacroAction $ MacroActionIdentEq lv how v) kont
@@ -262,19 +268,17 @@ step (Up v k) =
       (\(Syntax (Stx _ _ expr)) ->
           case expr of
             List tl -> Down (unCore scope) env (InScope (List $ hd : tl) env kont)
-            String _ ->
-              Er (EvalErrorType
-                   $ TypeError { _typeErrorExpected = "list"
-                               , _typeErrorActual   = "string"
-                               }) env k
-            Id _ -> Er (EvalErrorType
-                        $ TypeError { _typeErrorExpected = "list"
-                                    , _typeErrorActual   = "id"
-                                    }) env k
-            Integer _ -> Er (EvalErrorType
-                             $ TypeError { _typeErrorExpected = "list"
-                                         , _typeErrorActual   = "integer"
-                                         }) env k
+            String _  -> mkTypeError "list" "string"  env k
+            Id _      ->  mkTypeError "list" "id"     env k
+            Integer _ -> mkTypeError "list" "integer" env k
+            Int64 _   -> mkTypeError "list" "int64"  env k
+            Int32 _   -> mkTypeError "list" "int32"  env k
+            Int16 _   -> mkTypeError "list" "int16"  env k
+            Int8 _    -> mkTypeError "list" "int8"   env k
+            Word64 _  -> mkTypeError "list" "word64" env k
+            Word32 _  -> mkTypeError "list" "word32" env k
+            Word16 _  -> mkTypeError "list" "word16" env k
+            Word8 _   -> mkTypeError "list" "word8"  env k
          )
       (\err -> Er err env kont)
 
@@ -309,6 +313,38 @@ step (Up v k) =
     (InInteger scope env kont) ->
       evalAsInteger v
       (\good -> Down (unCore scope) env (InScope (Integer good) env kont))
+      (\err  -> Er err env kont)
+    (InInt64 scope env kont) ->
+      evalAsInt64 v
+      (\good -> Down (unCore scope) env (InScope (Int64 good) env kont))
+      (\err  -> Er err env kont)
+    (InInt32 scope env kont) ->
+      evalAsInt32 v
+      (\good -> Down (unCore scope) env (InScope (Int32 good) env kont))
+      (\err  -> Er err env kont)
+    (InInt16 scope env kont) ->
+      evalAsInt16 v
+      (\good -> Down (unCore scope) env (InScope (Int16 good) env kont))
+      (\err  -> Er err env kont)
+    (InInt8 scope env kont) ->
+      evalAsInt8 v
+      (\good -> Down (unCore scope) env (InScope (Int8 good) env kont))
+      (\err  -> Er err env kont)
+    (InWord64 scope env kont) ->
+      evalAsWord64 v
+      (\good -> Down (unCore scope) env (InScope (Word64 good) env kont))
+      (\err  -> Er err env kont)
+    (InWord32 scope env kont) ->
+      evalAsWord32 v
+      (\good -> Down (unCore scope) env (InScope (Word32 good) env kont))
+      (\err  -> Er err env kont)
+    (InWord16 scope env kont) ->
+      evalAsWord16 v
+      (\good -> Down (unCore scope) env (InScope (Word16 good) env kont))
+      (\err  -> Er err env kont)
+    (InWord8 scope env kont) ->
+      evalAsWord8 v
+      (\good -> Down (unCore scope) env (InScope (Word8 good) env kont))
       (\err  -> Er err env kont)
     (InString scope env kont) ->
       evalAsString v
@@ -361,9 +397,25 @@ step (Down c env k)  =
   case c of
 
     -- atoms
-    (CoreString s)    -> Up (ValueString s) k
-    (CoreInteger i)   -> Up (ValueInteger i) k
+    (CoreString s)  -> Up (ValueString s) k
+    (CoreInteger i) -> Up (ValueInteger i) k
+    (CoreWord64 i)  -> Up (ValueWord64 i) k
+    (CoreWord32 i)  -> Up (ValueWord32 i) k
+    (CoreWord16 i)  -> Up (ValueWord16 i) k
+    (CoreWord8 i)   -> Up (ValueWord8  i) k
+    (CoreInt64 i)   -> Up (ValueInt64 i) k
+    (CoreInt32 i)   -> Up (ValueInt32 i) k
+    (CoreInt16 i)   -> Up (ValueInt16 i) k
+    (CoreInt8 i)    -> Up (ValueInt8  i) k
     (CoreIntegerSyntax (ScopedInteger int scope)) -> Down (unCore int) env (InInteger scope env k)
+    (CoreWord64Syntax (ScopedWord64 int scope))   -> Down (unCore int) env (InWord64 scope env k)
+    (CoreWord32Syntax (ScopedWord32 int scope))   -> Down (unCore int) env (InWord32 scope env k)
+    (CoreWord16Syntax (ScopedWord16 int scope))   -> Down (unCore int) env (InWord16 scope env k)
+    (CoreWord8Syntax  (ScopedWord8  int scope))   -> Down (unCore int) env (InWord8 scope env k)
+    (CoreInt64Syntax (ScopedInt64 int scope))     -> Down (unCore int) env (InInt64 scope env k)
+    (CoreInt32Syntax (ScopedInt32 int scope))     -> Down (unCore int) env (InInt32 scope env k)
+    (CoreInt16Syntax (ScopedInt16 int scope))     -> Down (unCore int) env (InInt16 scope env k)
+    (CoreInt8Syntax  (ScopedInt8  int scope))     -> Down (unCore int) env (InInt8 scope env k)
     (CoreStringSyntax  (ScopedString  str scope)) -> Down (unCore str) env (InString scope env k)
     (CoreSyntax s)    -> Up (ValueSyntax s) k
     (CoreError what)  -> Down (unCore what) env (InError env k)
@@ -454,6 +506,54 @@ evalAsInteger int_to_be on_success on_error =
   case int_to_be of
     ValueInteger i -> on_success i
     other          -> on_error (evalErrorType "integer" other)
+
+evalAsInt64 :: Value -> ContinueWith Int64 -> OnFailure -> EState
+evalAsInt64 int_to_be on_success on_error =
+  case int_to_be of
+    ValueInt64 i -> on_success i
+    other        -> on_error (evalErrorType "int64" other)
+
+evalAsInt32 :: Value -> ContinueWith Int32 -> OnFailure -> EState
+evalAsInt32 int_to_be on_success on_error =
+  case int_to_be of
+    ValueInt32 i -> on_success i
+    other        -> on_error (evalErrorType "int32" other)
+
+evalAsInt16 :: Value -> ContinueWith Int16 -> OnFailure -> EState
+evalAsInt16 int_to_be on_success on_error =
+  case int_to_be of
+    ValueInt16 i -> on_success i
+    other        -> on_error (evalErrorType "int16" other)
+
+evalAsInt8 :: Value -> ContinueWith Int8 -> OnFailure -> EState
+evalAsInt8 int_to_be on_success on_error =
+  case int_to_be of
+    ValueInt8 i -> on_success i
+    other       -> on_error (evalErrorType "int8" other)
+
+evalAsWord64 :: Value -> ContinueWith Word64 -> OnFailure -> EState
+evalAsWord64 int_to_be on_success on_error =
+  case int_to_be of
+    ValueWord64 i -> on_success i
+    other         -> on_error (evalErrorType "int64" other)
+
+evalAsWord32 :: Value -> ContinueWith Word32 -> OnFailure -> EState
+evalAsWord32 int_to_be on_success on_error =
+  case int_to_be of
+    ValueWord32 i -> on_success i
+    other         -> on_error (evalErrorType "int32" other)
+
+evalAsWord16 :: Value -> ContinueWith Word16 -> OnFailure -> EState
+evalAsWord16 int_to_be on_success on_error =
+  case int_to_be of
+    ValueWord16 i -> on_success i
+    other         -> on_error (evalErrorType "int16" other)
+
+evalAsWord8 :: Value -> ContinueWith Word8 -> OnFailure -> EState
+evalAsWord8 int_to_be on_success on_error =
+  case int_to_be of
+    ValueWord8 i -> on_success i
+    other        -> on_error (evalErrorType "int8" other)
 
 evalAsSyntax :: Value -> ContinueWith Syntax -> OnFailure -> EState
 evalAsSyntax syn_to_be on_success on_error =
@@ -566,6 +666,46 @@ doCase blameLoc v0 ((p, rhs0) : ps) e  kont = match (doCase blameLoc v0 ps e kon
         ValueSyntax (Syntax (Stx _ _ (Integer int))) ->
           step $ Down (unCore rhs) (extend n x (ValueInteger int) env) k
         _ -> next
+    match next (SyntaxPatternInt64 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Int64 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueInt64 int) env) k
+        _ -> next
+    match next (SyntaxPatternInt32 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Int32 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueInt32 int) env) k
+        _ -> next
+    match next (SyntaxPatternInt16 n x) rhs scrutinee env k =
+     case scrutinee of
+       ValueSyntax (Syntax (Stx _ _ (Int16 int))) ->
+         step $ Down (unCore rhs) (extend n x (ValueInt16 int) env) k
+       _ -> next
+    match next (SyntaxPatternInt8 n x) rhs scrutinee env k =
+     case scrutinee of
+       ValueSyntax (Syntax (Stx _ _ (Int8 int))) ->
+         step $ Down (unCore rhs) (extend n x (ValueInt8 int) env) k
+       _ -> next
+    match next (SyntaxPatternWord64 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Word64 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueWord64 int) env) k
+        _ -> next
+    match next (SyntaxPatternWord32 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Word32 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueWord32 int) env) k
+        _ -> next
+    match next (SyntaxPatternWord16 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Word16 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueWord16 int) env) k
+        _ -> next
+    match next (SyntaxPatternWord8 n x) rhs scrutinee env k =
+      case scrutinee of
+        ValueSyntax (Syntax (Stx _ _ (Word8 int))) ->
+          step $ Down (unCore rhs) (extend n x (ValueWord8 int) env) k
+        _ -> next
     match next (SyntaxPatternString n x) rhs scrutinee env k =
       case scrutinee of
         ValueSyntax (Syntax (Stx _ _ (String str))) ->
@@ -617,6 +757,12 @@ doDataCase loc v0 ((pat, rhs) : ps) env kont =
         _otherValue -> fk
     match fk sk ((PatternVar n x, tgt) : more) =
       match fk (sk . extend n x tgt) more
+
+mkTypeError :: Type -> Type -> VEnv -> Kont -> EState
+mkTypeError expected actual env k =
+  Er (EvalErrorType
+      $ TypeError { _typeErrorExpected = expected
+                  , _typeErrorActual   = actual}) env k
 
 -- -----------------------------------------------------------------------------
 -- Top level API

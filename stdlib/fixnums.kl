@@ -1,0 +1,39 @@
+#lang kernel
+
+-- low level utilities related to fixnums
+
+(import (shift kernel 1))
+(import (shift "quasiquote.kl" 1))
+
+-- When the expander finds a literal integer, it wraps the literal in a call to
+-- #%integer-literal. So for fixnums we overload that call with our own version.
+-- We define our own version to detects the expected type and wrap the integer
+-- literal in a primitive conversion function to create the right literal
+-- value. Note that this must call the kernel's #%integer-literal or else it
+-- will loop on the Integer case.
+(define-macros
+  ([my-integer-literal
+    (lambda (stx)
+      (syntax-case stx
+        [(cons _ args)
+          (syntax-case args
+          [(cons n _)
+            (>>= (which-problem)
+              (lambda (problem)
+                (case problem
+                  [(expression t)
+                    (type-case t
+                    [(Int64)   (pure `(integer->int64   ,n))]
+                    [(Int32)   (pure `(integer->int32   ,n))]
+                    [(Int16)   (pure `(integer->int16   ,n))]
+                    [(Int8)    (pure `(integer->int8    ,n))]
+                    [(Word64)  (pure `(integer->word64  ,n))]
+                    [(Word32)  (pure `(integer->word32  ,n))]
+                    [(Word16)  (pure `(integer->word16  ,n))]
+                    [(Word8)   (pure `(integer->word8   ,n))]
+                    [(Integer) (pure `(#%integer-literal ,n))]
+                    )])))])]))]))
+
+
+(export (rename ([my-integer-literal #%integer-literal])
+                my-integer-literal))

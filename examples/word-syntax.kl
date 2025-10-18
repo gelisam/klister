@@ -3,13 +3,13 @@
 (import (shift "quasiquote.kl" 1))
 
 (define-macros
-  ([gotta-be-integer
+  ([gotta-be-word
     (lambda (stx)
       (syntax-case stx
         [(list (_ i))
           (syntax-case i
-            [(integer int) (pure (integer-syntax (+ int int) i))]
+            [(word int) (pure (word-syntax (+ int int) i))]
             [_ (syntax-error (quasiquote/loc i "bad syntax"))])]
         [_ (syntax-error (quasiquote/loc stx "bad syntax"))]))]))
 
-(example (the Integer (gotta-be-integer 2)))
+(example (gotta-be-word 2))

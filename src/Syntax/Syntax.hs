@@ -14,6 +14,8 @@ module Syntax.Syntax where
 import Control.Lens hiding (List)
 import Data.Data (Data)
 import Data.Text (Text)
+import Data.Word
+import Data.Int
 
 import Alpha
 import ModuleName
@@ -34,10 +36,19 @@ data Stx a = Stx
   deriving (Data, Eq, Functor, Show)
 makeLenses ''Stx
 
+-- | ExprF a is the data type of s-exprs
 data ExprF a
   = Id Text
   | String Text
   | Integer Integer
+  | Int64 Int64
+  | Int32 Int32
+  | Int16 Int16
+  | Int8  Int8
+  | Word64 Word64
+  | Word32 Word32
+  | Word16 Word16
+  | Word8  Word8
   | List [a]
   deriving (Data, Eq, Functor, Show)
 makePrisms ''ExprF
@@ -78,6 +89,14 @@ instance HasScopes Syntax where
       mapRec (Id x) = Id x
       mapRec (String str) = String str
       mapRec (Integer i) = Integer i
+      mapRec (Int64 i) = Int64 i
+      mapRec (Int32 i) = Int32 i
+      mapRec (Int16 i) = Int16 i
+      mapRec (Int8 i)  = Int8 i
+      mapRec (Word64 i) = Word64 i
+      mapRec (Word32 i) = Word32 i
+      mapRec (Word16 i) = Word16 i
+      mapRec (Word8 i)  = Word8 i
       mapRec (List xs) = List $ map (\stx -> mapScopes f stx) xs
 
 instance Phased (Stx Text) where

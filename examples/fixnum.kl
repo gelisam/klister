@@ -1,0 +1,17 @@
+#lang "prelude.kl"
+
+
+(example (the Integer 0b1100)) -- 12
+(example (the Word64 0xFF))    -- 255
+(example (the Word32 0o32))    -- 26
+(example (the Word16 22))
+(example (the Word8 12))
+(example (the Int64 12))
+(example (the Int32 12))
+(example (the Int16 12))
+(example (the Int8  256))  -- note no bounds checking with the primitives this is 0
+(example (int32-popcount 0xFF)) -- 8
+(example (int8-+ 42 50))
+(example (int8-compliment 7)) -- will be -8 because 2's complement
+(example (+ 0b0111 0o22))
+(example (+ 0b0111 0x7A))

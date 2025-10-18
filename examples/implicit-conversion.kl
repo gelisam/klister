@@ -177,7 +177,7 @@
 -- everywhere, everything must expand to a Reader behind the scenes.
 
 (define-macro (my-integer-literal n)
-  (pure `(reader-pure (#%integer-literal ,n))))
+  (pure `(reader-pure (the Integer (#%integer-literal ,n)))))
 
 (define-macro (my-string-literal s)
   (pure `(reader-pure (#%string-literal ,s))))

@@ -66,6 +66,175 @@
 --
 -- -> : Type -> Type -> Type
 --
+-- Fixnums
+-- Word8 : Type
+(example (pair "word8-+" word8-+))
+(example (pair "word8--" word8--))
+(example (pair "word8-*" word8-*))
+(example (pair "word8-/" word8-/))
+(example (pair "word8>"  word8>))
+(example (pair "word8>=" word8>=))
+(example (pair "word8<"  word8<))
+(example (pair "word8<=" word8<=))
+(example (pair "word8="  word8=))
+(example (pair "word8/=" word8/=))
+(example (pair "integer->word8" integer->word8))
+(example (pair "word8-and"    word8-and))
+(example (pair "word8-or"     word8-or))
+(example (pair "word8-xor"    word8-xor))
+(example (pair "word8-rotate" word8-rotate))
+(example (pair "word8-shift"  word8-shift))
+(example (pair "word8->string" word8->string))
+(example (pair "word8-popcount" word8-popcount))
+(example (pair "word8-compliment" word8-compliment))
+
+-- Word16 : Type
+(example (pair "word16-+" word16-+))
+(example (pair "word16--" word16--))
+(example (pair "word16-*" word16-*))
+(example (pair "word16-/" word16-/))
+(example (pair "word16>"  word16>))
+(example (pair "word16>=" word16>=))
+(example (pair "word16<"  word16<))
+(example (pair "word16<=" word16<=))
+(example (pair "word16="  word16=))
+(example (pair "word16/=" word16/=))
+(example (pair "integer->word16" integer->word16))
+(example (pair "word16-and"    word16-and))
+(example (pair "word16-or"     word16-or))
+(example (pair "word16-xor"    word16-xor))
+(example (pair "word16-rotate" word16-rotate))
+(example (pair "word16-shift"  word16-shift))
+(example (pair "word16->string" word16->string))
+(example (pair "word16-popcount" word16-popcount))
+(example (pair "word16-compliment" word16-compliment))
+
+-- Word32 : Type
+(example (pair "word32-+" word32-+))
+(example (pair "word32--" word32--))
+(example (pair "word32-*" word32-*))
+(example (pair "word32-/" word32-/))
+(example (pair "word32>"  word32>))
+(example (pair "word32>=" word32>=))
+(example (pair "word32<"  word32<))
+(example (pair "word32<=" word32<=))
+(example (pair "word32="  word32=))
+(example (pair "word32/=" word32/=))
+(example (pair "integer->word32" integer->word32))
+(example (pair "word32-and"    word32-and))
+(example (pair "word32-or"     word32-or))
+(example (pair "word32-xor"    word32-xor))
+(example (pair "word32-rotate" word32-rotate))
+(example (pair "word32-shift"  word32-shift))
+(example (pair "word32->string" word32->string))
+(example (pair "word32-popcount" word32-popcount))
+(example (pair "word32-compliment" word32-compliment))
+
+-- Word64 : Type
+(example (pair "word64-+" word64-+))
+(example (pair "word64--" word64--))
+(example (pair "word64-*" word64-*))
+(example (pair "word64-/" word64-/))
+(example (pair "word64>"  word64>))
+(example (pair "word64>=" word64>=))
+(example (pair "word64<"  word64<))
+(example (pair "word64<=" word64<=))
+(example (pair "word64="  word64=))
+(example (pair "word64/=" word64/=))
+(example (pair "integer->word64" integer->word64))
+(example (pair "word64-and"    word64-and))
+(example (pair "word64-or"     word64-or))
+(example (pair "word64-xor"    word64-xor))
+(example (pair "word64-rotate" word64-rotate))
+(example (pair "word64-shift"  word64-shift))
+(example (pair "word64->string" word64->string))
+(example (pair "word64-popcount" word64-popcount))
+(example (pair "word64-compliment" word64-compliment))
+
+-- Int8 : Type
+(example (pair "int8-+" int8-+))
+(example (pair "int8--" int8--))
+(example (pair "int8-*" int8-*))
+(example (pair "int8-/" int8-/))
+(example (pair "int8>"  int8>))
+(example (pair "int8>=" int8>=))
+(example (pair "int8<"  int8<))
+(example (pair "int8<=" int8<=))
+(example (pair "int8="  int8=))
+(example (pair "int8/=" int8/=))
+(example (pair "integer->int8" integer->int8))
+(example (pair "int8-and"    int8-and))
+(example (pair "int8-or"     int8-or))
+(example (pair "int8-xor"    int8-xor))
+(example (pair "int8-rotate" int8-rotate))
+(example (pair "int8-shift"  int8-shift))
+(example (pair "int8->string" int8->string))
+(example (pair "int8-popcount" int8-popcount))
+(example (pair "int8-compliment" int8-compliment))
+
+-- Int16 : Type
+(example (pair "int16-+" int16-+))
+(example (pair "int16--" int16--))
+(example (pair "int16-*" int16-*))
+(example (pair "int16-/" int16-/))
+(example (pair "int16>"  int16>))
+(example (pair "int16>=" int16>=))
+(example (pair "int16<"  int16<))
+(example (pair "int16<=" int16<=))
+(example (pair "int16="  int16=))
+(example (pair "int16/=" int16/=))
+(example (pair "integer->int16" integer->int16))
+(example (pair "int16-and"    int16-and))
+(example (pair "int16-or"     int16-or))
+(example (pair "int16-xor"    int16-xor))
+(example (pair "int16-rotate" int16-rotate))
+(example (pair "int16-shift"  int16-shift))
+(example (pair "int16->string" int16->string))
+(example (pair "int16-popcount" int16-popcount))
+(example (pair "int16-compliment" int16-compliment))
+
+-- Int32 : Type
+(example (pair "int32-+" int32-+))
+(example (pair "int32--" int32--))
+(example (pair "int32-*" int32-*))
+(example (pair "int32-/" int32-/))
+(example (pair "int32>"  int32>))
+(example (pair "int32>=" int32>=))
+(example (pair "int32<"  int32<))
+(example (pair "int32<=" int32<=))
+(example (pair "int32="  int32=))
+(example (pair "int32/=" int32/=))
+(example (pair "integer->int32" integer->int32))
+(example (pair "int32-and"    int32-and))
+(example (pair "int32-or"     int32-or))
+(example (pair "int32-xor"    int32-xor))
+(example (pair "int32-rotate" int32-rotate))
+(example (pair "int32-shift"  int32-shift))
+(example (pair "int32->string" int32->string))
+(example (pair "int32-popcount" int32-popcount))
+(example (pair "int32-compliment" int32-compliment))
+
+-- Int64 : Type
+(example (pair "int64-+" int64-+))
+(example (pair "int64--" int64--))
+(example (pair "int64-*" int64-*))
+(example (pair "int64-/" int64-/))
+(example (pair "int64>"  int64>))
+(example (pair "int64>=" int64>=))
+(example (pair "int64<"  int64<))
+(example (pair "int64<=" int64<=))
+(example (pair "int64="  int64=))
+(example (pair "int64/=" int64/=))
+(example (pair "integer->int64" integer->int64))
+(example (pair "int64-and"    int64-and))
+(example (pair "int64-or"     int64-or))
+(example (pair "int64-xor"    int64-xor))
+(example (pair "int64-rotate" int64-rotate))
+(example (pair "int64-shift"  int64-shift))
+(example (pair "int64->string" int64->string))
+(example (pair "int64-popcount" int64-popcount))
+(example (pair "int64-compliment" int64-compliment))
+
 -- Integer : Type
 (example (pair "+" +))
 (example (pair "-" -))
@@ -99,6 +268,7 @@
 (example (pair "string-downcase" string-downcase))
 (example (pair "string-titlecase" string-titlecase))
 (example (pair "string-foldcase" string-foldcase))
+
 --
 -- IO : Type -> Type
 (example (pair "pure-IO" pure-IO))
@@ -137,6 +307,14 @@
 -- Syntax-Contents : Type -> Type
 -- list-contents : List A -> Syntax-Contents A
 -- integer-contents : Integer -> Syntax-Contents A
+-- int8-contents  : Int8  -> Syntax-Contents A
+-- int16-contents : Int16 -> Syntax-Contents A
+-- int32-contents : Int32 -> Syntax-Contents A
+-- int64-contents : Int64 -> Syntax-Contents A
+-- word8-contents  : Word8  -> Syntax-Contents A
+-- word16-contents : Word16 -> Syntax-Contents A
+-- word32-contents : Word32 -> Syntax-Contents A
+-- word64-contents : Word64 -> Syntax-Contents A
 -- string-contents : String -> Syntax-Contents A
 -- identifier-contents : String -> Syntax-Contents A
 
@@ -166,6 +344,14 @@
 -- cons-list-syntax : Macro            (cons-list-syntax '1 '(2 3 4) 'loc)
 -- list-syntax : Macro                 (list-syntax ('1 '2 '3 '4) 'loc))
 -- integer-syntax : (Integer, Syntax) -> Syntax
+-- int8-syntax  : (Int8, Syntax) -> Syntax
+-- int16-syntax : (Int16, Syntax) -> Syntax
+-- int32-syntax : (Int32, Syntax) -> Syntax
+-- int64-syntax : (Int64, Syntax) -> Syntax
+-- word8-syntax  : (Word8, Syntax) -> Syntax
+-- word16-syntax : (Word16, Syntax) -> Syntax
+-- word32-syntax : (Word32, Syntax) -> Syntax
+-- word64-syntax : (Word64, Syntax) -> Syntax
 -- string-syntax : (String, Syntax) -> Syntax
 -- replace-loc : (Syntax, Syntax) -> Syntax
 -- syntax-case : Macro                 (syntax-case 'bar

@@ -49,7 +49,7 @@
 (example (run-either integer->string id))
 
 -- "42"
-(example (run-either integer->string id (left 42)))
+(example (run-either integer->string id (left (the Integer 42))))
 
 
 -- Next, let's define a variant of Either with three cases: leftmost, center,
@@ -115,10 +115,10 @@
          (pure `(:: ,x (nil)))]))))
 
 -- (:: 42 (nil))
-(example (head 42))
+(example (head (the Integer 42)))
 
 -- 1
-(example (case (list 1 2 3)
+(example (case (list (the Integer 1) 2 3)
            [(head x)
             x]))
 

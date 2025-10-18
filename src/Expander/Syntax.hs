@@ -14,6 +14,8 @@ import Data.List (nub, sort)
 import Data.Text (Text)
 import qualified Data.Text as T
 import Numeric.Natural
+import Data.Word
+import Data.Int
 
 import Expander.Error
 import Expander.Monad
@@ -46,6 +48,38 @@ mustBeList other = throwError (NotList other)
 mustBeInteger :: Syntax -> Expand (Stx Integer)
 mustBeInteger (Syntax (Stx scs srcloc (Integer n))) = return (Stx scs srcloc n)
 mustBeInteger other = throwError (NotInteger other)
+
+mustBeWord64 :: Syntax -> Expand (Stx Word64)
+mustBeWord64 (Syntax (Stx scs srcloc (Word64 n))) = return (Stx scs srcloc n)
+mustBeWord64 other = throwError (NotInteger other)
+
+mustBeWord32 :: Syntax -> Expand (Stx Word32)
+mustBeWord32 (Syntax (Stx scs srcloc (Word32 n))) = return (Stx scs srcloc n)
+mustBeWord32 other = throwError (NotInteger other)
+
+mustBeWord16 :: Syntax -> Expand (Stx Word16)
+mustBeWord16 (Syntax (Stx scs srcloc (Word16 n))) = return (Stx scs srcloc n)
+mustBeWord16 other = throwError (NotInteger other)
+
+mustBeWord8 :: Syntax -> Expand (Stx Word8)
+mustBeWord8 (Syntax (Stx scs srcloc (Word8 n))) = return (Stx scs srcloc n)
+mustBeWord8 other = throwError (NotInteger other)
+
+mustBeInt64 :: Syntax -> Expand (Stx Int64)
+mustBeInt64 (Syntax (Stx scs srcloc (Int64 n))) = return (Stx scs srcloc n)
+mustBeInt64 other = throwError (NotInteger other)
+
+mustBeInt32 :: Syntax -> Expand (Stx Int32)
+mustBeInt32 (Syntax (Stx scs srcloc (Int32 n))) = return (Stx scs srcloc n)
+mustBeInt32 other = throwError (NotInteger other)
+
+mustBeInt16 :: Syntax -> Expand (Stx Int16)
+mustBeInt16 (Syntax (Stx scs srcloc (Int16 n))) = return (Stx scs srcloc n)
+mustBeInt16 other = throwError (NotInteger other)
+
+mustBeInt8 :: Syntax -> Expand (Stx Int8)
+mustBeInt8 (Syntax (Stx scs srcloc (Int8 n))) = return (Stx scs srcloc n)
+mustBeInt8 other = throwError (NotInteger other)
 
 mustBeString :: Syntax -> Expand (Stx Text)
 mustBeString (Syntax (Stx scs srcloc (String s))) = return (Stx scs srcloc s)
