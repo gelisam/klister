@@ -1,0 +1,44 @@
+#lang "prelude.kl"
+
+(import "optional-parens.kl")
+(import (shift "prelude.kl" 1))
+(import (shift "optional-parens.kl" 1))
+
+(define-macros
+  ([m1
+    -- all three types can appear in type-patterns with parentheses
+    (lambda (stx)
+      (>>= (which-problem)
+        (lambda (problem)
+          (case problem
+            [(expression tp)
+             (type-case tp
+               [(Nat1)
+                (pure '(zero1))]
+               [(Nat2)
+                (pure '(zero2))]
+               [(Integer)
+                (pure '42)]
+               [(List3 elem-tp)
+                (pure '(nil3))])]))))]
+   [m2
+    -- the nullary types can appear in type-patterns without parentheses
+    (lambda (stx)
+      (>>= (which-problem)
+        (lambda (problem)
+          (case problem
+            [(expression tp)
+             (type-case tp
+               [Nat1
+                (pure '(suc1 m1))]
+               [Nat2
+                (pure '(suc2 m1))]
+               [Integer
+                (pure '(+ m1 1))]
+               [(List3 elem-tp)
+                (pure '(cons3 m1 m1))])]))))]))
+
+(example (the Nat1 m2))
+(example (the Nat2 m2))
+(example (the Integer m2))
+(example (the (List3 Integer) m2))

@@ -1,0 +1,146 @@
+#lang kernel
+
+-- Optional parentheses for user-defined datatypes
+
+(import (shift kernel 1))
+(import (shift "defun.kl" 1))
+(import (shift "list.kl" 1))
+(import (shift "n-ary-app.kl" 1))
+(import "optional-parens.kl")
+(import (shift "optional-parens.kl" 1))
+(import (shift "quasiquote.kl" 1))
+
+(meta
+  -- (replace-needle 'Nat '(Core-Nat) '(... Nat ...))
+  -- =>
+  -- '(... (Core-Nat) ...)
+  (defun replace-needle (needle replacement stx)
+    (case (open-syntax stx)
+      [(identifier-contents _)
+       (>>= (bound-identifier=? stx needle)
+         (lambda (is-needle)
+           (case is-needle
+             [(true)
+              -- 'Nat => '(Core-Nat)
+              (pure replacement)]
+             [(false)
+              -- 'foo => 'foo
+              (pure stx)])))]
+      [(list-contents (list single))
+       -- '(<single>) => ...
+       (case (open-syntax single)
+         [(identifier-contents _)
+          (>>= (bound-identifier=? single needle)
+            (lambda (is-needle)
+              (case is-needle
+                [(true)
+                 -- '(Nat) => '(Core-Nat)
+                 (pure replacement)]
+                [(false)
+                 -- '(foo) => '(foo)
+                 (pure stx)])))]
+         [_
+          -- '(42) => '(42)
+          (pure stx)])]
+      [(list-contents elems)
+       -- recur
+       (>>= (traverse (replace-needle needle replacement) elems)
+         (lambda (core-elems)
+           (pure (close-syntax stx stx (list-contents core-elems)))))]
+      [_
+       -- '42 => '42
+       (pure stx)])))
+
+-- A version of
+--
+--   (datatype (Nat)
+--     (zero)
+--     (suc (Nat)))
+--   (example
+--     (the (Nat) (zero))
+--
+-- which also supports this simpler syntax for nullary type constructors:
+--
+--   (my-datatype Nat
+--     (zero)
+--     (suc Nat))
+--   (example
+--     (the Nat (zero))
+--
+-- TODO: also make parentheses optional for nullary data constructors like zero
+(define-macros
+  ([my-datatype
+    (lambda (stx)
+      (case (open-syntax stx)
+        [(list-contents (:: _ (:: name-spec-stx ctor-stxes)))
+         -- (my-datatype ... ...)
+         -- =>
+         -- ...
+         (case (open-syntax name-spec-stx)
+           [(identifier-contents name-str)
+            -- (my-datatype Nat ...)
+            -- =>
+            -- ...
+            (let [name-stx name-spec-stx]
+              (let [core-name-stx -- Core-Nat
+                                  (close-syntax name-stx
+                                                'only-visible-inside-my-datatype
+                                                (identifier-contents name-str))]
+                (let [core-name-spec-stx `(,core-name-stx)]
+                  (>>= (traverse (replace-needle name-stx core-name-spec-stx) ctor-stxes)
+                    (lambda (core-ctor-stxes)
+                      -- (my-datatype Nat
+                      --   (zero)
+                      --   (suc Nat))
+                      -- =>
+                      -- (group
+                      --   (datatype (Core-Nat)
+                      --     (zero)
+                      --     (suc (Core-Nat)))
+                      -- (define-macros
+                      --   ([Nat (optional-parens 'Core-Nat)])))
+                      (pure `(group
+                               ,(close-syntax stx stx
+                                  (list-contents
+                                    (:: 'datatype
+                                      (:: core-name-spec-stx
+                                        core-ctor-stxes))))
+                               (define-macros
+                                 ([,name-stx (optional-parens ',core-name-stx)])))))))))]
+           [(list-contents (list name-stx))
+            -- (my-datatype (Nat) ...)
+            -- =>
+            -- ...
+            (let [core-name-stx -- Core-Nat
+                                (close-syntax name-stx
+                                              'only-visible-inside-my-datatype
+                                              (open-syntax name-stx))]
+              (let [core-name-spec-stx `(,core-name-stx)]
+                (>>= (traverse (replace-needle name-stx core-name-spec-stx) ctor-stxes)
+                  (lambda (core-ctor-stxes)
+                    -- (my-datatype (Nat) ...)
+                    -- =>
+                    -- (group
+                    --   (datatype (Core-Nat) ...)
+                    --   (define-macros
+                    --     ([Nat (optional-parens 'Core-Nat)])))
+                    (pure `(group
+                             ,(close-syntax stx stx
+                                (list-contents
+                                  (:: 'datatype
+                                    (:: core-name-spec-stx
+                                      core-ctor-stxes))))
+                             (define-macros
+                               ([,name-stx (optional-parens ',core-name-stx)]))))))))]
+           [_
+            -- (my-datatype (List A) ...)
+            -- =>
+            -- (datatype (List A) ...)
+            (pure (close-syntax stx stx
+                    (list-contents
+                      (:: 'datatype
+                        (:: name-spec-stx
+                          ctor-stxes)))))])]))]))
+
+(export (rename ([my-datatype datatype])
+                my-datatype))
