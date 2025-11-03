@@ -7,17 +7,17 @@
 (import "quasiquote.kl")
 
 -- (define-macros
---   ([unit (optional-parens 'unit)]))
+--   ([my-unit (optional-parens 'unit)]))
 (define optional-parens
   (lambda (symbol stx)
     (case (open-syntax stx)
       [(identifier-contents x)
-       -- unit
+       -- my-unit
        -- =>
        -- (unit)
        (pure `(,symbol))]
       [(list-contents (:: _ args))
-       -- (unit 1 2 3)
+       -- (my-unit 1 2 3)
        -- =>
        -- (unit 1 2 3)
        (pure (close-syntax stx stx (list-contents (:: symbol args))))])))
