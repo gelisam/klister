@@ -1,6 +1,6 @@
 A "scope" intuitively means a region of code where some variables are visible. In a language without hygienic macros, scopes are neatly nested within each other, and when multiple bindings bind the same name, the innermost binding wins:
 ```
--- example 1
+-- example 1: This example demonstrates scopes in a language that does not have macros
 (let [x 1]    -- call this binding "x1"
   -- scope 1 begins {
   (let [x 2]  -- call this binding "x2"
@@ -14,7 +14,7 @@ A "scope" intuitively means a region of code where some variables are visible. I
 
 In a world with macros, the situation is more complicated. 
 ```
--- example 2
+-- example 2: This example demonstrates how hygenic macros complicate the situation
 (let [x 1]         -- call this binding "x1"
   (my-macro [x 2]  -- call this binding "x2"
     -- which bindings are visible here depends
@@ -35,7 +35,7 @@ The goal of hygienic macros is to make sure that even if the caller of `my-macro
 (let [x 1]      -- call this binding "x1"
   (let [x 3]    -- call this binding "xM"
     (let [x 2]  -- call this binding "x2"
-      (+ x      -- xM should win here
+      (+ x      -- xM should win here because this x comes from the body of my-macro
          x))))  -- but x2 should win here
 ```
 
@@ -61,7 +61,7 @@ Let's now look at example 2. The parts which are lexically within binding x1 _be
 -- example 2, scope 1
 (let [x 1]  -- scope 1
   (my-macro
-    [x 2]   -- scope 1
+    [x 2]   -- scope 1: _all_ locations in the AST are tagged, even arguments passed to macros.
     x))     -- scope 1
 ```
 becomes
