@@ -5,7 +5,7 @@ A "scope" intuitively means a region of code where some variables are visible. I
   -- scope 1 begins {
   (let [x 2]  -- call this binding "x2"
     -- scope 2 begins {
-    x         -- x1 and x2 are both visible but x2 wins
+    x         -- at this reference, both x1 and x2 are visible, but x2 wins.
     -- } scopes 2 ends 
   )
   -- } scope 1 ends
