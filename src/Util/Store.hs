@@ -16,9 +16,11 @@
 module Util.Store
   ( empty
   , lookup
+  , (!)
   , singleton
   , insert
   , toList
+  , toAscList
   , fromList
   , Store
   , unionWith
@@ -75,6 +77,11 @@ empty = Store IM.empty
 lookup :: HasKey p => p -> Store p v -> Maybe v
 lookup ptr graph = getKey ptr `IM.lookup` unStore graph
 
+(!) :: HasKey p => Store p v -> p -> v
+graph ! ptr = case lookup ptr graph of
+  Just v -> v
+  Nothing -> error "Store.!!: key not found"
+
 singleton :: HasKey p => p -> v -> Store p v
 singleton ptr val = Store $! IM.singleton (getKey ptr) val
 
@@ -83,6 +90,9 @@ insert k v str = Store $! IM.insert (getKey k) v (unStore str)
 
 toList :: HasKey p => Store p v -> [(p,v)]
 toList str = map (first fromKey) $ IM.toList (unStore str)
+
+toAscList :: HasKey p => Store p v -> [(p,v)]
+toAscList str = map (first fromKey) $ IM.toAscList (unStore str)
 
 fromList :: HasKey p => [(p,v)] -> Store p v
 fromList ps = Store $! IM.fromList $ map (first getKey) ps

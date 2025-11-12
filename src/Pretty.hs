@@ -372,14 +372,14 @@ instance Pretty VarInfo (Scheme Ty) where
     pure $ text "∀" <>
       (align $ group $
        vsep [ group $
-              vsep (zipWith ppArgKind typeVarNames ppArgKinds) <> text "."
+              vsep (zipWith ppArgKind schemeVarNames ppArgKinds) <> text "."
             , ppT
             ])
     where
       ppArgKind varName kind = parens (text varName <+> text ":" <+> kind)
 
-typeVarNames :: [Text]
-typeVarNames =
+schemeVarNames :: [Text]
+schemeVarNames =
   greek ++
   [ base <> T.pack (show i)
   | (base, i) <- greekNum
@@ -393,6 +393,9 @@ typeVarNames =
                , base <- greek
                ]
 
+schemeVarName :: SchemeVar -> Text
+schemeVarName (SchemeVar n) = schemeVarNames !! fromIntegral n
+
 instance Pretty VarInfo TypeConstructor where
   pp _   TSyntax        = pure $ text "Syntax"
   pp _   TInteger       = pure $ text "Integer"
@@ -403,7 +406,7 @@ instance Pretty VarInfo TypeConstructor where
   pp _   TIO            = pure $ text "IO"
   pp _   TType          = pure $ text "Type"
   pp env (TDatatype t)  = pp env t
-  pp _   (TSchemaVar n) = pure $ text $ typeVarNames !! fromIntegral n
+  pp _   (TSchemaVar v) = pure $ text $ schemeVarName v
   pp _   (TMetaVar v)   = do
     renumbering <- get
     case St.lookup v renumbering of
@@ -469,7 +472,7 @@ instance (Pretty VarInfo s, Pretty VarInfo t, PrettyBinder VarInfo a, Pretty Var
     pure (hang 2 $ group $
             vsep ( text "data" <+> text x <+>
                    hsep [ parens (text α <+> ":" <+> kind)
-                        | α <- typeVarNames
+                        | α <- schemeVarNames
                         | kind <- ppArgKinds
                         ] <+>
                    text "="
