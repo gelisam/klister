@@ -59,7 +59,7 @@ So the reason x1 and x2 are both visible is because the use site is tagged with 
 Let's now look at example 2. The parts which are lexically within binding x1 _before_ `my-macro` is expanded will be tagged with scope 1:
 ```
 -- example 2, scope 1
-(let [x 1]  -- scope 1
+(let [x 1]  -- binding x1, scope 1
   (my-macro
     [x 2]   -- scope 1: _all_ locations in the AST are tagged, even arguments passed to macros.
     x))     -- scope 1
@@ -67,7 +67,7 @@ Let's now look at example 2. The parts which are lexically within binding x1 _be
 becomes
 ```
 -- example 2, scope 1, expanded
-(let [x 1]      -- scope 1
+(let [x 1]      -- binding x1, scope 1
   (let _
     (let [x 2]  -- scope 1
       (+ _
@@ -77,7 +77,7 @@ becomes
 The parts which are lexically within the `my-macro` definition will be tagged with scope M:
 ```
 (define-macro (my-macro binding expr)
-  (pure `(let [x 3]      -- scope M
+  (pure `(let [x 3]      -- binding xM, scope M
            (let ,binding
              (+ x        -- scope M
                 ,expr)))))
@@ -86,7 +86,7 @@ becomes
 ```
 -- example 2, scope M, expanded
 (let _
-  (let [x 3]  -- scope M
+  (let [x 3]  -- binding xM, scope M
     (let _
       (+ x    -- scope M
          _))))
@@ -97,7 +97,7 @@ The last binding, `(let [x 2] _)`, only appears after `my-macro` is expanded, so
 -- example 2, scope 2, expanded
 (let _
   (let _
-    (let [x 2]
+    (let [x 2]  -- binding 2, scope 2
       (+ x      -- scope 2
          x))))  -- scope 2
 ```
