@@ -2,8 +2,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Expander.Task where
 
-import qualified Data.Text as T
-
 import Binding
 import Core
 import Datatype
@@ -13,7 +11,6 @@ import Module
 import Phase
 import Pretty
 import ScopeSet
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax
@@ -85,29 +82,5 @@ data TaskAwaitMacroType = TaskAwaitMacroType
   deriving (Show)
 
 
-instance ShortShow TaskAwaitMacro where
-  shortShow (TaskAwaitMacro _ _ x deps _ stx) =
-    "(TaskAwaitMacro " ++ show x ++ " " ++ show deps ++ " " ++ T.unpack (pretty stx) ++ ")"
-
-instance ShortShow TaskAwaitMacroType where
-  shortShow = show
-
-instance ShortShow ExpanderTask where
-  shortShow (ExpandSyntax _dest stx) = "(ExpandSyntax " ++ T.unpack (pretty stx) ++ ")"
-  shortShow (AwaitingTypeCase loc _ _ _ _ _) = "(AwaitingTypeCase " ++ shortShow loc ++ "_)"
-  shortShow (AwaitingDefn _x n _b _defn _t _dest stx) =
-    "(AwaitingDefn " ++ shortShow n ++ " " ++ shortShow stx ++ ")"
-  shortShow (AwaitingMacro dest t) = "(AwaitingMacro " ++ show dest ++ " " ++ shortShow t ++ ")"
-  shortShow (AwaitingType tdest tasks) = "(AwaitingType " ++ show tdest ++ " " ++ show tasks ++ ")"
-  shortShow (ExpandDeclForms _dest _scs waitingOn outScopesDest stx) = "(ExpandDeclForms _ " ++ show waitingOn ++ " " ++ show outScopesDest ++ " " ++ T.unpack (syntaxText stx) ++ ")"
-  shortShow (InterpretMacroAction _dest act kont) = "(InterpretMacroAction " ++ show act ++ " " ++ show kont ++ ")"
-  shortShow (ContinueMacroAction _dest value kont) = "(ContinueMacroAction " ++ show value ++ " " ++ show kont ++ ")"
-  shortShow (EvalDefnAction var name phase _expr) = "(EvalDefnAction " ++ show var ++ " " ++ shortShow name ++ " " ++ show phase ++ ")"
-  shortShow (GeneralizeType e _ _) = "(GeneralizeType " ++ show e ++ " _ _)"
-  shortShow (ExpandVar t d x v) = "(ExpandVar " ++ show t ++ " " ++ show d ++ " " ++ show x ++ " " ++ show v ++ ")"
-  shortShow (EstablishConstructors _ _ dt _) = "(EstablishConstructors " ++ show dt ++ ")"
-  shortShow (AwaitingPattern _ _ _ _) = "(AwaitingPattern _ _ _ _)"
-  shortShow (AwaitingTypePattern _ _ _ _) = "(AwaitingTypePattern _ _ _ _)"
-
 instance Pretty VarInfo ExpanderTask where
-  pp _ task = string (shortShow task)
+  pp _ task = pure $ string (show task)

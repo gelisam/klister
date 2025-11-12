@@ -10,7 +10,6 @@ import Data.Data (Data)
 import Data.Sequence (Seq)
 import Numeric.Natural
 
-import ShortShow
 
 import Util.Key
 
@@ -24,9 +23,6 @@ instance HasKey Phase where
   fromKey i = Phase $! fromIntegral  i
   {-# INLINE getKey  #-}
   {-# INLINE fromKey #-}
-
-instance ShortShow Phase where
-  shortShow (Phase i) = "p" ++ show i
 
 runtime :: Phase
 runtime = Phase 0

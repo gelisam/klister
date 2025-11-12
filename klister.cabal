@@ -15,6 +15,8 @@ data-files:
     stdlib/list.kl
     stdlib/n-ary-app.kl
     stdlib/optional-parens.kl
+    stdlib/optional-parens-datatype.kl
+    stdlib/optional-parens-primitives.kl
     stdlib/prelude.kl
     stdlib/quasiquote.kl
 
@@ -83,7 +85,6 @@ library
       Pretty
       Scope
       ScopeSet
-      ShortShow
       SplitCore
       SplitType
       Syntax

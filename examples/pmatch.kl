@@ -86,7 +86,7 @@
 
 
 
-(datatype (Nat) (zero) (add1 (Nat)))
+(datatype Nat (zero) (add1 Nat))
 
 (example (pmatch (zero) (else 't)))
 (example (pmatch (zero) ((else x) 't)))

@@ -1,0 +1,3 @@
+#lang "prelude.kl"
+
+(example (42 4 2))

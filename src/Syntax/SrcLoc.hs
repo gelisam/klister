@@ -7,7 +7,6 @@ import Control.Lens
 import Data.Data (Data)
 
 import Alpha
-import ShortShow
 
 data SrcPos = SrcPos
   { _srcPosLine :: !Int
@@ -15,9 +14,6 @@ data SrcPos = SrcPos
   }
   deriving (Data, Eq, Show)
 makeLenses ''SrcPos
-
-instance ShortShow SrcPos where
-  shortShow (SrcPos l c) = show l ++ "." ++ show c
 
 data SrcLoc = SrcLoc
   { _srcLocFilePath :: !FilePath
@@ -29,9 +25,3 @@ makeLenses ''SrcLoc
 
 instance AlphaEq SrcLoc where
   alphaCheck x y = guard (x == y)
-
-instance ShortShow SrcLoc where
-  shortShow (SrcLoc fn beg end) =
-    reverse (take 10 (reverse fn)) ++ ":" ++
-    shortShow beg ++ "-" ++
-    shortShow end

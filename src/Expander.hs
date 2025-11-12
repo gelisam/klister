@@ -73,7 +73,6 @@ import Parser
 import Phase
 import Pretty
 import ScopeSet (ScopeSet)
-import ShortShow
 import SplitCore
 import SplitType
 import Syntax
@@ -230,7 +229,7 @@ visit modName = do
               getState
   unless visitedp $ do
     let m' = shift i m -- Shift the syntax literals in the module source code
-    sc <- freshScope $ T.pack $ "For module-phase " ++ shortShow modName ++ "-" ++ shortShow p
+    sc <- freshScope $ T.pack $ "For module-phase " ++ show modName ++ "-" ++ show p
     let m'' = over ScopeSet.allScopeSets (ScopeSet.insertUniversally sc) m'
     evalResults <- inPhase p $ evalMod m''
     modifyState $
@@ -772,7 +771,7 @@ primImportModule dest outScopesDest importStx = do
   Stx scs loc (_, toImport) <- mustHaveEntries importStx
   spec <- importSpec toImport
   modExports <- getImports spec
-  sc <- freshScope $ T.pack $ "For import at " ++ shortShow (stxLoc importStx)
+  sc <- freshScope $ T.pack $ "For import at " ++ show (stxLoc importStx)
   flip forExports_ modExports $ \p x b -> inPhase p do
     imported <- addModuleScope =<< addRootScope' (addScope' sc (Stx scs loc x))
     addImportBinding imported b
@@ -1312,7 +1311,7 @@ expandOneForm prob stx
         EIncompleteMacro transformerName sourceIdent mdest ->
           forkAwaitingMacro b transformerName sourceIdent mdest prob stx
         EUserMacro transformerName -> do
-          stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ shortShow ident
+          stepScope <- freshScope $ T.pack $ "Expansion step for decl " ++ show ident
           p <- currentPhase
           implV <- Env.lookupVal transformerName <$> currentTransformerEnv
           case implV of
@@ -1341,8 +1340,8 @@ expandOneForm prob stx
                     throwError $ ValueNotMacro other
             Nothing ->
               throwError $ InternalError $
-              "No transformer yet created for " ++ shortShow ident ++
-              " (" ++ show transformerName ++ ") at phase " ++ shortShow p
+              "No transformer yet created for " ++ show ident ++
+              " (" ++ show transformerName ++ ") at phase " ++ show p
             Just other -> throwError $ ValueNotMacro other
   | otherwise =
     case prob of
@@ -1419,11 +1418,7 @@ interpretMacroAction prob =
         StuckOnType loc ty env cases closures ->
           pure $ StuckOnType loc ty env cases (closures ++ [closure])
         Done boundResult -> do
-          phase <- view (expanderLocal . expanderPhase)
-          s <- getState
-          let env = fromMaybe Env.empty .
-                    view (expanderWorld . worldEnvironments . at phase) $ s
-          case applyInEnv env closure boundResult of
+          case apply closure boundResult of
             -- FIXME DYG: what error to throw here
             Left err -> throwError
               $ ValueNotMacro

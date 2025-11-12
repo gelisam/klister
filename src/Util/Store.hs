@@ -14,7 +14,8 @@
 -- | wrapper over IntMap for our purposes
 
 module Util.Store
-  ( lookup
+  ( empty
+  , lookup
   , (!)
   , singleton
   , insert
@@ -25,6 +26,7 @@ module Util.Store
   , unionWith
   , mapKeys
   , mapMaybeWithKey
+  , size
   )
 where
 
@@ -69,6 +71,9 @@ instance HasKey p => At (Store p v) where
 instance (c ~ d) => Each (Store c a) (Store d b) a b where
   each = traversed
 
+empty :: Store p v
+empty = Store IM.empty
+
 lookup :: HasKey p => p -> Store p v -> Maybe v
 lookup ptr graph = getKey ptr `IM.lookup` unStore graph
 
@@ -104,3 +109,6 @@ mapMaybeWithKey f s = Store $! IM.mapMaybeWithKey (f . fromKey) (unStore s)
 
 mapKeys :: HasKey p => (p -> p) -> Store p v -> Store p v
 mapKeys f s = Store $! IM.mapKeys (getKey . f . fromKey) (unStore s)
+
+size :: Store p v -> Int
+size = IM.size . unStore

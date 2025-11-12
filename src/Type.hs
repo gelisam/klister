@@ -20,7 +20,6 @@ import Numeric.Natural
 import Alpha
 import Datatype
 import Kind
-import ShortShow
 import Unique
 
 import Util.Key
@@ -107,10 +106,6 @@ instance AlphaEq a => AlphaEq (TyF a) where
     guard (ctor1 == ctor2)
     guard (length args1 == length args2)
     for_ (zip args1 args2) (uncurry alphaCheck)
-
-instance ShortShow a => ShortShow (TyF a) where
-  shortShow t = show (fmap shortShow t)
-
 
 class TyLike a arg | a -> arg where
   tSyntax     :: a
