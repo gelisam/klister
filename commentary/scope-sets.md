@@ -12,21 +12,21 @@ A "scope" intuitively means a region of code where some variables are visible. I
 )
 ```
 
-In a world with macros, the situation is more complicated. 
+In a world with macros, the situation is more complicated. One reason is that each identifier within the body of the macro can either be used as a binder or as a use-site, depending on which code the macro produces.
 ```
 -- example 2: This example demonstrates how hygenic macros complicate the situation
-(let [x 1]         -- call this binding "x1"
-  (my-macro [x 2]  -- call this binding "x2"
-    -- which bindings are visible here depends
-    -- on which code my-macro produces
-    x))
+(let [x 1]  -- call this binding "x1"
+  (my-macro
+    [x 2]   -- meaningless syntax for now, eventually the "x2" binding
+    x))     -- meaningless syntax for now, eventually a reference to x2
 ```
 
-Let's say that `(my-macro [y 2] y)` expands to
+A more subtle complication is macro hygiene. Let's say that `(my-macro [y 2] y)` expands to
 ```
-(let [x 3]  -- call this binding "xM"
-  (let [y 2]
-    (+ x y)))
+(let [x 3]    -- call this binding "xM"
+  (let [y 2]  -- call this binding "x2"
+    (+ x      -- refers to xM
+       y)))   -- refers to x2
 ```
 
 The goal of hygienic macros is to make sure that even if the caller of `my-macro` happens to pass `[x 2]` instead of `[y 2]`, it should not affect the binding structure of the result: the two arguments to `+` should still refer to two different bindings. So we want example 2 to expand to this: 
@@ -35,8 +35,8 @@ The goal of hygienic macros is to make sure that even if the caller of `my-macro
 (let [x 1]      -- call this binding "x1"
   (let [x 3]    -- call this binding "xM"
     (let [x 2]  -- call this binding "x2"
-      (+ x      -- xM should win here because this x comes from the body of my-macro
-         x))))  -- but x2 should win here
+      (+ x      -- should still refer to xM
+         x))))  -- should still refer to x2
 ```
 
 Obviously we cannot use the "innermost binding wins" algorithm here, or x2 would win at both use sites. We need a more complicated algorithm, the "scope sets" algorithm. 
@@ -61,7 +61,7 @@ Let's now look at example 2. The parts which are lexically within binding x1 _be
 -- example 2, scope 1
 (let [x 1]  -- binding x1, scope 1
   (my-macro
-    [x 2]   -- scope 1: _all_ locations in the AST are tagged, even arguments passed to macros.
+    [x 2]   -- scope 1: _all_ locations in the sub-term are tagged, even the syntax passed to macros.
     x))     -- scope 1
 ```
 becomes
@@ -92,7 +92,7 @@ becomes
          _))))
 ```
 
-The last binding, `(let [x 2] _)`, only appears after `my-macro` is expanded, so this time it is the parts which are lexically within binding x2 _after_ `my-macro` is expanded which are tagged with scope 2:
+The last binding, `(let [x 2] _)`, is only known to be a binding after `my-macro` is expanded, so this time it is the parts which are lexically within binding x2 _after_ `my-macro` is expanded which are tagged with scope 2:
 ```
 -- example 2, scope 2, expanded
 (let _
