@@ -41,7 +41,7 @@ The goal of hygienic macros is to make sure that even if the caller of `my-macro
 
 Obviously we cannot use the "innermost binding wins" algorithm here, or x2 would win at both use sites. We need a more complicated algorithm, the "scope sets" algorithm. 
 
-In this algorithm, each location in the AST is tagged with a set of `Scope` values. Two `Scope` values can be compared for equality, and that's it, there are no other operations on `Scope` values. Here is how the scope set algorithm works in example 1:
+In this algorithm, each location in the AST is tagged with a set of `Scope` values, called a `ScopeSet`. Two `Scope` values can be compared for equality, and that's it, there are no other operations on `Scope` values, whereas with two `ScopeSet`s we can ask if one set is strictly included in the other or if they are incomparable (the power-set partial-order). Here is how the scope set algorithm works in example 1:
 ```
 -- example 1, scope sets
 (let [x 1]    -- binding x1, tagged with scope 1
@@ -78,7 +78,7 @@ The parts which are lexically within the `my-macro` definition will be tagged wi
 ```
 (define-macro (my-macro binding expr)
   (pure `(let [x 3]      -- binding xM, scope M
-           (let ,binding
+           (let ,binding -- splices-in the syntax '[x 2], which is already tagged with scope 1
              (+ x        -- scope M
                 ,expr)))))
 ```
@@ -92,7 +92,7 @@ becomes
          _))))
 ```
 
-The last binding, `(let [x 2] _)`, is only known to be a binding after `my-macro` is expanded, so this time it is the parts which are lexically within binding x2 _after_ `my-macro` is expanded which are tagged with scope 2:
+The innermost binding, `(let [x 2] _)`, is only known to be a binding after `my-macro` is expanded, so this time it is the parts which are lexically within binding x2 _after_ `my-macro` is expanded which are tagged with scope 2:
 ```
 -- example 2, scope 2, expanded
 (let _
