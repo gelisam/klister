@@ -73,7 +73,7 @@ TC1. ?0 = type-check !0 (unblocked)
 ME2. !1 = expand `(convert)`
 ME5. ?2 = expand `42`
 ```
-Running TC1 solves `?1`, adds `?1` and `?2`, and adds two more type-checking tasks. Since we use unification, we don't need to add TC4.
+Running TC1 adds `?1` and `?2` and adds two more type-checking tasks. Since we use unification, we don't need to add TC4.
 ```
 ?0 = ?
 ?1 = ?2 -> ?0
