@@ -28,17 +28,17 @@ In other words, we have to interleave macro-expansion and type-checking, we cann
 
 Before we look at their interleaving, let's review each phase on its own, starting with macro-expansion (ME). 
 
-ME1. Expand `((convert) 42)`. It's a function application, so recur on `(convert)` and `42`.
-ME2. Expand `(convert)`. It's a macro, execute its body. The body calls `type-case` on the type of `42`.
-ME3. Assuming that the type-checker has figured out that `42` has type `Integer` by now, the body completes its execution and outputs `integer->string`.
-ME4. `integer->string` is an identifier, it expands to itself. 
+ME1. Expand `((convert) 42)`. It's a function application, so recur on `(convert)` and `42`.  
+ME2. Expand `(convert)`. It's a macro, execute its body. The body calls `type-case` on the type of `42`.  
+ME3. Assuming that the type-checker has figured out that `42` has type `Integer` by now, the body completes its execution and outputs `integer->string`.  
+ME4. `integer->string` is an identifier, it expands to itself.  
 ME5. `42` is an integer literal, it expands to itself. 
 
 Taking everything together, the expansion is `(integer->string 42)`. Let's look at type-checking (TC) next. 
 
-TC1. Type-check `((convert) 42)`. It's a function application, so recur on `integer->string` and `42`.
-TC2. Assuming that the macro-expander has figured out that `(convert)` expands to `integer->string` by now, type-check `integer->string`. It's an identifier, and the environment says it has type `(-> Integer String)`.
-TC3. Type-check `42`. It's an integer literal, it has type `Integer`.
+TC1. Type-check `((convert) 42)`. It's a function application, so recur on `integer->string` and `42`.  
+TC2. Assuming that the macro-expander has figured out that `(convert)` expands to `integer->string` by now, type-check `integer->string`. It's an identifier, and the environment says it has type `(-> Integer String)`.  
+TC3. Type-check `42`. It's an integer literal, it has type `Integer`.  
 TC4. Combine the `(-> Integer String)` and `Integer` results to conclude that `(integer->string 42)` is well-typed and has type `String`.
 
 If we swapped the order of TC2 and TC3, the algorithm would still make sense. But it would not make sense to move TC4 any higher, since it depends on the output of both TC2 and TC3. Steps are partially ordered by their dependencies. And steps from one phase can depend on steps from the other phase: TC2 depends on ME3, and ME3 depends on TC3. To interleave macro-expansion and type-checking, we must divide each phase into individual steps, which we call "tasks", figure out the dependencies between them, and execute the tasks in an order which satisfies the dependency constraints. 
