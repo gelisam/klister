@@ -36,7 +36,7 @@ ME5. `42` is an integer literal, it expands to itself.
 
 Taking everything together, the expansion is `(integer->string 42)`. Let's look at type-checking (TC) next. 
 
-TC1. Type-check `((convert) 42)`. It's a function application, so recur on `integer->string` and `42`.  
+TC1. Type-check `((convert) 42)`. It's a function application, so recur on `(convert)` and `42`.  
 TC2. Assuming that the macro-expander has figured out that `(convert)` expands to `integer->string` by now, type-check `integer->string`. It's an identifier, and the environment says it has type `(-> Integer String)`.  
 TC3. Type-check `42`. It's an integer literal, it has type `Integer`.  
 TC4. Combine the `(-> Integer String)` and `Integer` results to conclude that `(integer->string 42)` is well-typed and has type `String`.
