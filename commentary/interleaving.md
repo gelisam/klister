@@ -52,8 +52,10 @@ In the Klister codebase, we know that a type-checker problem has been solved if 
 Let's use this notation to step through the macro-expansion and type-checking of `((convert) 42)`. We start with two tasks: expand `((convert) 42)` to solve `!0`, and type-check `((convert) 42)` to solve `?0`. We put both of those in an unordered "task pool". Running a task may either solve its goal or add more tasks to the task pool which will make progress toward solving that goal. The interleaving algorithm is to keep running unblocked tasks until either all the tasks are blocked (an error case) or no tasks are left (success). If there is more than one unblocked task, they can run in any order.
 
 ```
+Unification variables:
 ?0 = ?
 
+Expansion variables:
 !0 = ?
 
 Task Pool:
@@ -62,8 +64,10 @@ TC1. ?0 = type-check !0 (blocked on !0)
 ```
 Running ME1 solves `!0`, adds `!1` and `!2`, and adds two more macro-expansion tasks.
 ```
+Unification variables:
 ?0 = ?
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = ?
@@ -75,10 +79,12 @@ ME5. ?2 = expand `42`
 ```
 Running TC1 adds `?1` and `?2` and adds two more type-checking tasks. Since we use unification, we don't need to add TC4.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = ?
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = ?
@@ -91,10 +97,12 @@ ME5. ?2 = expand `42`
 ```
 Running ME2 adds one more macro-expansion task.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = ?
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = ?
@@ -107,10 +115,12 @@ ME5. ?2 = expand `42`
 ```
 Running ME5 solves `!2`.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = ?
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = 42
@@ -122,10 +132,12 @@ ME3. !1 = continue after the type-case (blocked on ?2)
 ```
 Running TC3 solves `?2`.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = Integer
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = 42
@@ -136,10 +148,12 @@ ME3. !1 = continue after the type-case (unblocked)
 ```
 Running ME3 adds one more macro-expansion task.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = Integer
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = ?
 !2 = 42
@@ -150,10 +164,12 @@ ME4. !1 = expand `integer->string`
 ```
 Running ME4 solves `!1`.
 ```
+Unification variables:
 ?0 = ?
 ?1 = ?2 -> ?0
 ?2 = Integer
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = integer->string
 !2 = 42
@@ -163,10 +179,12 @@ TC2. ?1 = type-check !1 (unblocked)
 ```
 Running TC2 unifies `?1` with `Integer -> String`, solving `?0`.
 ```
+Unification variables:
 ?0 = String
 ?1 = ?2 -> ?0
 ?2 = Integer
 
+Expansion variables:
 !0 = (!1 !2)
 !1 = integer->string
 !2 = 42
