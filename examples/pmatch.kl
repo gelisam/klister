@@ -116,6 +116,6 @@
     [(nil)
      (nil)]))
 
-(example (swap-list (:: (pair 1 '1) (:: (pair 2 '2) (:: (pair 3 '3) (nil))))))
+(example (swap-list (:: (pair (the Integer 1) '1) (:: (pair (the Integer 2) '2) (:: (pair (the Integer 3) '3) (nil))))))
 
 (export pmatch)

@@ -19,6 +19,7 @@ data-files:
     stdlib/optional-parens-primitives.kl
     stdlib/prelude.kl
     stdlib/quasiquote.kl
+    stdlib/fixnums.kl
 
 source-repository head
   type: git

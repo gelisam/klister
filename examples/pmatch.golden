@@ -7,6 +7,6 @@
 (zero) : Nat
 (zero) : Nat
 (add1 (zero)) : Nat
-(:: (pair #[pmatch.kl:119.34-119.35]<1> 1)
-    (:: (pair #[pmatch.kl:119.50-119.51]<2> 2)
-        (:: (pair #[pmatch.kl:119.66-119.67]<3> 3) (nil)))) : (List (Pair Syntax Integer))
+(:: (pair #[pmatch.kl:119.48-119.49]<1> 1)
+    (:: (pair #[pmatch.kl:119.78-119.79]<2> 2)
+        (:: (pair #[pmatch.kl:119.108-119.109]<3> 3) (nil)))) : (List (Pair Syntax Integer))

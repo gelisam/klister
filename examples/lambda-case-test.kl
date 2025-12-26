@@ -9,4 +9,4 @@
     [(:: a b) 'cons]))
 
 (example (classify (nil)))
-(example (classify (:: 1 (:: 2 (nil)))))
+(example (classify (:: (the Integer 1) (:: 2 (nil)))))

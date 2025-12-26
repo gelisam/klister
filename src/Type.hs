@@ -45,6 +45,14 @@ firstSchemeVar = SchemeVar 0
 data TypeConstructor
   = TSyntax
   | TInteger
+  | TWord64
+  | TWord32
+  | TWord16
+  | TWord8
+  | TInt64
+  | TInt32
+  | TInt16
+  | TInt8
   | TString
   | TOutputPort
   | TFun
@@ -109,7 +117,8 @@ instance AlphaEq a => AlphaEq (TyF a) where
 
 class TyLike a arg | a -> arg where
   tSyntax     :: a
-  tInteger    :: a
+  tInteger, tInt64, tInt32, tInt16, tInt8 :: a
+  tWord64, tWord32, tWord16, tWord8       :: a
   tString     :: a
   tOutputPort :: a
   tFun1       :: arg -> arg -> a
@@ -121,9 +130,17 @@ class TyLike a arg | a -> arg where
   tMetaVar    :: MetaPtr -> a
 
 instance TyLike (TyF a) a where
-  tSyntax         = TyF TSyntax []
+  tSyntax         = TyF TSyntax  []
   tInteger        = TyF TInteger []
-  tString         = TyF TString []
+  tInt64          = TyF TInt64   []
+  tInt32          = TyF TInt32   []
+  tInt16          = TyF TInt16   []
+  tInt8           = TyF TInt8    []
+  tWord64         = TyF TWord64  []
+  tWord32         = TyF TWord32  []
+  tWord16         = TyF TWord16  []
+  tWord8          = TyF TWord8   []
+  tString         = TyF TString  []
   tOutputPort     = TyF TOutputPort []
   tFun1 t1 t2     = TyF TFun [t1, t2]
   tMacro t        = TyF TMacro [t]
@@ -136,6 +153,14 @@ instance TyLike (TyF a) a where
 instance TyLike Ty Ty where
   tSyntax         = Ty $ tSyntax
   tInteger        = Ty $ tInteger
+  tInt64          = Ty $ tInt64
+  tInt32          = Ty $ tInt32
+  tInt16          = Ty $ tInt16
+  tInt8           = Ty $ tInt8
+  tWord64         = Ty $ tWord64
+  tWord32         = Ty $ tWord32
+  tWord16         = Ty $ tWord16
+  tWord8          = Ty $ tWord8
   tString         = Ty $ tString
   tOutputPort     = Ty $ tOutputPort
   tFun1 t1 t2     = Ty $ tFun1 t1 t2

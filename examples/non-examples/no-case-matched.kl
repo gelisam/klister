@@ -3,4 +3,4 @@
 (example
   (case (true)
     [(false)
-     42]))
+     (the Integer 42)]))

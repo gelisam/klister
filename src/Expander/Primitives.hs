@@ -32,6 +32,14 @@ module Expander.Primitives
   , letSyntax
   , listSyntax
   , integerSyntax
+  , int64Syntax
+  , int32Syntax
+  , int16Syntax
+  , int8Syntax
+  , word64Syntax
+  , word32Syntax
+  , word16Syntax
+  , word8Syntax
   , stringSyntax
   , makeIntroducer
   , Expander.Primitives.log
@@ -51,8 +59,14 @@ module Expander.Primitives
   , makeLocalType
   -- * Primitive values
   , unaryIntegerPrim
+  , unaryWord64Prim, unaryWord32Prim, unaryWord16Prim, unaryWord8Prim
+  , unaryInt64Prim, unaryInt32Prim, unaryInt16Prim, unaryInt8Prim
   , binaryIntegerPrim
+  , binaryWord64Prim, binaryWord32Prim, binaryWord16Prim, binaryWord8Prim
+  , binaryInt64Prim, binaryInt32Prim, binaryInt16Prim, binaryInt8Prim
   , binaryIntegerPred
+  , binaryWord64Pred, binaryWord32Pred, binaryWord16Pred, binaryWord8Pred
+  , binaryInt64Pred, binaryInt32Pred, binaryInt16Pred, binaryInt8Pred
   , binaryStringPred
   -- * Helpers
   , prepareVar
@@ -68,6 +82,9 @@ import Control.Monad.Except
 import Data.Text (Text)
 import qualified Data.Text as T
 import Data.Traversable
+import Numeric.Natural
+import Data.Word
+import Data.Int
 
 import Binding
 import Core
@@ -89,6 +106,8 @@ import SplitType
 import Syntax
 import Type
 import Value
+
+import Debug.Trace
 
 ----------------------------
 -- Declaration primitives --
@@ -319,11 +338,45 @@ app t dest stx = do
   linkExpr dest $ CoreApp funDest argDest
 
 integerLiteral :: ExprPrim
-integerLiteral t dest stx = do
+word64Literal  :: ExprPrim
+word32Literal  :: ExprPrim
+word16Literal  :: ExprPrim
+word8Literal   :: ExprPrim
+int64Literal   :: ExprPrim
+int32Literal   :: ExprPrim
+int16Literal   :: ExprPrim
+int8Literal    :: ExprPrim
+integerLiteral t dest stx = numLiteral t dest stx mustBeInteger tInteger CoreInteger
+word64Literal t dest stx  = numLiteral t dest stx mustBeWord64 tWord64 CoreWord64
+word32Literal t dest stx  = numLiteral t dest stx mustBeWord32 tWord32 CoreWord32
+word16Literal t dest stx  = numLiteral t dest stx mustBeWord16 tWord16 CoreWord16
+word8Literal  t dest stx  = numLiteral t dest stx mustBeWord8  tWord8  CoreWord8
+int64Literal t dest stx   = numLiteral t dest stx mustBeInt64 tInt64 CoreInt64
+int32Literal t dest stx   = numLiteral t dest stx mustBeInt32 tInt32 CoreInt32
+int16Literal t dest stx   = numLiteral t dest stx mustBeInt16 tInt16 CoreInt16
+int8Literal  t dest stx   = numLiteral t dest stx mustBeInt8  tInt8  CoreInt8
+
+numLiteral
+  :: Ty
+  -> SplitCorePtr
+  -> Syntax
+  -> (Syntax -> Expand (Stx t))
+  -> Ty
+  -> (t -> CoreF TypePatternPtr PatternPtr SplitCorePtr)
+  -> Expand ()
+numLiteral t dest stx must_be typ constr = do
   Stx _ _ (_, arg) <- mustHaveEntries stx
-  Stx _ _ i <- mustBeInteger arg
-  unify dest t tInteger
-  linkExpr dest (CoreInteger i)
+  Stx _ _ i <- must_be arg
+  unify dest t typ
+  linkExpr dest (constr i)
+  saveExprType dest t
+
+integerToInt64 :: ExprPrim
+integerToInt64 t dest stx = do
+  Stx _ _ (_, arg) <- mustHaveEntries stx
+  Stx _ _ s <- mustBeInteger arg
+  unify dest t tInt64
+  linkExpr dest (CoreInt64 $ fromIntegral s)
   saveExprType dest t
 
 stringLiteral :: ExprPrim
@@ -416,6 +469,38 @@ integerSyntax t dest stx = do
   intDest <- schedule tInteger int
   sourceDest <- schedule tSyntax source
   linkExpr dest $ CoreIntegerSyntax $ ScopedInteger intDest sourceDest
+
+mkNumSyntax
+  :: Ty
+  -> SplitCorePtr
+  -> Syntax
+  -> (SplitCorePtr -> SplitCorePtr -> CoreF TypePatternPtr PatternPtr SplitCorePtr)
+  -> Ty
+  -> Expand ()
+mkNumSyntax t dest stx coreScopeConstr tType = do
+  unify dest t tSyntax
+  Stx _ _ (_, int, source) <- mustHaveEntries stx
+  numDest <- schedule tType int
+  sourceDest <- schedule tSyntax source
+  linkExpr dest $ coreScopeConstr numDest sourceDest
+
+int64Syntax :: ExprPrim
+int32Syntax :: ExprPrim
+int16Syntax :: ExprPrim
+int8Syntax  :: ExprPrim
+int64Syntax t dest stx = mkNumSyntax t dest stx ((CoreInt64Syntax .) . ScopedInt64) tInt64
+int32Syntax t dest stx = mkNumSyntax t dest stx ((CoreInt32Syntax .) . ScopedInt32) tInt32
+int16Syntax t dest stx = mkNumSyntax t dest stx ((CoreInt16Syntax .) . ScopedInt16) tInt16
+int8Syntax t dest stx  = mkNumSyntax t dest stx ((CoreInt8Syntax .) . ScopedInt8) tInt8
+
+word64Syntax :: ExprPrim
+word32Syntax :: ExprPrim
+word16Syntax :: ExprPrim
+word8Syntax  :: ExprPrim
+word64Syntax t dest stx = mkNumSyntax t dest stx ((CoreWord64Syntax .) . ScopedWord64) tWord64
+word32Syntax t dest stx = mkNumSyntax t dest stx ((CoreWord32Syntax .) . ScopedWord32) tWord32
+word16Syntax t dest stx = mkNumSyntax t dest stx ((CoreWord16Syntax .) . ScopedWord16) tWord16
+word8Syntax t dest stx  = mkNumSyntax t dest stx ((CoreWord8Syntax .) . ScopedWord8)   tWord8
 
 stringSyntax :: ExprPrim
 stringSyntax t dest stx = do
@@ -631,6 +716,22 @@ addDatatype name dt argKinds = do
   bind b val
 
 
+expNum
+  :: (Ident -> Var -> a)
+  -> Ty
+  -> Ty
+  -> Syntax
+  -> Phase
+  -> Syntax
+  -> Expand (a, SplitCorePtr)
+expNum synPatConstr tType t patVar p rhs = do
+  (sc, x', var) <- prepareVar patVar
+  let rhs' = addScope p sc rhs
+  strSch <- trivialScheme tType
+  rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
+  let patOut = synPatConstr x' var
+  return (patOut, rhsDest)
+
 expandPatternCase :: Ty -> Stx (Syntax, Syntax) -> Expand (SyntaxPattern, SplitCorePtr)
 -- TODO match case keywords hygienically
 expandPatternCase t (Stx _ _ (lhs, rhs)) = do
@@ -645,13 +746,23 @@ expandPatternCase t (Stx _ _ (lhs, rhs)) = do
       let patOut = SyntaxPatternIdentifier x' var
       return (patOut, rhsDest)
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "integer")),
-                           patVar])) -> do
-      (sc, x', var) <- prepareVar patVar
-      let rhs' = addScope p sc rhs
-      strSch <- trivialScheme tInteger
-      rhsDest <- withLocalVarType x' var strSch $ schedule t rhs'
-      let patOut = SyntaxPatternInteger x' var
-      return (patOut, rhsDest)
+                           patVar])) -> expNum SyntaxPatternInteger tInteger t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "int64")),
+                           patVar])) -> expNum SyntaxPatternInt64 tInt64 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "int32")),
+                           patVar])) -> expNum SyntaxPatternInt32 tInt32 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "int16")),
+                           patVar])) -> expNum SyntaxPatternInt16 tInt16 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "int8")),
+                           patVar])) -> expNum SyntaxPatternInt8  tInt8 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "word64")),
+                           patVar])) -> expNum SyntaxPatternWord64 tWord64 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "word32")),
+                           patVar])) -> expNum SyntaxPatternWord32 tWord32 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "word16")),
+                           patVar])) -> expNum SyntaxPatternWord16 tWord16 t patVar p rhs
+    Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "word8")),
+                           patVar])) -> expNum SyntaxPatternWord8  tWord8 t patVar p rhs
     Syntax (Stx _ _ (List [Syntax (Stx _ _ (Id "string")),
                            patVar])) -> do
       (sc, x', var) <- prepareVar patVar
@@ -743,26 +854,146 @@ primitiveDatatype name args =
                     }
   in tDatatype dt args
 
+unaryNumPrim :: (Value -> Value) -> Value
+unaryNumPrim = ValueClosure . HO
+
 unaryIntegerPrim :: (Integer -> Integer) -> Value
-unaryIntegerPrim f =
-  ValueClosure $ HO $
-  \(ValueInteger i) ->
-    ValueInteger (f i)
+unaryIntegerPrim f = unaryNumPrim $ \x -> case x of
+  (ValueInteger i) -> ValueInteger (f i)
+  other -> error (show other)
+
+unaryInt8Prim  :: (Int8 -> Int8)   -> Value
+unaryInt16Prim :: (Int16 -> Int16) -> Value
+unaryInt32Prim :: (Int32 -> Int32) -> Value
+unaryInt64Prim :: (Int64 -> Int64) -> Value
+unaryInt8Prim  f = unaryNumPrim $ \(ValueInt8 i)  -> ValueInt8  (f i)
+unaryInt16Prim f = unaryNumPrim $ \(ValueInt16 i) -> ValueInt16 (f i)
+unaryInt32Prim f = unaryNumPrim $ \(ValueInt32 i) -> ValueInt32 (f i)
+unaryInt64Prim f = unaryNumPrim $ \(ValueInt64 i) -> ValueInt64 (f i)
+
+unaryWord8Prim  :: (Word8 -> Word8)   -> Value
+unaryWord16Prim :: (Word16 -> Word16) -> Value
+unaryWord32Prim :: (Word32 -> Word32) -> Value
+unaryWord64Prim :: (Word64 -> Word64) -> Value
+unaryWord8Prim  f = unaryNumPrim $ \(ValueWord8 i)  -> ValueWord8  (f i)
+unaryWord16Prim f = unaryNumPrim $ \(ValueWord16 i) -> ValueWord16 (f i)
+unaryWord32Prim f = unaryNumPrim $ \(ValueWord32 i) -> ValueWord32 (f i)
+unaryWord64Prim f = unaryNumPrim $ \(ValueWord64 i) -> ValueWord64 (f i)
 
 binaryIntegerPrim :: (Integer -> Integer -> Integer) -> Value
 binaryIntegerPrim f =
-  ValueClosure $ HO $
-  \(ValueInteger i1) ->
-    ValueClosure $ HO $
-    \(ValueInteger i2) ->
-      ValueInteger (f i1 i2)
+  ValueClosure $ HO $ \(ValueInteger i1) ->
+    ValueClosure $ HO $ \(ValueInteger i2) -> ValueInteger (f i1 i2)
+
+binaryInt8Prim :: (Int8 -> Int8 -> Int8) -> Value
+binaryInt8Prim f =
+  ValueClosure $ HO $ \(ValueInt8 i1) ->
+    ValueClosure $ HO \(ValueInt8 i2) -> ValueInt8 (f i1 i2)
+
+binaryInt16Prim :: (Int16 -> Int16 -> Int16) -> Value
+binaryInt16Prim f =
+  ValueClosure $ HO $ \(ValueInt16 i1) ->
+    ValueClosure $ HO \(ValueInt16 i2) -> ValueInt16 (f i1 i2)
+
+binaryInt32Prim :: (Int32 -> Int32 -> Int32) -> Value
+binaryInt32Prim f =
+  ValueClosure $ HO $ \(ValueInt32 i1) ->
+    ValueClosure $ HO \(ValueInt32 i2) -> ValueInt32 (f i1 i2)
+
+binaryInt64Prim :: (Int64 -> Int64 -> Int64) -> Value
+binaryInt64Prim f =
+  ValueClosure $ HO $ \(ValueInt64 i1) ->
+    ValueClosure $ HO \(ValueInt64 i2) -> ValueInt64 (f i1 i2)
+
+binaryWord8Prim :: (Word8 -> Word8 -> Word8) -> Value
+binaryWord8Prim f =
+  ValueClosure $ HO $ \(ValueWord8 i1) ->
+    ValueClosure $ HO \(ValueWord8 i2) -> ValueWord8 (f i1 i2)
+
+binaryWord16Prim :: (Word16 -> Word16 -> Word16) -> Value
+binaryWord16Prim f =
+  ValueClosure $ HO $ \(ValueWord16 i1) ->
+    ValueClosure $ HO \(ValueWord16 i2) -> ValueWord16 (f i1 i2)
+
+binaryWord32Prim :: (Word32 -> Word32 -> Word32) -> Value
+binaryWord32Prim f =
+  ValueClosure $ HO $ \(ValueWord32 i1) ->
+    ValueClosure $ HO \(ValueWord32 i2) -> ValueWord32 (f i1 i2)
+
+binaryWord64Prim :: (Word64 -> Word64 -> Word64) -> Value
+binaryWord64Prim f =
+  ValueClosure $ HO $ \(ValueWord64 i1) ->
+    ValueClosure $ HO \(ValueWord64 i2) -> ValueWord64 (f i1 i2)
+
 
 binaryIntegerPred :: (Integer -> Integer -> Bool) -> Value
 binaryIntegerPred f =
-  ValueClosure $ HO $
-  \(ValueInteger i1) ->
-    ValueClosure $ HO $
-    \(ValueInteger i2) ->
+  ValueClosure $ HO $ \(ValueInteger i1) ->
+    ValueClosure $ HO $ \(ValueInteger i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryInt8Pred :: (Int8 -> Int8 -> Bool) -> Value
+binaryInt8Pred f =
+  ValueClosure $ HO $ \(ValueInt8 i1) ->
+    ValueClosure $ HO $ \(ValueInt8 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryInt16Pred :: (Int16 -> Int16 -> Bool) -> Value
+binaryInt16Pred f =
+  ValueClosure $ HO $ \(ValueInt16 i1) ->
+    ValueClosure $ HO $ \(ValueInt16 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryInt32Pred :: (Int32 -> Int32 -> Bool) -> Value
+binaryInt32Pred f =
+  ValueClosure $ HO $ \(ValueInt32 i1) ->
+    ValueClosure $ HO $ \(ValueInt32 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryInt64Pred :: (Int64 -> Int64 -> Bool) -> Value
+binaryInt64Pred f =
+  ValueClosure $ HO $ \(ValueInt64 i1) ->
+    ValueClosure $ HO $ \(ValueInt64 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryWord8Pred :: (Word8 -> Word8 -> Bool) -> Value
+binaryWord8Pred f =
+  ValueClosure $ HO $ \(ValueWord8 i1) ->
+    ValueClosure $ HO $ \(ValueWord8 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryWord16Pred :: (Word16 -> Word16 -> Bool) -> Value
+binaryWord16Pred f =
+  ValueClosure $ HO $ \(ValueWord16 i1) ->
+    ValueClosure $ HO $ \(ValueWord16 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryWord32Pred :: (Word32 -> Word32 -> Bool) -> Value
+binaryWord32Pred f =
+  ValueClosure $ HO $ \(ValueWord32 i1) ->
+    ValueClosure $ HO $ \(ValueWord32 i2) ->
+      if f i1 i2
+        then primitiveCtor "true" []
+        else primitiveCtor "false" []
+
+binaryWord64Pred :: (Word64 -> Word64 -> Bool) -> Value
+binaryWord64Pred f =
+  ValueClosure $ HO $ \(ValueWord64 i1) ->
+    ValueClosure $ HO $ \(ValueWord64 i2) ->
       if f i1 i2
         then primitiveCtor "true" []
         else primitiveCtor "false" []
@@ -770,10 +1001,8 @@ binaryIntegerPred f =
 
 binaryStringPred :: (Text -> Text -> Bool) -> Value
 binaryStringPred f =
-  ValueClosure $ HO $
-  \(ValueString str1) ->
-    ValueClosure $ HO $
-    \(ValueString str2) ->
+  ValueClosure $ HO $ \(ValueString str1) ->
+    ValueClosure $ HO $ \(ValueString str2) ->
       if f str1 str2
         then primitiveCtor "true" []
         else primitiveCtor "false" []
