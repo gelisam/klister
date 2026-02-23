@@ -1,2 +1,2 @@
-Type mismatch at not-a-function.kl:3.11-3.13.
-Expected (Integer → (?1 → ?2)) but got Integer
+Type mismatch at not-a-function.kl:3.24-3.26.
+Expected (?1 → (?2 → ?3)) but got Integer

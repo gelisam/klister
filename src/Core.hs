@@ -25,6 +25,8 @@ import Data.Data (Data)
 import Data.Foldable
 import Data.Text (Text)
 import Data.Traversable
+import Data.Word
+import Data.Int
 
 import Alpha
 import Datatype
@@ -98,6 +100,14 @@ instance Phased TypePattern where
 data SyntaxPattern
   = SyntaxPatternIdentifier Ident Var
   | SyntaxPatternInteger Ident Var
+  | SyntaxPatternInt64 Ident Var
+  | SyntaxPatternInt32 Ident Var
+  | SyntaxPatternInt16 Ident Var
+  | SyntaxPatternInt8  Ident Var
+  | SyntaxPatternWord64 Ident Var
+  | SyntaxPatternWord32 Ident Var
+  | SyntaxPatternWord16 Ident Var
+  | SyntaxPatternWord8  Ident Var
   | SyntaxPatternString Ident Var
   | SyntaxPatternEmpty
   | SyntaxPatternCons Ident Var Ident Var
@@ -141,6 +151,63 @@ data ScopedInteger core = ScopedInteger
   deriving (Data, Eq, Functor, Foldable, Show, Traversable)
 makeLenses ''ScopedInteger
 
+data ScopedInt64 core = ScopedInt64
+  { _scopedInt64      :: core
+  , _scopedInt64Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedInt64
+
+data ScopedInt32 core = ScopedInt32
+  { _scopedInt32      :: core
+  , _scopedInt32Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedInt32
+
+data ScopedInt16 core = ScopedInt16
+  { _scopedInt16      :: core
+  , _scopedInt16Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedInt16
+
+data ScopedInt8 core = ScopedInt8
+  { _scopedInt8      :: core
+  , _scopedInt8Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedInt8
+
+data ScopedWord64 core = ScopedWord64
+  { _scopedWord64      :: core
+  , _scopedWord64Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedWord64
+
+data ScopedWord32 core = ScopedWord32
+  { _scopedWord32      :: core
+  , _scopedWord32Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedWord32
+
+data ScopedWord16 core = ScopedWord16
+  { _scopedWord16      :: core
+  , _scopedWord16Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedWord16
+
+data ScopedWord8 core = ScopedWord8
+  { _scopedWord8      :: core
+  , _scopedWord8Scope :: core
+  }
+  deriving (Data, Eq, Functor, Foldable, Show, Traversable)
+makeLenses ''ScopedWord8
+
+
 data ScopedString core = ScopedString
   { _scopedString      :: core
   , _scopedStringScope :: core
@@ -161,6 +228,14 @@ data CoreF typePat pat core
   | CoreCtor Constructor [core] -- ^ Constructor application
   | CoreDataCase SrcLoc core [(pat, core)]
   | CoreInteger Integer
+  | CoreInt64   Int64
+  | CoreInt32   Int32
+  | CoreInt16   Int16
+  | CoreInt8    Int8
+  | CoreWord64  Word64
+  | CoreWord32  Word32
+  | CoreWord16  Word16
+  | CoreWord8   Word8
   | CoreString Text
   | CoreError core
   | CorePureMacro core                  -- :: a -> Macro a
@@ -178,7 +253,15 @@ data CoreF typePat pat core
   | CoreCons (ScopedCons core)
   | CoreList (ScopedList core)
   | CoreIntegerSyntax (ScopedInteger core)
-  | CoreStringSyntax (ScopedString core)
+  | CoreInt64Syntax   (ScopedInt64 core)
+  | CoreInt32Syntax   (ScopedInt32 core)
+  | CoreInt16Syntax   (ScopedInt16 core)
+  | CoreInt8Syntax    (ScopedInt8  core)
+  | CoreWord64Syntax  (ScopedWord64 core)
+  | CoreWord32Syntax  (ScopedWord32 core)
+  | CoreWord16Syntax  (ScopedWord16 core)
+  | CoreWord8Syntax   (ScopedWord8  core)
+  | CoreStringSyntax  (ScopedString core)
   | CoreReplaceLoc core core
   | CoreTypeCase SrcLoc core [(typePat, core)]
   deriving (Data, Eq, Functor, Foldable, Show, Traversable)
@@ -207,6 +290,22 @@ mapCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc (h scrut) [(g pat, h c) | (pat, c) <- cases]
 mapCoreF _f _g _h (CoreInteger i) =
   CoreInteger i
+mapCoreF _f _g _h (CoreWord64 i) =
+  CoreWord64 i
+mapCoreF _f _g _h (CoreWord32 i) =
+  CoreWord32 i
+mapCoreF _f _g _h (CoreWord16 i) =
+  CoreWord16 i
+mapCoreF _f _g _h (CoreWord8 i) =
+  CoreWord8 i
+mapCoreF _f _g _h (CoreInt64 i) =
+  CoreInt64 i
+mapCoreF _f _g _h (CoreInt32 i) =
+  CoreInt32 i
+mapCoreF _f _g _h (CoreInt16 i) =
+  CoreInt16 i
+mapCoreF _f _g _h (CoreInt8 i) =
+  CoreInt8 i
 mapCoreF _f _g _h (CoreString str) =
   CoreString str
 mapCoreF _f _g h (CoreError msg) =
@@ -239,6 +338,22 @@ mapCoreF _f _g h (CoreList args) =
   CoreList (fmap h args)
 mapCoreF _f _g h (CoreIntegerSyntax str) =
   CoreIntegerSyntax (fmap h str)
+mapCoreF _f _g h (CoreWord64Syntax str) =
+  CoreWord64Syntax (fmap h str)
+mapCoreF _f _g h (CoreWord32Syntax str) =
+  CoreWord32Syntax (fmap h str)
+mapCoreF _f _g h (CoreWord16Syntax str) =
+  CoreWord16Syntax (fmap h str)
+mapCoreF _f _g h (CoreWord8Syntax str) =
+  CoreWord8Syntax (fmap h str)
+mapCoreF _f _g h (CoreInt64Syntax str) =
+  CoreInt64Syntax (fmap h str)
+mapCoreF _f _g h (CoreInt32Syntax str) =
+  CoreInt32Syntax (fmap h str)
+mapCoreF _f _g h (CoreInt16Syntax str) =
+  CoreInt16Syntax (fmap h str)
+mapCoreF _f _g h (CoreInt8Syntax str) =
+  CoreInt8Syntax (fmap h str)
 mapCoreF _f _g h (CoreStringSyntax str) =
   CoreStringSyntax (fmap h str)
 mapCoreF _f _g h (CoreReplaceLoc src dest) =
@@ -263,6 +378,22 @@ traverseCoreF _f g h (CoreDataCase loc scrut cases) =
   CoreDataCase loc <$> h scrut <*> for cases \ (pat, c) -> (,) <$> g pat <*> h c
 traverseCoreF _f _g _h (CoreInteger integer) =
   pure $ CoreInteger integer
+traverseCoreF _f _g _h (CoreWord64 wrd) =
+  pure $ CoreWord64 wrd
+traverseCoreF _f _g _h (CoreWord32 wrd) =
+  pure $ CoreWord32 wrd
+traverseCoreF _f _g _h (CoreWord16 wrd) =
+  pure $ CoreWord16 wrd
+traverseCoreF _f _g _h (CoreWord8 wrd) =
+  pure $ CoreWord8 wrd
+traverseCoreF _f _g _h (CoreInt64 wrd) =
+  pure $ CoreInt64 wrd
+traverseCoreF _f _g _h (CoreInt32 wrd) =
+  pure $ CoreInt32 wrd
+traverseCoreF _f _g _h (CoreInt16 wrd) =
+  pure $ CoreInt16 wrd
+traverseCoreF _f _g _h (CoreInt8 wrd) =
+  pure $ CoreInt8 wrd
 traverseCoreF _f _g _h (CoreString str) =
   pure $ CoreString str
 traverseCoreF _f _g h (CoreError msg) =
@@ -295,6 +426,22 @@ traverseCoreF _f _g h (CoreList args) =
   CoreList <$> traverse h args
 traverseCoreF _f _g h (CoreIntegerSyntax arg) =
   CoreIntegerSyntax <$> traverse h arg
+traverseCoreF _f _g h (CoreWord64Syntax arg) =
+  CoreWord64Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreWord32Syntax arg) =
+  CoreWord32Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreWord16Syntax arg) =
+  CoreWord16Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreWord8Syntax arg) =
+  CoreWord8Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreInt64Syntax arg) =
+  CoreInt64Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreInt32Syntax arg) =
+  CoreInt32Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreInt16Syntax arg) =
+  CoreInt16Syntax <$> traverse h arg
+traverseCoreF _f _g h (CoreInt8Syntax arg) =
+  CoreInt8Syntax <$> traverse h arg
 traverseCoreF _f _g h (CoreStringSyntax arg) =
   CoreStringSyntax <$> traverse h arg
 traverseCoreF _f _g h (CoreReplaceLoc src dest) =
@@ -364,6 +511,30 @@ instance (AlphaEq typePat, AlphaEq pat, AlphaEq core) => AlphaEq (CoreF typePat 
     alphaCheck cases1 cases2
   alphaCheck (CoreInteger i1)
              (CoreInteger i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreWord64 i1)
+             (CoreWord64 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreWord32 i1)
+             (CoreWord32 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreWord16 i1)
+             (CoreWord16 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreWord8 i1)
+             (CoreWord8 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreInt64 i1)
+             (CoreInt64 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreInt32 i1)
+             (CoreInt32 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreInt16 i1)
+             (CoreInt16 i2) =
+    guard $ i1 == i2
+  alphaCheck (CoreInt8 i1)
+             (CoreInt8 i2) =
     guard $ i1 == i2
   alphaCheck (CoreIdent scopedIdent1)
              (CoreIdent scopedIdent2) = do

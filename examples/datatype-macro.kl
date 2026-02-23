@@ -32,9 +32,9 @@
            [(cons x xs)
             (pure (quasiquote/loc more (:: ,x ,(cons-list-syntax 'list xs xs))))])]))]))
 
-(example (reverse (:: 1 (:: 2 (:: 3 (nil))))))
+(example (reverse (:: (the Integer 1) (:: 2 (:: 3 (nil))))))
 
-(example (reverse (list 1 2 3)))
+(example (reverse (list (the Integer 1) 2 3)))
 
 (define-macros
   ([null (lambda (stx) (pure '(nil)))]))
@@ -48,5 +48,4 @@
 
 (example (case (reverse null) [null 'a]))
 
-(example (case (reverse (list 1 2 3)) [(head x) x]))
-         
+(example (case (reverse (list (the Integer 1) 2 3)) [(head x) x]))

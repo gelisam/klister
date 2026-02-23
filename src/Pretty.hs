@@ -212,12 +212,28 @@ instance (PrettyBinder VarInfo typePat, PrettyBinder VarInfo pat, Pretty VarInfo
       group (hang 2 $ text "syntax-case" <+> ppScrut <+> "of") <> line <>
       vsep ppPats
   pp _env (CoreInteger s) = pure $ viaShow s
+  pp _env (CoreWord64 s)  = pure $ viaShow s
+  pp _env (CoreWord32 s)  = pure $ viaShow s
+  pp _env (CoreWord16 s)  = pure $ viaShow s
+  pp _env (CoreWord8  s)  = pure $ viaShow s
+  pp _env (CoreInt64 s)   = pure $ viaShow s
+  pp _env (CoreInt32 s)   = pure $ viaShow s
+  pp _env (CoreInt16 s)   = pure $ viaShow s
+  pp _env (CoreInt8  s)   = pure $ viaShow s
   pp env (CoreIdent x) = pp env x
   pp env (CoreEmpty e) = pp env e
   pp env (CoreCons e) = pp env e
   pp env (CoreList e) = pp env e
   pp env (CoreIntegerSyntax i) = pp env i
-  pp env (CoreStringSyntax s) = pp env s
+  pp env (CoreWord64Syntax i)  = pp env i
+  pp env (CoreWord32Syntax i)  = pp env i
+  pp env (CoreWord16Syntax i)  = pp env i
+  pp env (CoreWord8Syntax i)   = pp env i
+  pp env (CoreInt64Syntax i)  = pp env i
+  pp env (CoreInt32Syntax i)  = pp env i
+  pp env (CoreInt16Syntax i)  = pp env i
+  pp env (CoreInt8Syntax i)   = pp env i
+  pp env (CoreStringSyntax s)  = pp env s
   pp env (CoreReplaceLoc loc stx) = do
     ppLoc <- pp env loc
     ppStx <- pp env stx
@@ -286,6 +302,22 @@ instance PrettyBinder VarInfo SyntaxPattern where
     pure (annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env (SyntaxPatternInteger ident@(Stx _ _ x) v) =
     pure (parens $ text "integer" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternInt64 ident@(Stx _ _ x) v) =
+    pure (parens $ text "int64" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternInt32 ident@(Stx _ _ x) v) =
+    pure (parens $ text "int32" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternInt16 ident@(Stx _ _ x) v) =
+    pure (parens $ text "int16" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternInt8 ident@(Stx _ _ x) v) =
+    pure (parens $ text "int8" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternWord64 ident@(Stx _ _ x) v) =
+    pure (parens $ text "word64" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternWord32 ident@(Stx _ _ x) v) =
+    pure (parens $ text "word32" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternWord16 ident@(Stx _ _ x) v) =
+    pure (parens $ text "word16" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
+  ppBind _env (SyntaxPatternWord8 ident@(Stx _ _ x) v) =
+    pure (parens $ text "word8" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env (SyntaxPatternString ident@(Stx _ _ x) v) =
     pure (parens $ text "string" <+> annotate (BindingSite v) (text x), Env.singleton v ident ())
   ppBind _env SyntaxPatternEmpty =
@@ -334,6 +366,54 @@ instance Pretty VarInfo core => Pretty VarInfo (ScopedInteger core) where
     ppInteger <- pp env (view scopedInteger s)
     ppScope <- pp env (view scopedIntegerScope s)
     pure $ ppInteger <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedWord64 core) where
+  pp env s = do
+    ppWord64 <- pp env (view scopedWord64 s)
+    ppScope  <- pp env (view scopedWord64Scope s)
+    pure $ ppWord64 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedWord32 core) where
+  pp env s = do
+    ppWord32 <- pp env (view scopedWord32 s)
+    ppScope  <- pp env (view scopedWord32Scope s)
+    pure $ ppWord32 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedWord16 core) where
+  pp env s = do
+    ppWord16 <- pp env (view scopedWord16 s)
+    ppScope  <- pp env (view scopedWord16Scope s)
+    pure $ ppWord16 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedWord8 core) where
+  pp env s = do
+    ppWord8 <- pp env (view scopedWord8 s)
+    ppScope <- pp env (view scopedWord8Scope s)
+    pure $ ppWord8 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedInt64 core) where
+  pp env s = do
+    ppInt64 <- pp env (view scopedInt64 s)
+    ppScope <- pp env (view scopedInt64Scope s)
+    pure $ ppInt64 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedInt32 core) where
+  pp env s = do
+    ppInt32 <- pp env (view scopedInt32 s)
+    ppScope <- pp env (view scopedInt32Scope s)
+    pure $ ppInt32 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedInt16 core) where
+  pp env s = do
+    ppInt16 <- pp env (view scopedInt16 s)
+    ppScope <- pp env (view scopedInt16Scope s)
+    pure $ ppInt16 <> angles ppScope
+
+instance Pretty VarInfo core => Pretty VarInfo (ScopedInt8 core) where
+  pp env s = do
+    ppInt8  <- pp env (view scopedInt8 s)
+    ppScope <- pp env (view scopedInt8Scope s)
+    pure $ ppInt8 <> angles ppScope
 
 instance Pretty VarInfo core => Pretty VarInfo (ScopedString core) where
   pp env s = do
@@ -399,6 +479,14 @@ schemeVarName (SchemeVar n) = schemeVarNames !! fromIntegral n
 instance Pretty VarInfo TypeConstructor where
   pp _   TSyntax        = pure $ text "Syntax"
   pp _   TInteger       = pure $ text "Integer"
+  pp _   TInt64         = pure $ text "Int64"
+  pp _   TInt32         = pure $ text "Int32"
+  pp _   TInt16         = pure $ text "Int16"
+  pp _   TInt8          = pure $ text "Int8"
+  pp _   TWord64        = pure $ text "Word64"
+  pp _   TWord32        = pure $ text "Word32"
+  pp _   TWord16        = pure $ text "Word16"
+  pp _   TWord8         = pure $ text "Word8"
   pp _   TString        = pure $ text "String"
   pp _   TOutputPort    = pure $ text "Output-Port"
   pp _   TFun           = pure $ text "(→)"
@@ -606,6 +694,14 @@ instance Pretty VarInfo (ExprF Syntax) where
   pp _   (Id x)      = pure $ text x
   pp _   (String s)  = pure $ viaShow s
   pp _   (Integer s) = pure $ viaShow s
+  pp _   (Word64 s)  = pure $ viaShow s
+  pp _   (Word32 s)  = pure $ viaShow s
+  pp _   (Word16 s)  = pure $ viaShow s
+  pp _   (Word8 s)   = pure $ viaShow s
+  pp _   (Int64 s)   = pure $ viaShow s
+  pp _   (Int32 s)   = pure $ viaShow s
+  pp _   (Int16 s)   = pure $ viaShow s
+  pp _   (Int8 s)    = pure $ viaShow s
   pp env (List xs)   = do
     ppXs <- mapM (pp env . syntaxE) xs
     pure $ parens (group (vsep ppXs))
@@ -620,6 +716,14 @@ instance Pretty VarInfo Value where
   pp _env (ValueIOAction _) = pure "#<IO action>"
   pp _env (ValueOutputPort _) = pure "#<output port>"
   pp _env (ValueInteger s) = pure $ viaShow s
+  pp _env (ValueInt64 s)   = pure $ viaShow s
+  pp _env (ValueInt32 s)   = pure $ viaShow s
+  pp _env (ValueInt16 s)   = pure $ viaShow s
+  pp _env (ValueInt8 s)    = pure $ viaShow s
+  pp _env (ValueWord64 s)  = pure $ viaShow s
+  pp _env (ValueWord32 s)  = pure $ viaShow s
+  pp _env (ValueWord16 s)  = pure $ viaShow s
+  pp _env (ValueWord8 s)  = pure $ viaShow s
   pp _env (ValueCtor c []) = pure $ parens $ text (view (constructorName . constructorNameText) c)
   pp env (ValueCtor c args) = do
     ppArgs <- mapM (pp env) args
@@ -800,7 +904,7 @@ instance Pretty VarInfo ScopeSet where
       ppSet s = do
         ppS <- mapM (pp env) (Set.toList s)
         pure $ text "{" <> commaSep ppS <> text "}"
-      
+
       ppStore :: Store Phase (Set Scope) -> State Renumbering (Doc VarInfo)
       ppStore m = do
         ppM <- for (St.toList m) $ \(p, scopes) -> do

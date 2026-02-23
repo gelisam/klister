@@ -9,13 +9,13 @@
      (syntax-case stx
        [(list (_ x))
         (free-identifier-case x
-          [if (pure '1)]
-          [else (pure '2)]
-          [define (pure '3)]
-          [#%app (pure '4)]
+          [if (pure '(the Integer 1))]
+          [else (pure '(the Integer 2))]
+          [define (pure '(the Integer 3))]
+          [#%app (pure '(the Integer 4))]
           [(else y) (pure y)])]))]))
 
-(define hello 32)
+(define hello (the Integer 32))
 (example (test if))
 (example (test else))
 (example (test define))

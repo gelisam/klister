@@ -5,6 +5,11 @@
 (import "pair-datatype.kl")
 (import "defun.kl")
 
+-- make-temporary is mostly used inside of macros. Make-temporary is a function
+-- that take a piece of syntax and produces a piece of syntax but the result
+-- syntax has different scoped-sets on it so it can be disambiguated from other
+-- binders. In this way make-temporary is a safe method to create a hygenic
+-- fresh variable.
 
 (define make-temporary
   (lambda (x)
@@ -23,4 +28,3 @@
          (pure (:: (pair tmp v) tmps)))]))
 
 (export make-temporary make-temporaries)
-  

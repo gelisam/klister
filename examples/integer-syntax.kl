@@ -12,5 +12,4 @@
             [_ (syntax-error (quasiquote/loc i "bad syntax"))])]
         [_ (syntax-error (quasiquote/loc stx "bad syntax"))]))]))
 
-(example (gotta-be-integer 2))
-
+(example (the Integer (gotta-be-integer 2)))

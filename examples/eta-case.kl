@@ -19,13 +19,13 @@
     [(:: x xs)
      (pair x xs)]
     [(nil)
-     (pair 0 (nil))]))
+     (pair (the Integer 0) (nil))]))
 
 (example (list-to-pair (list)))
 -- =>
 --   (pair 0 (nil))
 
-(example (list-to-pair (list 1 2 3)))
+(example (list-to-pair (list (the Integer 1) 2 3)))
 -- =>
 --   (pair 1 (list 2 3))
 
@@ -332,11 +332,11 @@
 -- =>
 --   (lambda (x xs) (:: x xs))
 
-(example (cons-lambda 1))
+(example (cons-lambda (the Integer 1)))
 -- =>
 --   (lambda (xs) (:: 1 xs))
 
-(example (cons-lambda 1 (list 2 3)))
+(example (cons-lambda (the Integer 1) (list 2 3)))
 -- =>
 --   (list 1 2 3)
 
@@ -381,16 +381,16 @@
 -- =>
 --   (lambda (x xs) (:: x xs))
 
-(example (cons 1))
+(example (cons (the Integer 1)))
 -- =>
 --   (lambda (xs) (:: 1 xs))
 
-(example (cons 1 (list 2 3)))
+(example (cons (the Integer 1) (list 2 3)))
 -- =>
 --   (list 1 2 3)
 
 (example
-  (case (list 1 2 3)
+  (case (list (the Integer 1) 2 3)
     [(cons x xs)
      (pair x xs)]))
 -- =>
@@ -398,10 +398,10 @@
 
 -- All right, we can finally test eta-case and eta-case-aux!
 (example
-  ((eta-case-aux (list 1 2 3)
+  ((eta-case-aux (list (the Integer 1) 2 3)
      (cons)
      (pair)
-     [(nil) (pair 0 (nil))])
+     [(nil) (pair (the Integer 0) (nil))])
    (cons)))
 -- =>
 --   (pair 1 (list 2 3))
@@ -409,12 +409,12 @@
 (defun eta-list-to-pair (xs0)
   (eta-case xs0
     [(cons) (pair)]
-    [(nil) (pair 0 (nil))]))
+    [(nil) (pair (the Integer 0) (nil))]))
 
 (example (eta-list-to-pair (list)))
 -- =>
 --   (pair 0 (nil))
 
-(example (eta-list-to-pair (list 1 2 3)))
+(example (eta-list-to-pair (list (the Integer 1) 2 3)))
 -- =>
 --   (pair 1 (list 2 3))

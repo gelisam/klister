@@ -145,7 +145,7 @@ want to help make Klister a more practical language, please `reach out`_!
 Here are the most prominent Racket features which are missing from Klister:
 
 * Klister does not yet support custom readers, and thus every ``#lang`` looks like a
-  Lisp. This also limits languages to Integer literals and String literals.
+  Lisp. This also limits languages to Integer literals, builtin fixnums and String literals.
 * `local-expand`_ is planned, but not yet implemented.
 * `Syntax parameters`_ are planned, but not yet implemented.
 

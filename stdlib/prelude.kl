@@ -5,6 +5,7 @@
 (import "optional-parens-datatype.kl")
 (import "optional-parens-primitives.kl")
 (import "quasiquote.kl")
+(import "fixnums.kl")
 
 (defun id (x) x)
 (define const (lambda (x y) x))
@@ -31,6 +32,24 @@
         Syntax open-syntax close-syntax
         ->
         Integer + - * / abs negate > >= < <= = /= integer->string
+        integer->int64 integer->int32 integer->int16 integer->int8
+        integer->word64 integer->word32 integer->word16 integer->word8
+        Int64 int64-+ int64-- int64-* int64-/ int64> int64>= int64< int64<= int64= int64/= int64->string
+        int64-rotate int64-shift int64-and int64-or int64-xor int64-popcount int64-compliment
+        Int32 int32-+ int32-- int32-* int32-/ int32> int32>= int32< int32<= int32= int32/= int32->string
+        int32-rotate int32-shift int32-and int32-or int32-xor int32-popcount int32-compliment
+        Int16 int16-+ int16-- int16-* int16-/ int16> int16>= int16< int16<= int16= int16/= int16->string
+        int16-rotate int16-shift int16-and int16-or int16-xor int16-popcount int16-compliment
+        Int8 int8-+ int8-- int8-* int8-/ int8> int8>= int8< int8<= int8= int8/= int8->string
+        int8-rotate int8-shift int8-and int8-or int8-xor int8-popcount int8-compliment
+        Word64 word64-+ word64-- word64-* word64-/ word64> word64>= word64< word64<= word64= word64/= word64->string
+        word64-rotate word64-shift word64-and word64-or word64-xor word64-popcount word64-compliment
+        Word32 word32-+ word32-- word32-* word32-/ word32> word32>= word32< word32<= word32= word32/= word32->string
+        word32-rotate word32-shift word32-and word32-or word32-xor word32-popcount word32-compliment
+        Word16 word16-+ word16-- word16-* word16-/ word16> word16>= word16< word16<= word16= word16/= word16->string
+        word16-rotate word16-shift word16-and word16-or word16-xor word16-popcount word16-compliment
+        Word8 word8-+ word8-- word8-* word8-/ word8> word8>= word8< word8<= word8= word8/= word8->string
+        word8-rotate word8-shift word8-and word8-or word8-xor word8-popcount word8-compliment
         Macro
         Type
         String string-append substring string-length
@@ -46,6 +65,8 @@
         Maybe nothing just
         List nil ::
         Syntax-Contents list-contents integer-contents string-contents identifier-contents
+        int64-contents int32-contents int16-contents int8-contents
+        word64-contents word32-contents word16-contents word8-contents
 
         -- primitive expression macros
         error
@@ -66,7 +87,8 @@
         empty-list-syntax
         cons-list-syntax
         list-syntax
-        integer-syntax
+        integer-syntax int64-syntax int32-syntax int16-syntax int8-syntax
+        word64-syntax word32-syntax word16-syntax word8-syntax
         string-syntax
         replace-loc
         syntax-case
@@ -96,7 +118,7 @@
         id
         const
         compose
-        
+
         -- IO primitives
         Output-Port
         stdout

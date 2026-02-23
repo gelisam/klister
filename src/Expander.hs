@@ -45,6 +45,8 @@ import Control.Monad.Trans.State.Strict (StateT, execStateT, modify', runStateT)
 import Data.Foldable
 import Data.Function (on)
 import Data.List (nub)
+import Data.Word
+import Data.Int
 import qualified Data.HashMap.Strict as HM
 import Data.Maybe
 import Data.Sequence (Seq(..))
@@ -55,6 +57,7 @@ import qualified Data.Text.IO as T
 import Data.Traversable
 import System.Directory
 import System.IO (Handle)
+import qualified Data.Bits as B
 
 import Binding
 import Core
@@ -85,6 +88,7 @@ import qualified ScopeSet
 
 import qualified Util.Set   as Set
 import qualified Util.Store as S
+
 
 expandExpr :: Syntax -> Expand SplitCore
 expandExpr stx = do
@@ -392,6 +396,14 @@ initializeKernel outputChannel = do
       [ ("Syntax", Prims.baseType TSyntax)
       , ("String", Prims.baseType TString)
       , ("Integer", Prims.baseType TInteger)
+      , ("Int64", Prims.baseType TInt64)
+      , ("Int32", Prims.baseType TInt32)
+      , ("Int16", Prims.baseType TInt16)
+      , ("Int8",  Prims.baseType TInt8)
+      , ("Word64", Prims.baseType TWord64)
+      , ("Word32", Prims.baseType TWord32)
+      , ("Word16", Prims.baseType TWord16)
+      , ("Word8",  Prims.baseType TWord8)
       , ("->", Prims.typeConstructor TFun [KStar, KStar])
       , ("Macro", Prims.typeConstructor TMacro [KStar])
       , ("IO", Prims.typeConstructor TIO [KStar])
@@ -412,6 +424,22 @@ initializeKernel outputChannel = do
                 primitiveCtor "string-contents" [ValueString str]
               Integer i ->
                 primitiveCtor "integer-contents" [ValueInteger i]
+              Int64 i ->
+                primitiveCtor "int64-contents" [ValueInt64 i]
+              Int32 i ->
+                primitiveCtor "int32-contents" [ValueInt32 i]
+              Int16 i ->
+                primitiveCtor "int16-contents" [ValueInt16 i]
+              Int8  i ->
+                primitiveCtor "int8-contents" [ValueInt8 i]
+              Word64 i ->
+                primitiveCtor "word64-contents" [ValueWord64 i]
+              Word32 i ->
+                primitiveCtor "word32-contents" [ValueWord32 i]
+              Word16 i ->
+                primitiveCtor "word16-contents" [ValueWord16 i]
+              Word8  i ->
+                primitiveCtor "word8-contents" [ValueWord8 i]
               List xs ->
                 primitiveCtor "list-contents" [foldr consVal nilVal xs]
                 where
@@ -445,8 +473,15 @@ initializeKernel outputChannel = do
                       close (Id name)
                     ("string-contents", ValueString str) ->
                       close (String str)
-                    ("integer-contents", ValueInteger i) ->
-                      close (Integer i)
+                    ("integer-contents", ValueInteger i) -> close (Integer i)
+                    ("int64-contents", ValueInt64 i) -> close (Int64 i)
+                    ("int32-contents", ValueInt32 i) -> close (Int32 i)
+                    ("int16-contents", ValueInt16 i) -> close (Int16 i)
+                    ("int8-contents",  ValueInt8  i) -> close (Int8  i)
+                    ("word64-contents", ValueWord64 i) -> close (Word64 i)
+                    ("word32-contents", ValueWord32 i) -> close (Word32 i)
+                    ("word16-contents", ValueWord16 i) -> close (Word16 i)
+                    ("word8-contents",  ValueWord8  i) -> close (Word8  i)
                     ("list-contents", unList -> lst) ->
                       close (List lst)
                     _ ->
@@ -471,13 +506,109 @@ initializeKernel outputChannel = do
             \(ValueString str2) ->
               ValueString (str1 <> str2)
         )
+      , ( "integer->int64"
+        , Scheme [] $ tFun [tInteger] tInt64
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueInt64 (fromIntegral int)
+        )
+      , ( "integer->int32"
+        , Scheme [] $ tFun [tInteger] tInt32
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueInt32 (fromIntegral int)
+        )
+      , ( "integer->int16"
+        , Scheme [] $ tFun [tInteger] tInt16
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueInt16 (fromIntegral int)
+        )
+      , ( "integer->int8"
+        , Scheme [] $ tFun [tInteger] tInt8
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueInt8 (fromIntegral int)
+        )
+      , ( "integer->word64"
+        , Scheme [] $ tFun [tInteger] tWord64
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueWord64 (fromIntegral int)
+        )
+      , ( "integer->word32"
+        , Scheme [] $ tFun [tInteger] tWord32
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueWord32 (fromIntegral int)
+        )
+      , ( "integer->word16"
+        , Scheme [] $ tFun [tInteger] tWord16
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueWord16 (fromIntegral int)
+        )
+      , ( "integer->word8"
+        , Scheme [] $ tFun [tInteger] tWord8
+        , ValueClosure $ HO $
+          \(ValueInteger int) ->
+            ValueWord8 (fromIntegral int)
+        )
       , ( "integer->string"
         , Scheme [] $ tFun [tInteger] tString
         , ValueClosure $ HO $
           \(ValueInteger int) ->
             ValueString (T.pack (show int))
         )
-      , ( "substring"
+     , ( "word64->string"
+        , Scheme [] $ tFun [tWord64] tString
+        , ValueClosure $ HO $
+          \(ValueWord64 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "word32->string"
+        , Scheme [] $ tFun [tWord32] tString
+        , ValueClosure $ HO $
+          \(ValueWord32 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "word16->string"
+        , Scheme [] $ tFun [tWord16] tString
+        , ValueClosure $ HO $
+          \(ValueWord16 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "word8->string"
+        , Scheme [] $ tFun [tWord8] tString
+        , ValueClosure $ HO $
+          \(ValueWord8 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "int64->string"
+        , Scheme [] $ tFun [tInt64] tString
+        , ValueClosure $ HO $
+          \(ValueInt64 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "int32->string"
+        , Scheme [] $ tFun [tInt32] tString
+        , ValueClosure $ HO $
+          \(ValueInt32 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "int16->string"
+        , Scheme [] $ tFun [tInt16] tString
+        , ValueClosure $ HO $
+          \(ValueInt16 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "int8->string"
+        , Scheme [] $ tFun [tInt8] tString
+        , ValueClosure $ HO $
+          \(ValueInt8 int) ->
+            ValueString (T.pack (show int))
+        )
+     , ( "substring"
         , Scheme [] $
           tFun [tInteger, tInteger, tString] (Prims.primitiveDatatype "Maybe" [tString])
         , ValueClosure $ HO $
@@ -518,12 +649,80 @@ initializeKernel outputChannel = do
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
       ] ++
-      [
-        ( name
+      [ ( name
         , Scheme [] $ tFun [tInteger] tInteger
         , Prims.unaryIntegerPrim fun
         )
       | (name, fun) <- [("abs", abs), ("negate", negate)]
+      ] ++
+      -- A popcount value for a fixnum can never be more than the maximum value
+      -- a given fixnum type. We utilize that here by just returning the same
+      -- fixnum type that the popcount is being called on.
+      [ ( "word64-popcount"
+        , Scheme [] $ tFun [tWord64] tWord64
+        , Prims.unaryWord64Prim (fromIntegral . B.popCount)
+        )
+      , ( "word32-popcount"
+        , Scheme [] $ tFun [tWord32] tWord32
+        , Prims.unaryWord32Prim (fromIntegral . B.popCount)
+        )
+      , ( "word16-popcount"
+        , Scheme [] $ tFun [tWord16] tWord16
+        , Prims.unaryWord16Prim (fromIntegral . B.popCount)
+        )
+      , ( "word8-popcount"
+        , Scheme [] $ tFun [tWord8] tWord8
+        , Prims.unaryWord8Prim (fromIntegral . B.popCount)
+        )
+      , ( "int64-popcount"
+        , Scheme [] $ tFun [tInt64] tInt64
+        , Prims.unaryInt64Prim (fromIntegral . B.popCount)
+        )
+      , ( "int32-popcount"
+        , Scheme [] $ tFun [tInt32] tInt32
+        , Prims.unaryInt32Prim (fromIntegral . B.popCount)
+        )
+      , ( "int16-popcount"
+        , Scheme [] $ tFun [tInt16] tInt16
+        , Prims.unaryInt16Prim (fromIntegral . B.popCount)
+        )
+      , ( "int8-popcount"
+        , Scheme [] $ tFun [tInt8] tInt8
+        , Prims.unaryInt8Prim (fromIntegral . B.popCount)
+        )
+      ] ++
+      [ ( "word64-compliment"
+        , Scheme [] $ tFun [tWord64] tWord64
+        , Prims.unaryWord64Prim B.complement
+        )
+      , ( "word32-compliment"
+        , Scheme [] $ tFun [tWord32] tWord32
+        , Prims.unaryWord32Prim B.complement
+        )
+      , ( "word16-compliment"
+        , Scheme [] $ tFun [tWord16] tWord16
+        , Prims.unaryWord16Prim B.complement
+        )
+      , ( "word8-compliment"
+        , Scheme [] $ tFun [tWord8] tWord8
+        , Prims.unaryWord8Prim B.complement
+        )
+      , ( "int64-compliment"
+        , Scheme [] $ tFun [tInt64] tInt64
+        , Prims.unaryInt64Prim B.complement
+        )
+      , ( "int32-compliment"
+        , Scheme [] $ tFun [tInt32] tInt32
+        , Prims.unaryInt32Prim B.complement
+        )
+      , ( "int16-compliment"
+        , Scheme [] $ tFun [tInt16] tInt16
+        , Prims.unaryInt16Prim B.complement
+        )
+      , ( "int8-compliment"
+        , Scheme [] $ tFun [tInt8] tInt8
+        , Prims.unaryInt8Prim B.complement
+        )
       ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] tInteger
@@ -531,11 +730,143 @@ initializeKernel outputChannel = do
         )
       | (name, fun) <- [("+", (+)), ("-", (-)), ("*", (*)), ("/", div)]
       ] ++
+      -- fixnum primitive num functions
+      [ ( "word64" <> "-" <> name
+        , Scheme [] $ tFun [tWord64, tWord64] tWord64
+        , Prims.binaryWord64Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "word32" <> "-" <> name
+        , Scheme [] $ tFun [tWord32, tWord32] tWord32
+        , Prims.binaryWord32Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "word16" <> "-" <> name
+        , Scheme [] $ tFun [tWord16, tWord16] tWord16
+        , Prims.binaryWord16Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "word8" <> "-" <> name
+        , Scheme [] $ tFun [tWord8, tWord8] tWord8
+        , Prims.binaryWord8Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "int64" <> "-" <> name
+        , Scheme [] $ tFun [tInt64, tInt64] tInt64
+        , Prims.binaryInt64Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "int32" <> "-" <> name
+        , Scheme [] $ tFun [tInt32, tInt32] tInt32
+        , Prims.binaryInt32Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "int16" <> "-" <> name
+        , Scheme [] $ tFun [tInt16, tInt16] tInt16
+        , Prims.binaryInt16Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
+      [ ( "int8" <> "-" <> name
+        , Scheme [] $ tFun [tInt8, tInt8] tInt8
+        , Prims.binaryInt8Prim fun
+        )
+      | (name, fun) <- [ ("+", (+)), ("-", (-)), ("*", (*)), ("/", div)
+                       , ("and", (B..&.)), ("or", (B..|.)), ("xor", B.xor)
+                       , ("rotate", (\l r -> B.rotate l (fromIntegral r)))
+                       , ("shift",  (\l r -> B.shift l (fromIntegral r)))
+                       ]
+      ] ++
       [ ( name
         , Scheme [] $ tFun [tInteger, tInteger] (Prims.primitiveDatatype "Bool" [])
         , Prims.binaryIntegerPred fun
         )
       | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      -- Fixnum binary preds
+      [ ( "word64" <> name
+        , Scheme [] $ tFun [tWord64, tWord64] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryWord64Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "word32" <> name
+        , Scheme [] $ tFun [tWord32, tWord32] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryWord32Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "word16" <> name
+        , Scheme [] $ tFun [tWord16, tWord16] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryWord16Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "word8" <> name
+        , Scheme [] $ tFun [tWord8, tWord8] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryWord8Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "int64" <> name
+        , Scheme [] $ tFun [tInt64, tInt64] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryInt64Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "int32" <> name
+        , Scheme [] $ tFun [tInt32, tInt32] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryInt32Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "int16" <> name
+        , Scheme [] $ tFun [tInt16, tInt16] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryInt16Pred fun
+        )
+      | (name, fun) <- [("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=)), ("=", (==)), ("/=", (/=))]
+      ] ++
+      [ ( "int8" <> name
+        , Scheme [] $ tFun [tInt8, tInt8] (Prims.primitiveDatatype "Bool" [])
+        , Prims.binaryInt8Pred fun
+        )
+      | (name, fun) <- [ ("<", (<)), ("<=", (<=)), (">", (>)), (">=", (>=))
+                       , ("=", (==)), ("/=", (/=))
+                       ]
       ] ++
       [ ("pure-IO"
         , let a = tSchemaVar firstSchemeVar []
@@ -602,6 +933,14 @@ initializeKernel outputChannel = do
         , let a = tSchemaVar firstSchemeVar []
           in [ ("list-contents", [Prims.primitiveDatatype "List" [a]])
              , ("integer-contents", [tInteger])
+             , ("word64-contents",  [tWord64])
+             , ("word32-contents",  [tWord32])
+             , ("word16-contents",  [tWord16])
+             , ("word8-contents",   [tWord8])
+             , ("int64-contents",   [tInt64])
+             , ("int32-contents",   [tInt32])
+             , ("int16-contents",   [tInt16])
+             , ("int8-contents",    [tInt8])
              , ("string-contents", [tString])
              , ("identifier-contents", [tString])
              -- if you add a constructor here, remember to also add a
@@ -647,6 +986,14 @@ initializeKernel outputChannel = do
       , ("cons-list-syntax", Prims.consListSyntax)
       , ("list-syntax", Prims.listSyntax)
       , ("integer-syntax", Prims.integerSyntax)
+      , ("int64-syntax", Prims.int64Syntax)
+      , ("int32-syntax", Prims.int32Syntax)
+      , ("int16-syntax", Prims.int16Syntax)
+      , ("int8-syntax",  Prims.int8Syntax)
+      , ("word64-syntax", Prims.word64Syntax)
+      , ("word32-syntax", Prims.word32Syntax)
+      , ("word16-syntax", Prims.word16Syntax)
+      , ("word8-syntax",  Prims.word8Syntax)
       , ("string-syntax", Prims.stringSyntax)
       , ("replace-loc", Prims.replaceLoc)
       , ("syntax-case", Prims.syntaxCase)
@@ -1154,14 +1501,35 @@ addApp (Syntax (Stx scs loc _)) args =
   where
     app = Syntax (Stx scs loc (Id "#%app"))
 
--- | Insert an integer literal marker with a lexical context from
--- the original expression
-addIntegerLiteral :: Syntax -> Integer -> Syntax
-addIntegerLiteral (Syntax (Stx scs loc _)) n =
-  Syntax (Stx scs loc (List [integerLiteral, n']))
+
+mkNumLiteral :: (t -> ExprF Syntax) -> Text -> Syntax -> t -> Syntax
+mkNumLiteral cnstr idStr (Syntax (Stx scs loc _)) n =
+  Syntax (Stx scs loc (List [num_literal, n']))
   where
-    integerLiteral = Syntax (Stx scs loc (Id "#%integer-literal"))
-    n' = Syntax (Stx scs loc (Integer n))
+    num_literal = Syntax (Stx scs loc (Id idStr))
+    n' = Syntax (Stx scs loc (cnstr n))
+
+-- | Insert an integer literal marker with a lexical context from the original
+-- expression
+addIntegerLiteral :: Syntax -> Integer -> Syntax
+addInt64Literal  :: Syntax -> Int64  -> Syntax
+addInt32Literal  :: Syntax -> Int32  -> Syntax
+addInt16Literal  :: Syntax -> Int16  -> Syntax
+addInt8Literal   :: Syntax -> Int8   -> Syntax
+addWord64Literal :: Syntax -> Word64 -> Syntax
+addWord32Literal :: Syntax -> Word32 -> Syntax
+addWord16Literal :: Syntax -> Word16 -> Syntax
+addWord8Literal  :: Syntax -> Word8  -> Syntax
+
+addIntegerLiteral = mkNumLiteral Integer "#%integer-literal"
+addInt64Literal  = mkNumLiteral Int64  "#%int64-literal"
+addInt32Literal  = mkNumLiteral Int32  "#%int32-literal"
+addInt16Literal  = mkNumLiteral Int16  "#%int16-literal"
+addInt8Literal   = mkNumLiteral Int8   "#%int8-literal"
+addWord64Literal = mkNumLiteral Word64 "#%word64-literal"
+addWord32Literal = mkNumLiteral Word32 "#%word32-literal"
+addWord16Literal = mkNumLiteral Word16 "#%word16-literal"
+addWord8Literal  = mkNumLiteral Word8  "#%word8-literal"
 
 -- | Insert a string literal marker with a lexical context from
 -- the original expression
@@ -1286,9 +1654,17 @@ expandOneForm prob stx
           case syntaxE stx of
             Id _ ->
               forkExpandVar t dest stx var
-            String _ -> error "Impossible - string not ident"
-            Integer _ -> error "Impossible - integer not ident"
             List xs -> expandOneExpression t dest (addApp stx xs)
+            String _  -> error "Impossible - string not ident"
+            Integer _ -> error "Impossible - integer not ident"
+            Int64 _   -> error "Impossible - int64 not ident"
+            Int32 _   -> error "Impossible - int32 not ident"
+            Int16 _   -> error "Impossible - int16 not ident"
+            Int8  _   -> error "Impossible - int8 not ident"
+            Word64 _  -> error "Impossible - word64 not ident"
+            Word32 _  -> error "Impossible - word32 not ident"
+            Word16 _  -> error "Impossible - word16 not ident"
+            Word8  _  -> error "Impossible - word8 not ident"
         ETypeVar k i -> do
           (k', dest) <- requireTypeCat stx prob
           case syntaxE stx of
@@ -1353,10 +1729,18 @@ expandOneForm prob stx
         throwError $ NotValidType stx
       ExprDest t dest ->
         case syntaxE stx of
-          List xs -> expandOneExpression t dest (addApp stx xs)
+          List xs   -> expandOneExpression t dest (addApp stx xs)
           Integer n -> expandOneExpression t dest (addIntegerLiteral stx n)
-          String s -> expandOneExpression t dest (addStringLiteral stx s)
-          Id _ -> error "Impossible happened - identifiers are identifier-headed!"
+          Int64 n   -> expandOneExpression t dest (addInt64Literal stx n)
+          Int32 n   -> expandOneExpression t dest (addInt32Literal stx n)
+          Int16 n   -> expandOneExpression t dest (addInt16Literal stx n)
+          Int8 n    -> expandOneExpression t dest (addInt8Literal stx n)
+          Word64 n  -> expandOneExpression t dest (addWord64Literal stx n)
+          Word32 n  -> expandOneExpression t dest (addWord32Literal stx n)
+          Word16 n  -> expandOneExpression t dest (addWord16Literal stx n)
+          Word8 n   -> expandOneExpression t dest (addWord8Literal stx n)
+          String s  -> expandOneExpression t dest (addStringLiteral stx s)
+          Id _      -> error "Impossible happened - identifiers are identifier-headed!"
       PatternDest {} ->
         throwError $ InternalError "All patterns should be identifier-headed"
       TypePatternDest {} ->

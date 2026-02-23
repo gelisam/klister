@@ -21,7 +21,7 @@
           hPkgs.haskell-language-server # LSP server for editor
           hPkgs.implicit-hie # auto generate LSP hie.yaml file from cabal
           hPkgs.retrie # Haskell refactoring tool
-          # hPkgs.cabal-install
+          hPkgs.cabal-install
           stack-wrapped
           pkgs.zlib # External C library needed by some Haskell packages
         ];
@@ -44,14 +44,19 @@
               "
           '';
         };
+        stdlib = ./stdlib;
+        examples = ./examples;
+
       in {
         devShells.default = pkgs.mkShell {
+
           buildInputs = myDevTools;
 
           # Make external Nix c libraries like zlib known to GHC, like
           # pkgs.haskell.lib.buildStackProject does
           # https://github.com/NixOS/nixpkgs/blob/d64780ea0e22b5f61cd6012a456869c702a72f20/pkgs/development/haskell-modules/generic-stack-builder.nix#L38
           LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath myDevTools;
+          KLISTERPATH = "${stdlib}:${examples}";
         };
       });
 }

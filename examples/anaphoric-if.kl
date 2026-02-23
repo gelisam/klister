@@ -33,6 +33,6 @@
                 ,else])))))
 
 (example
-  (if-non-empty (snoc (list 1 2 3) 4)
+  (if-non-empty (snoc (list (the Integer 1) 2 3) 4)
     (:: 0 it)
     (list 0)))

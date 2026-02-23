@@ -9,7 +9,7 @@
 (example (abs minus-two))
 (example (abs 4))
 (example (negate 4))
-(example -4)
+(example (the Integer -4))
 
 (example (< 1 2))
 (example (< 1 1))
@@ -32,4 +32,3 @@
 
 (example (integer->string 4))
 (example (integer->string (negate 5)))
-

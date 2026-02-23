@@ -48,7 +48,8 @@ readExpr filename fileContents =
     Right ok -> Right ok
 
 expr :: Parser Syntax
-expr = list <|> ident <|> integer <|> string <|> quoted <|> quasiquoted <|> unquote_spliced <|> unquoted
+expr = list <|> ident <|> binary <|> octal <|> hexadecimal <|> integer
+  <|> string <|> quoted <|> quasiquoted <|> unquote_spliced <|> unquoted
 
 ident :: Parser Syntax
 ident =
@@ -59,6 +60,22 @@ integer :: Parser Syntax
 integer =
   do Located srcloc s <- lexeme integerNum
      return $ Syntax $ Stx ScopeSet.empty srcloc (Integer s)
+
+binary :: Parser Syntax
+binary = try $ char '0' *> char 'b' *> do
+  Located srcLoc s <- lexeme L.binary
+  return $ Syntax $ Stx ScopeSet.empty srcLoc (Integer s)
+
+octal :: Parser Syntax
+octal = try $ char '0' *> char 'o' *> do
+  Located srcLoc s <- lexeme L.octal
+  return $ Syntax $ Stx ScopeSet.empty srcLoc (Integer s)
+
+hexadecimal :: Parser Syntax
+hexadecimal = try $ char '0' *> char 'x' *> do
+  Located srcLoc s <- lexeme L.hexadecimal
+  return $ Syntax $ Stx ScopeSet.empty srcLoc (Integer s)
+
 
 list :: Parser Syntax
 list = parenned "(" ")" <|> parenned "[" "]"
@@ -148,7 +165,7 @@ identName =
     magicIdent = (literal "#%app" $> "#%app")
              <|> (literal "#%module" $> "#%module")
              <|> (literal "#%integer-literal" $> "#%integer-literal")
-             <|> (literal "#%string-literal" $> "#%string-literal")
+             <|> (literal "#%string-literal"  $> "#%string-literal")
 
     initial :: Parser Char
     initial =

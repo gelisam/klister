@@ -30,6 +30,7 @@ import World
 import Util.Store (Store)
 import qualified Util.Store as St
 
+
 derefType :: MetaPtr -> Expand (TVar Ty)
 derefType ptr =
   (view (expanderTypeStore . at ptr) <$> getState) >>=
@@ -282,13 +283,14 @@ unifyWithBlame blame depth t1 t2 = do
           unifyWithBlame blame (depth + 1) (Ty $ TyF ctor1 args1') (Ty $ TyF (TMetaVar ptr2) [])
       | otherwise = mismatch shouldBe received
 
-
+   -- Rigid-rigid
     unifyTyFs shouldBe@(TyF ctor1 args1) received@(TyF ctor2 args2)
-      -- Rigid-rigid
-      | ctor1 == ctor2 && length args1 == length args2 =
-          for_ (zip args1 args2) $ \(arg1, arg2) ->
-            unifyWithBlame blame (depth + 1) arg1 arg2
+      | ctor1 == ctor2 && right_arity = go
       | otherwise = mismatch shouldBe received
+      where
+        right_arity = length args1 == length args2
+        go = for_ (zip args1 args2) $ \(arg1, arg2) ->
+          unifyWithBlame blame (depth + 1) arg1 arg2
 
     mismatch shouldBe received = do
         let (here, outerExpected, outerReceived) = blame
@@ -303,6 +305,7 @@ unifyWithBlame blame depth t1 t2 = do
             throwError $ TypeCheckError $ TypeMismatch loc outerE' outerR' (Just (e', r'))
 
     linkVar ptr t = linkToType (view _1 blame) ptr t
+
 
 
 typeVarKind :: MetaPtr -> Expand Kind
@@ -376,6 +379,14 @@ inferKind blame (Ty (TyF ctor args)) = do
   where
     ctorKind TSyntax = pure KStar
     ctorKind TInteger = pure KStar
+    ctorKind TInt64  = pure KStar
+    ctorKind TInt32  = pure KStar
+    ctorKind TInt16  = pure KStar
+    ctorKind TInt8   = pure KStar
+    ctorKind TWord64 = pure KStar
+    ctorKind TWord32 = pure KStar
+    ctorKind TWord16 = pure KStar
+    ctorKind TWord8  = pure KStar
     ctorKind TString = pure KStar
     ctorKind TOutputPort = pure KStar
     ctorKind TFun = pure $ kFun [KStar, KStar] KStar

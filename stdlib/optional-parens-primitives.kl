@@ -8,10 +8,18 @@
 (import (shift "optional-parens.kl" 1))
 
 -- wrap all the builtin types and data constructors.
--- "optional-parens-datatype.kl" handles user-defined datatypes. 
+-- "optional-parens-datatype.kl" handles user-defined datatypes.
 (define-macros
   ([my-Syntax (optional-parens 'Syntax)]
    [my-Integer (optional-parens 'Integer)]
+   [my-Word64 (optional-parens 'Word64)]
+   [my-Word32 (optional-parens 'Word32)]
+   [my-Word16 (optional-parens 'Word16)]
+   [my-Word8 (optional-parens 'Word8)]
+   [my-Int64 (optional-parens 'Int64)]
+   [my-Int32 (optional-parens 'Int32)]
+   [my-Int16 (optional-parens 'Int16)]
+   [my-Int8  (optional-parens 'Int8)]
    [my-Macro (optional-parens 'Macro)]
    [my-Type (optional-parens 'Type)]
    [my-String (optional-parens 'String)]
@@ -40,6 +48,8 @@
 
 (export (rename ([my-Syntax Syntax]
                  [my-Integer Integer]
+                 [my-Word64 Word64] [my-Word32 Word32] [my-Word16 Word16] [my-Word8 Word8]
+                 [my-Int64  Int64]  [my-Int32  Int32]  [my-Int16  Int16]  [my-Int8 Int8]
                  [my-Macro Macro]
                  [my-Type Type]
                  [my-String String]
@@ -54,6 +64,8 @@
                  [my-Output-Port Output-Port])
                 my-Syntax
                 my-Integer
+                my-Int64 my-Int32 my-Int16 my-Int8
+                my-Word64 my-Word32 my-Word16 my-Word8
                 my-Macro
                 my-Type
                 my-String

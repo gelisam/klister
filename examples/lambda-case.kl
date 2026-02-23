@@ -40,7 +40,7 @@
   (let [f (lambda-case
             [(nil) "nil"]
             [(:: _ _) "cons"])]
-    (f (list 1 2 3))))
+    (f (list (the Integer 1) 2 3))))
 
 -- A macro is implemented as a function of type (-> Syntax (Macro Syntax)).
 -- Macro is a monad, but we don't make use of its effects in this example, so
