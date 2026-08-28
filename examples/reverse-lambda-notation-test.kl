@@ -1,0 +1,18 @@
+#lang "reverse-lambda-notation.kl"
+
+(define let
+  (λ (f x)
+    (f x)))
+
+-- ordinary function application of 'let' to an ordinary lambda: the lambda body
+-- comes before the definition of 'foobar'.
+(example
+  (let
+    (λ (foobar) (string-append foobar "baz"))
+    (string-append "foo" "bar")))
+
+-- reverse-lambda-notation application of 'let': the definition of 'foobar'
+-- comes before the 'let' body.
+(example
+  (let (λ foobar <- (string-append "foo" "bar"))
+    (string-append foobar "baz")))

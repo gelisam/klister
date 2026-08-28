@@ -1,0 +1,70 @@
+#lang "prelude.kl"
+
+(import "keyword.kl")
+(import "define-syntax-rule.kl")
+(import (shift "list.kl" 1))
+(import (shift "prelude.kl" 1))
+
+(define-keyword ->)
+(define-keyword <-)
+(define-keyword <->)
+
+-- (λ (x y) x)
+-- =>
+-- (lambda (x y) x)
+(define-variadic-macro (λ stx)
+  -- stx = '(λ (x y) x)
+  (case (open-syntax stx)
+    [(list-contents (:: _ args))
+     (pure (close-syntax stx stx
+             (list-contents (:: 'lambda args))))]))
+
+-- (my-app f a)
+-- =>
+-- (#%app f a)
+--
+-- (my-app f (λ x <- y) z)
+-- =>
+-- (#%app f (λ (x) z) y)
+(define-variadic-macro (my-app stx)
+  -- stx = '(my-app f a)
+  (case (open-syntax stx)
+    [(list-contents (:: _ args))
+     -- args = [f, a]
+     (let [default
+           (close-syntax stx stx
+             (list-contents
+               (:: '#%app args)))]
+       -- default = '(#%app f a)
+       (case args
+         [(list f λx<-y? z)
+          -- stx = '(my-app f _ z)
+          (case (open-syntax λx<-y?)
+            [(list-contents (list λ? x <-? y))
+             -- stx = '(my-app f (_ x _ y) z)
+             (>>= (keyword=? λ? 'λ)
+               (lambda (is-λ)
+                 (if is-λ
+                   -- stx = '(my-app f (λ x _ y) z)
+                   (>>= (keyword=? <-? '<-)
+                     (lambda (is-<-)
+                       (if is-<-
+                         -- stx = '(my-app f (λ x <- y) z)
+                         (pure `(#%app ,f (λ (,x) ,z) ,y))
+                         (pure default))))
+                   (pure default))))]
+            [_
+             (pure default)])]
+         [_
+          (pure default)]))]))
+
+(export (rename ([my-app #%app])
+                #%module
+                #%integer-literal
+                #%string-literal
+                my-app
+                λ lambda
+                <- -> <->
+                define defun example
+                string-append
+                ))
