@@ -16,3 +16,35 @@
 (example
   (let (λ foobar <- (string-append "foo" "bar"))
     (string-append foobar "baz")))
+
+-- Klister supports recursive function definitions with 'flet'. But Klister is
+-- strict, so it does not support arbitrary recursion, only recursive functions.
+-- So instead of `∀ a r. (a → r) → (a → a) → r`, we will aim for
+-- `∀ a b r. ((a → b) → r) → ((a → b) → (a → b)) → r`.
+(define let-rec
+  (λ (f2r f2f)
+    (flet [f (a)
+          (f2f f a)]
+      (f2r f))))
+
+-- ordinary recursive definition
+(example
+  (let-rec
+    (λ (fib)
+      (fib 5))
+    (λ (fib n)
+      (if (or (= n 0) (= n 1))
+        n
+        (+ (fib (- n 1))
+           (fib (- n 2)))))))
+
+-- reverse-lambda-notation variant where the definition of 'fib' comes before
+-- the 'let-rec' body:
+(example
+  (let-rec
+    (λ fib <-> (λ (n)
+                 (if (or (= n 0) (= n 1))
+                   n
+                   (+ (fib (- n 1))
+                     (fib (- n 2))))))
+    (fib 5)))
