@@ -63,7 +63,7 @@
                 #%integer-literal
                 #%string-literal
                 my-app
-                λ lambda
+                λ
                 <- -> <->
                 define defun example
                 string-append
