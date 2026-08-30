@@ -1,5 +1,8 @@
 #lang "prelude.kl"
 
+-- Implementing Eitan Chatav's proposal for "reverse lambda notation"
+-- https://x.com/EChatav/status/2092464195384267255
+
 (import "bool.kl")
 (import "define-syntax-rule.kl")
 (import "keyword.kl")
