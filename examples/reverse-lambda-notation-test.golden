@@ -2,3 +2,5 @@
 "foobarbaz" : String
 5 : Integer
 5 : Integer
+(mk-pair "<one><two><three>" 6) : (Pair String Integer)
+(mk-pair "<one><two><three>" 6) : (Pair String Integer)

@@ -31,6 +31,18 @@
 -- (my-app f (λ x <-> y) z)
 -- =>
 -- (#%app f (λ (x) z) (λ (x) y))
+--
+-- (my-app f (λ x1 <- y1
+--            λ x2 <- y2
+--            λ x3 <- y3)
+--         g
+--         z)
+-- =>
+-- (#%app f
+--   (#%app f
+--     (#%app g (λ (x1 x2 x3) z) y1)
+--     y2)
+--   y3)
 (define-variadic-macro (my-app stx)
   -- stx = '(my-app f a)
   (case (open-syntax stx)
@@ -65,6 +77,69 @@
                    (pure default))))]
             [_
              (pure default)])]
+         [(list f λx<-ys? g z)
+          -- (render (list 'x1 'x2 'x3) (list 'y3 'y2 'y1))
+          -- =>
+          -- '(#%app f
+          --    (#%app f
+          --      (#%app g (λ (x1 x2 x3) z) y1)
+          --      y2)
+          --    y3)
+          (flet [render (xs reversed-ys)
+                 (case reversed-ys
+                   [(:: yZ (:: yY ysY1))
+                    -- (#%app f
+                    --   ...
+                    --   y3)
+                    `(#%app ,f
+                       ,(render xs (:: yY ysY1))
+                       ,yZ)]
+                   [(:: y1 (nil))
+                    -- (#%app g (λ (x1 x2 x3) z) y1)
+                    `(#%app
+                       ,g
+                       (λ ,(close-syntax λx<-ys? λx<-ys?
+                             (list-contents xs))
+                          ,z)
+                       ,y1)])]
+            (flet [parse-then-render (reversed-xs reversed-ys λx<-y?s)
+                   (case λx<-y?s
+                     [(list λ? x <-? y)
+                      -- λy<-ys? = '(_ x3 _ y3)
+                      (>>= (keyword=? λ? 'λ)
+                        (lambda (is-λ)
+                          (if is-λ
+                            -- λy<-ys? = '(λ x3 _ y3)
+                            (>>= (keyword=? <-? '<-)
+                              (lambda (is-<-)
+                                (if is-<-
+                                  -- λy<-ys? = '(λ x3 <- y3)
+                                  (pure (render
+                                          (reverse (:: x reversed-xs))
+                                          (:: y reversed-ys)))
+                                  (pure default))))
+                            (pure default))))]
+                     [(:: λ? (:: x (:: <-? (:: y more))))
+                      -- λy<-ys? = '(_ x1 _ y1 ...)
+                      (>>= (keyword=? λ? 'λ)
+                        (lambda (is-λ)
+                          (if is-λ
+                            -- λy<-ys? = '(λ x1 _ y1 ...)
+                            (>>= (keyword=? <-? '<-)
+                              (lambda (is-<-)
+                                (if is-<-
+                                  -- λy<-ys? = '(λ x1 <- y1 ...)
+                                  (parse-then-render
+                                    (:: x reversed-xs)
+                                    (:: y reversed-ys)
+                                    more)
+                                  (pure default))))
+                            (pure default))))]
+                     [_
+                      (pure default)])]
+              (case (open-syntax λx<-ys?)
+                [(list-contents λx<-y?s)
+                 (parse-then-render (nil) (nil) λx<-y?s)])))]
          [_
           (pure default)]))]))
 
@@ -75,7 +150,7 @@
                 my-app
                 λ
                 <- -> <->
-                define defun example flet
+                define defun example flet datatype case
                 string-append
                 + - =
                 if true false or

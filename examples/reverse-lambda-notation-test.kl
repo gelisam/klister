@@ -17,6 +17,7 @@
   (let (λ foobar <- (string-append "foo" "bar"))
     (string-append foobar "baz")))
 
+
 -- Klister supports recursive function definitions with 'flet'. But Klister is
 -- strict, so it does not support arbitrary recursion, only recursive functions.
 -- So instead of `∀ a r. (a → r) → (a → a) → r`, we will aim for
@@ -48,3 +49,49 @@
                    (+ (fib (- n 1))
                      (fib (- n 2))))))
     (fib 5)))
+
+
+-- Klister doesn't have builting tuples, we have to define them.
+(datatype (Pair A B)
+  (mk-pair A B))
+
+(defun fmap (f pair)
+  (case pair
+    [(mk-pair a b)
+     (mk-pair a (f b))]))
+
+(defun ap (str-f str-a)
+  (case str-f
+    [(mk-pair str1 f)
+     (case str-a
+       [(mk-pair str2 a)
+        (mk-pair (string-append str1 str2)
+                 (f a))])]))
+
+-- In Klister does not have infix functions, so
+--
+-- > f <$> x1 <*> x2 <*> x3
+--
+-- looks like
+--
+-- > (ap
+-- >   (ap
+-- >     (fmap f x1)
+-- >     x2)
+-- >   x3)
+(example
+  (ap
+    (ap
+      (fmap (λ (x y z)
+              (+ x (+ y z)))
+            (mk-pair "<one>" 1))
+      (mk-pair "<two>" 2))
+    (mk-pair "<three>" 3)))
+
+-- The reverse-lambda-notation variant is much more readable:
+(example
+  (ap (λ x <- (mk-pair "<one>" 1)
+       λ y <- (mk-pair "<two>" 2)
+       λ z <- (mk-pair "<three>" 3))
+      fmap
+      (+ x (+ y z))))
