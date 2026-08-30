@@ -14,7 +14,11 @@
 -- free-identifier=? or bound-identifier=?
 (meta
   (defun keyword=? (ident keyword)
-    (free-identifier=? ident keyword)))
+    (case (open-syntax ident)
+      [(identifier-contents _)
+       (free-identifier=? ident keyword)]
+      [_
+       (pure false)])))
 
 (export define-keyword)
 (export (shift 1 keyword=?))
